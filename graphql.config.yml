@@ -1,0 +1,5 @@
+schema: "https://beta.pokeapi.co/graphql/v1beta"
+#schema: "https://shopify.dev/admin-graphql-direct-proxy/2024-07"
+
+# schema: build/schema.graphql
+documents: 'src/main/**/*.graphql'

@@ -1,0 +1,9 @@
+/build/
+/out/
+/.gradle/
+/.kotlin/
+/.idea/*
+!/.idea/dictionaries/
+/.idea/dictionaries/*
+!/.idea/dictionaries/project.xml
+.env

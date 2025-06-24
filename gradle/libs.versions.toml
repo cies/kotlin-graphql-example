@@ -1,0 +1,160 @@
+[versions]
+android-plugin = "8.5.0"
+classgraph = "4.8.174"
+dataloader = "4.0.0"
+federation = "5.2.0"
+graphql-java = "23.1"
+graalvm = "0.10.2"
+jackson = "2.17.1"
+# kotlin version has to match the compile-testing compiler version
+kotlin = "2.0.0"
+kotlinx-benchmark = "0.4.13"
+kotlinx-coroutines = "1.9.0"
+# TODO kotlin 1.9 upgrade: fix GraphQLTestUtils and GenerateKotlinxClientIT
+kotlinx-serialization = "1.6.3"
+ktor = "3.0.3"
+fastjson2 = "2.0.56"
+maven-plugin-annotation = "3.13.1"
+maven-plugin-api = "3.9.8"
+maven-project = "2.2.1"
+poet = "1.17.0"
+## reactor and spring versions should be the same as defined in spring-boot-dependencies
+reactor-core = "3.6.7"
+reactor-extensions = "1.2.2"
+slf4j = "2.0.13"
+spring = "6.1.10"
+spring-boot = "3.2.7"
+
+# security vulnerabilities overrides
+commons-codec = { strictly = "[1.13, 2[", prefer = "1.16.0" }
+
+# test dependencies
+compile-testing = "0.5.1"
+icu = "75.1"
+junit = "5.10.2"
+junit-platform = "1.10.1"
+logback = "1.5.6"
+mockk = "1.13.13"
+rxjava = "3.1.8"
+wiremock = "3.7.0"
+
+# plugins
+detekt = "1.23.7"
+dokka = "2.0.0"
+jacoco = "0.8.12"
+ktlint-core = "1.5.0"
+ktlint-plugin = "12.1.2"
+maven-plugin-development = "0.4.3"
+nexus-publish-plugin = "2.0.0"
+plugin-publish = "1.2.1"
+
+# ====================
+# LIBRARIES
+# ====================
+[libraries]
+android-plugin = { group = "com.android.tools.build", name = "gradle", version.ref = "android-plugin" }
+classgraph = { group = "io.github.classgraph", name = "classgraph", version.ref = "classgraph" }
+dataloader = { group = "com.graphql-java", name = "java-dataloader", version.ref = "dataloader" }
+federation = { group = "com.apollographql.federation", name = "federation-graphql-java-support", version.ref = "federation" }
+graphql-java = { group = "com.graphql-java", name = "graphql-java", version.ref = "graphql-java" }
+graphql-kotlin-ktor-client = { group = "com.expediagroup", name = "graphql-kotlin-ktor-client", version = "8.8.1" }
+jackson = { group = "com.fasterxml.jackson.module", name = "jackson-module-kotlin", version.ref = "jackson" }
+kotlin-gradle-api = { group = "org.jetbrains.kotlin", name = "kotlin-gradle-plugin-api", version.ref = "kotlin" }
+kotlin-reflect = { group = "org.jetbrains.kotlin", name = "kotlin-reflect", version.ref = "kotlin" }
+kotlin-serialization = { group = "org.jetbrains.kotlin", name = "kotlin-serialization", version.ref= "kotlin" }
+kotlin-stdlib = { group = "org.jetbrains.kotlin", name = "kotlin-stdlib", version.ref = "kotlin" }
+kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
+kotlinx-coroutines-jdk8 = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-jdk8", version.ref = "kotlinx-coroutines" }
+kotlinx-coroutines-reactive = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-reactive", version.ref = "kotlinx-coroutines" }
+kotlinx-coroutines-reactor = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-reactor", version.ref = "kotlinx-coroutines" }
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
+ktor-client-apache = { group = "io.ktor", name = "ktor-client-apache", version.ref = "ktor" }
+ktor-client-cio = { group = "io.ktor", name = "ktor-client-cio", version.ref = "ktor" }
+ktor-client-content = { group = "io.ktor", name = "ktor-client-content-negotiation", version.ref = "ktor" }
+ktor-client-serialization = { group = "io.ktor", name = "ktor-client-serialization", version.ref = "ktor" }
+ktor-client-websockets = { group = "io.ktor", name = "ktor-client-websockets", version.ref = "ktor" }
+ktor-serialization-jackson = { group = "io.ktor", name = "ktor-serialization-jackson", version.ref = "ktor" }
+ktor-server-core = { group = "io.ktor", name = "ktor-server-core", version.ref = "ktor" }
+ktor-server-cors = { group = "io.ktor", name = "ktor-server-cors", version.ref = "ktor" }
+ktor-server-content = { group = "io.ktor", name = "ktor-server-content-negotiation", version.ref = "ktor" }
+ktor-server-statuspages = { group = "io.ktor", name = "ktor-server-status-pages", version.ref = "ktor" }
+ktor-server-websockets = { group = "io.ktor", name = "ktor-server-websockets", version.ref = "ktor" }
+maven-plugin-annotations = { group = "org.apache.maven.plugin-tools", name = "maven-plugin-annotations", version.ref = "maven-plugin-annotation" }
+maven-plugin-api = { group = "org.apache.maven", name = "maven-plugin-api", version.ref = "maven-plugin-api" }
+maven-project = { group = "org.apache.maven", name = "maven-project", version.ref = "maven-project" }
+poet = { group = "com.squareup", name = "kotlinpoet", version.ref = "poet" }
+slf4j = { group = "org.slf4j", name = "slf4j-api", version.ref = "slf4j" }
+spring-boot-config = { group = "org.springframework.boot", name = "spring-boot-configuration-processor", version.ref = "spring-boot" }
+spring-boot-netty = { group = "org.springframework.boot", name = "spring-boot-starter-reactor-netty", version.ref = "spring-boot" }
+spring-boot-webflux = { group = "org.springframework.boot", name = "spring-boot-starter-webflux", version.ref = "spring-boot" }
+spring-webflux = { group = "org.springframework", name = "spring-webflux", version.ref = "spring" }
+spring-context = { group = "org.springframework", name = "spring-context", version.ref = "spring" }
+fastjson2 = { group = "com.alibaba.fastjson2", name = "fastjson2-kotlin", version.ref = "fastjson2" }
+fastjson2-spring = { group = "com.alibaba.fastjson2", name = "fastjson2-extension-spring6", version.ref = "fastjson2" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit-platform" }
+
+# security vulnerabilities overrides
+commons-codec = { group = "commons-codec", name = "commons-codec", version.ref = "commons-codec" }
+
+# test dependencies
+compile-testing = { group = "dev.zacsweers.kctfork", name = "core", version.ref = "compile-testing" }
+icu = { group = "com.ibm.icu", name = "icu4j", version.ref = "icu" }
+logback = { group = "ch.qos.logback", name = "logback-classic", version.ref = "logback" }
+junit-api = { group = "org.junit.jupiter", name = "junit-jupiter-api", version.ref = "junit" }
+junit-bom = { group = "org.junit", name = "junit-bom", version.ref = "junit" }
+junit-engine = { group = "org.junit.jupiter", name = "junit-jupiter-engine", version.ref = "junit" }
+kotlin-junit-test = { group = "org.jetbrains.kotlin", name = "kotlin-test-junit5", version.ref = "kotlin" }
+kotlin-annotation-processing = { group = "org.jetbrains.kotlin", name = "kotlin-annotation-processing-embeddable", version.ref = "kotlin" }
+kotlin-compiler = { group = "org.jetbrains.kotlin", name = "kotlin-compiler-embeddable", version.ref = "kotlin" }
+kotlin-test = { group = "org.jetbrains.kotlin", name = "kotlin-test", version.ref = "kotlin" }
+kotlinx-benchmark = { group = "org.jetbrains.kotlinx", name = "kotlinx-benchmark-runtime", version.ref = "kotlinx-benchmark" }
+kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
+ktor-client-logging = { group = "io.ktor", name = "ktor-client-logging", version.ref = "ktor" }
+ktor-client-okhttp = { group = "io.ktor", name = "ktor-client-okhttp", version.ref = "ktor" }
+ktor-server-cio = { group = "io.ktor", name = "ktor-server-cio", version.ref = "ktor" }
+ktor-server-netty = { group = "io.ktor", name = "ktor-server-netty", version.ref = "ktor" }
+ktor-server-test-host = { group = "io.ktor", name = "ktor-server-test-host", version.ref = "ktor" }
+mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
+reactor-core = { group = "io.projectreactor", name = "reactor-core", version.ref = "reactor-core" }
+reactor-extensions = { group = "io.projectreactor.kotlin", name = "reactor-kotlin-extensions", version.ref = "reactor-extensions" }
+reactor-test = { group = "io.projectreactor", name = "reactor-test", version.ref = "reactor-core" }
+rxjava = { group = "io.reactivex.rxjava3", name = "rxjava", version.ref = "rxjava" }
+spring-boot-test = { group = "org.springframework.boot", name = "spring-boot-starter-test", version.ref = "spring-boot" }
+wiremock-lib = { group = "org.wiremock", name = "wiremock", version.ref = "wiremock" }
+wiremock-standalone = { group = "org.wiremock", name = "wiremock-standalone", version.ref = "wiremock" }
+
+# build src plugin libraries
+detekt-plugin = { group = "io.gitlab.arturbosch.detekt", name = "detekt-gradle-plugin", version.ref = "detekt" }
+dokka-plugin = { group = "org.jetbrains.dokka", name = "dokka-gradle-plugin", version.ref = "dokka" }
+graalvm-plugin = { group = "org.graalvm.buildtools.native", name = "org.graalvm.buildtools.native.gradle.plugin", version.ref = "graalvm" }
+kotlin-gradle-plugin = { group = "org.jetbrains.kotlin", name = "kotlin-gradle-plugin", version.ref = "kotlin" }
+ktlint-plugin = { group = "org.jlleitschuh.gradle", name = "ktlint-gradle", version.ref = "ktlint-plugin" }
+
+# ====================
+# BUNDLES
+# ====================
+[bundles]
+#groovy = ["groovy-core", "groovy-json", "groovy-nio"]
+
+# ====================
+# PLUGINS
+# ====================
+[plugins]
+kotlin-graphql = { id = "com.expediagroup.graphql", version = "8.8.1" }
+benchmark = { id = "org.jetbrains.kotlinx.benchmark", version.ref = "kotlinx-benchmark" }
+detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
+dokka = { id = "org.jetbrains.dokka", version.ref = "dokka" }
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-kapt = { id = "org.jetbrains.kotlin.kapt", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+kotlin-spring = { id = "org.jetbrains.kotlin.plugin.spring", version.ref = "kotlin" }
+ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlint-plugin" }
+maven-plugin-development = { id = "de.benediktritter.maven-plugin-development", version.ref = "maven-plugin-development" }
+nexus-publish = { id = "io.github.gradle-nexus.publish-plugin", version.ref = "nexus-publish-plugin" }
+plugin-publish = { id = "com.gradle.plugin-publish", version.ref = "plugin-publish" }
+spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }
+
+# test projects
+android-application = { id = "com.android.application", version.ref = "android-plugin" }
+graalvm-native = { id = "org.graalvm.buildtools.native", version.ref = "graalvm" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
