@@ -1,0 +1,11 @@
+#schema: "https://beta.pokeapi.co/graphql/v1beta"
+schema: "graphql-schema/schema.graphql" # IntelliJ GraphQL plugin does not like it to be in the `build` folder
+documents: "resources/**/*.graphql"
+
+extensions:
+  endpoints:
+    # DO NOT press the play button in the margin of the next line, it results in an error.
+    # Downloading the schema is done with the `graphqlIntrospectSchema` Gradle task.
+    shopify.dev:
+      # Keep this endpoint in sync with the endpoint specified in `tasks.graphqlIntrospectSchema` (build.gradle.kts)
+      url: https://shopify.dev/admin-graphql-direct-proxy/2024-10
