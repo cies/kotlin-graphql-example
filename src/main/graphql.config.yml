@@ -8,4 +8,4 @@ extensions:
     # Downloading the schema is done with the `graphqlIntrospectSchema` Gradle task.
     shopify.dev:
       # Keep this endpoint in sync with the endpoint specified in `tasks.graphqlIntrospectSchema` (build.gradle.kts)
-      url: https://shopify.dev/admin-graphql-direct-proxy/2024-10
+      url: https://shopify.dev/admin-graphql-direct-proxy/2026-01

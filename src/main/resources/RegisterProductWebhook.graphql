@@ -1,0 +1,15 @@
+mutation RegisterProductWebhook($callbackUrl: URL!) {
+  webhookSubscriptionCreate(
+    topic: PRODUCTS_UPDATE,
+    webhookSubscription: { callbackUrl: $callbackUrl }
+  ) {
+    userErrors {
+      field
+      message
+    }
+    webhookSubscription {
+      id
+      topic
+    }
+  }
+}
