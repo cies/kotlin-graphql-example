@@ -1,12 +1,19 @@
 [versions]
-kotlinVersion = "2.1.20"
-ktorVersion = "3.2.0"
-kotlinGraphqlVersion = "8.8.1"
+kotlinVersion = "2.2.20"
+ktorVersion = "3.4.1"
+kotlinGraphqlVersion = "9.0.0"
 
 [libraries]
 graphqlKotlinKtorClient = { group = "com.expediagroup", name = "graphql-kotlin-ktor-client", version.ref = "kotlinGraphqlVersion" }
+graphqlKotlinClientSerialization = { group = "com.expediagroup", name = "graphql-kotlin-client-serialization", version.ref = "kotlinGraphqlVersion" }
 ktorClientOkhttp = { group = "io.ktor", name = "ktor-client-okhttp", version.ref = "ktorVersion" }
 ktorClientLogging = { group = "io.ktor", name = "ktor-client-logging", version.ref = "ktorVersion" }
+ktorClientContentNegotiation = { group = "io.ktor", name = "ktor-client-content-negotiation", version.ref = "ktorVersion" }
+ktorSerializationKotlinxJson = { group = "io.ktor", name = "ktor-serialization-kotlinx-json", version.ref = "ktorVersion" }
+ktorServerCio = { group = "io.ktor", name = "ktor-server-cio", version.ref = "ktorVersion" }
+ktorServerStatusPages = { group = "io.ktor", name = "ktor-server-status-pages", version.ref = "ktorVersion" }
+ktorServerContentNegotiation = { group = "io.ktor", name = "ktor-server-content-negotiation", version.ref = "ktorVersion" }
+ktorServerCallLogging = { group = "io.ktor", name = "ktor-server-call-logging", version.ref = "ktorVersion" }
 
 [plugins]
 kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlinVersion" }

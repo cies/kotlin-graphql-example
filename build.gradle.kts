@@ -5,7 +5,7 @@ description = "GraphQL client Kotlin with compile-time query validation and IDE 
 
 plugins {
   application
-  kotlin("jvm") version "2.2.0"
+  kotlin("jvm") version "2.2.20"
   alias(libs.plugins.kotlinSerialization)
   alias(libs.plugins.kotlinGraphql)
 }
@@ -24,12 +24,24 @@ repositories {
 dependencies {
   implementation(kotlin("stdlib-jdk8"))
   implementation(libs.graphqlKotlinKtorClient)
+  implementation(libs.graphqlKotlinClientSerialization)
   implementation(libs.ktorClientOkhttp)
   implementation(libs.ktorClientLogging)
+  implementation(libs.ktorClientContentNegotiation)
+  implementation(libs.ktorSerializationKotlinxJson)
+  implementation(libs.ktorServerCio)
+  implementation(libs.ktorServerStatusPages)
+  implementation(libs.ktorServerContentNegotiation)
+  implementation(libs.ktorServerCallLogging)
 }
 
 application {
-  mainClass.set("com.example.KtorClientApplicationKt")
+  mainClass.set("com.example.ShopifyServerKt")
+}
+
+kotlin {
+  // Target latest installed Java SDK.
+  jvmToolchain(24)
 }
 
 graphql {
@@ -37,7 +49,7 @@ graphql {
     packageName = "com.example.graphql.generated"
 
     // endpoint = "https://beta.pokeapi.co/graphql/v1beta"
-    endpoint = "https://shopify.dev/admin-graphql-direct-proxy/2024-10"
+    endpoint = "https://shopify.dev/admin-graphql-direct-proxy/2026-01"
 
     allowDeprecatedFields = true
     serializer = GraphQLSerializer.KOTLINX

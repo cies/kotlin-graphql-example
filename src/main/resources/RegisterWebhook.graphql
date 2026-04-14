@@ -1,0 +1,15 @@
+mutation RegisterWebhook($topic: WebhookSubscriptionTopic!, $callbackUrl: URL!) {
+  webhookSubscriptionCreate(
+    topic: $topic,
+    webhookSubscription: { callbackUrl: $callbackUrl }
+  ) {
+    userErrors {
+      field
+      message
+    }
+    webhookSubscription {
+      id
+      topic
+    }
+  }
+}

@@ -1,0 +1,27 @@
+query SyncProductsPage($first: Int!, $after: String) {
+  products(first: $first, after: $after, sortKey: UPDATED_AT) {
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+    edges {
+      node {
+        id
+        title
+        handle
+        variants(first: 100) {
+          edges {
+            node {
+              id
+              title
+              sku
+              barcode
+              inventoryQuantity
+              price
+            }
+          }
+        }
+      }
+    }
+  }
+}

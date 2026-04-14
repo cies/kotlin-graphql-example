@@ -1,0 +1,20 @@
+query GetProductById($id: ID!) {
+  product(id: $id) {
+    id
+    title
+    handle
+    updatedAt
+    variants(first: 100) {
+      edges {
+        node {
+          id
+          title
+          sku
+          barcode
+          inventoryQuantity
+          price
+        }
+      }
+    }
+  }
+}
