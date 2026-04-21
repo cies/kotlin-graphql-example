@@ -7,7 +7,6 @@ kotlinGraphqlVersion = "9.0.0"
 graphqlKotlinKtorClient = { group = "com.expediagroup", name = "graphql-kotlin-ktor-client", version.ref = "kotlinGraphqlVersion" }
 graphqlKotlinClientSerialization = { group = "com.expediagroup", name = "graphql-kotlin-client-serialization", version.ref = "kotlinGraphqlVersion" }
 ktorClientOkhttp = { group = "io.ktor", name = "ktor-client-okhttp", version.ref = "ktorVersion" }
-ktorClientLogging = { group = "io.ktor", name = "ktor-client-logging", version.ref = "ktorVersion" }
 ktorClientContentNegotiation = { group = "io.ktor", name = "ktor-client-content-negotiation", version.ref = "ktorVersion" }
 ktorSerializationKotlinxJson = { group = "io.ktor", name = "ktor-serialization-kotlinx-json", version.ref = "ktorVersion" }
 ktorServerCio = { group = "io.ktor", name = "ktor-server-cio", version.ref = "ktorVersion" }

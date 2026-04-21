@@ -26,7 +26,6 @@ dependencies {
   implementation(libs.graphqlKotlinKtorClient)
   implementation(libs.graphqlKotlinClientSerialization)
   implementation(libs.ktorClientOkhttp)
-  implementation(libs.ktorClientLogging)
   implementation(libs.ktorClientContentNegotiation)
   implementation(libs.ktorSerializationKotlinxJson)
   implementation(libs.ktorServerCio)
@@ -49,7 +48,7 @@ graphql {
     packageName = "com.example.graphql.generated"
 
     // endpoint = "https://beta.pokeapi.co/graphql/v1beta"
-    endpoint = "https://shopify.dev/admin-graphql-direct-proxy/2026-01"
+    endpoint = "https://shopify.dev/admin-graphql-direct-proxy/2026-04"
 
     allowDeprecatedFields = true
     serializer = GraphQLSerializer.KOTLINX

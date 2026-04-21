@@ -25,7 +25,7 @@ data class ShopifyConfig(
         scopes = scopes,
         publicBaseUrl = base.trimEnd('/'),
         oauthRedirectPath = env("OAUTH_REDIRECT_PATH") ?: "/oauth/callback",
-        apiVersion = env("SHOPIFY_API_VERSION") ?: "2026-01",
+        apiVersion = env("SHOPIFY_API_VERSION") ?: "2026-04",
         serverPort = env("PORT")?.toIntOrNull() ?: 8080,
       )
     }

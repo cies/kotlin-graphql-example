@@ -16,3 +16,6 @@ fun normalizeShopDomain(raw: String): String? {
 
 fun adminGraphqlJsonUrl(shop: String, apiVersion: String): String =
   "https://$shop/admin/api/$apiVersion/graphql.json"
+
+/** Short handle (e.g. `store` from `store.myshopify.com`) for monolith / DSS payloads. */
+fun shopifySubdomainShort(shop: String): String = shop.removeSuffix(".myshopify.com")

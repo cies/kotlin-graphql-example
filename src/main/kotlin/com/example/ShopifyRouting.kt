@@ -1,13 +1,21 @@
 package com.example
 
+import com.example.dss.DssAppConfig
+import com.example.dss.DssFulfillmentService
+import com.example.dss.MonolithClient
+import com.example.dss.configureDssRoutes
+import com.example.dss.orderToCreateShopifyOrderRequest
+import com.example.dss.persistence.FileStoreRepository
 import com.example.config.ShopifyConfig
 import com.example.graphql.generated.FulfillmentCreateWithTracking
 import com.example.graphql.generated.FulfillmentTrackingInfoUpdateMutation
 import com.example.graphql.generated.GetOrderById
+import com.example.graphql.generated.GetOrderForDss
 import com.example.graphql.generated.GetProductById
+import com.example.graphql.generated.ShopIdentity
 import com.example.graphql.generated.SyncProductsPage
 import com.example.graphql.generated.inputs.FulfillmentTrackingInput
-import com.example.shopify.AccessTokenStore
+import com.example.dss.legacyIdFromGid
 import com.example.shopify.FulfillmentCreateDemoBody
 import com.example.shopify.FulfillmentTrackingUpdateDemoBody
 import com.example.shopify.OAuthStateStore
@@ -19,6 +27,7 @@ import com.example.shopify.graphqlResourceIdFromShopifyWebhook
 import com.example.shopify.normalizeShopDomain
 import com.example.shopify.randomOAuthState
 import com.example.shopify.registerStandardWebhooks
+import com.example.shopify.shopifySubdomainShort
 import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
 import io.ktor.client.HttpClient
 import io.ktor.client.request.header
@@ -34,14 +43,16 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import java.net.URI
-import kotlin.math.min
 
 fun Application.configureRouting(
-  config: ShopifyConfig,
+  dssConfig: DssAppConfig,
   stateStore: OAuthStateStore,
-  tokenStore: AccessTokenStore,
+  storeRepo: FileStoreRepository,
   httpClient: HttpClient,
+  fulfillmentService: DssFulfillmentService,
+  monolithClient: MonolithClient?,
 ) {
+  val config: ShopifyConfig = dssConfig.shopify
   routing {
     get("/health") { call.respondText("ok") }
 
@@ -84,10 +95,18 @@ fun Application.configureRouting(
       }
 
       val oauthResponse = exchangeAuthorizationCode(httpClient, shop, code, config)
-      tokenStore.put(shop, oauthResponse.accessToken)
-
       val gqlUrl = URI(adminGraphqlJsonUrl(shop, config.apiVersion)).toURL()
       val graphQLClient = GraphQLKtorClient(gqlUrl, httpClient)
+      val identityResult =
+        graphQLClient.execute(ShopIdentity()) {
+          header("X-Shopify-Access-Token", oauthResponse.accessToken)
+        }
+      val shopNode = identityResult.data?.shop
+      val shopId =
+        shopNode?.id?.let { legacyIdFromGid(it.toString()) } ?: 0L
+      val domain =
+        shopNode?.myshopifyDomain?.let { normalizeShopDomain(it) } ?: shop
+      storeRepo.upsert(domain, shopId, oauthResponse.accessToken)
 
       val syncResult =
         graphQLClient.execute(SyncProductsPage(SyncProductsPage.Variables(first = 3))) {
@@ -113,6 +132,7 @@ fun Application.configureRouting(
       call.respondText(html, ContentType.Text.Html, HttpStatusCode.OK)
     }
 
+    if (dssConfig.enableDemoRoutes) {
     get("/demo/products") {
       val rawShop =
         call.request.queryParameters["shop"]
@@ -126,7 +146,7 @@ fun Application.configureRouting(
         normalizeShopDomain(rawShop)
           ?: return@get call.respondText("Invalid shop", status = HttpStatusCode.BadRequest)
       val token =
-        tokenStore[shop]
+        storeRepo.getAccessToken(shop)
           ?: return@get
             call.respondText(
               "Shop not installed. Open /install?shop=$shop first.",
@@ -171,7 +191,7 @@ fun Application.configureRouting(
         normalizeShopDomain(rawShop)
           ?: return@get call.respondText("Invalid shop", status = HttpStatusCode.BadRequest)
       val token =
-        tokenStore[shop]
+        storeRepo.getAccessToken(shop)
           ?: return@get
             call.respondText(
               "Shop not installed. Open /install?shop=$shop first.",
@@ -212,7 +232,7 @@ fun Application.configureRouting(
         normalizeShopDomain(body.shop)
           ?: return@post call.respondText("Invalid shop", status = HttpStatusCode.BadRequest)
       val token =
-        tokenStore[shop]
+        storeRepo.getAccessToken(shop)
           ?: return@post
             call.respondText(
               "Shop not installed",
@@ -253,7 +273,7 @@ fun Application.configureRouting(
         normalizeShopDomain(body.shop)
           ?: return@post call.respondText("Invalid shop", status = HttpStatusCode.BadRequest)
       val token =
-        tokenStore[shop]
+        storeRepo.getAccessToken(shop)
           ?: return@post call.respondText("Shop not installed", status = HttpStatusCode.NotFound)
       val gqlUrl = URI(adminGraphqlJsonUrl(shop, config.apiVersion)).toURL()
       val graphQLClient = GraphQLKtorClient(gqlUrl, httpClient)
@@ -285,6 +305,7 @@ fun Application.configureRouting(
         call.respondText("Tracking updated id=${r.data?.fulfillmentTrackingInfoUpdate?.fulfillment?.id}")
       }
     }
+    }
 
     post("/webhooks/shopify") {
       val hmacHeader = call.request.headers["X-Shopify-Hmac-Sha256"]
@@ -296,13 +317,12 @@ fun Application.configureRouting(
         return@post
       }
       val bodyStr = body.decodeToString()
-      val preview = bodyStr.substring(0, min(400, bodyStr.length))
       call.application.log.info(
-        "Webhook verified topic=$topic shopDomain=$shopDomain preview=$preview",
+        "Webhook verified topic=$topic shopDomain=$shopDomain bodyBytes=${body.size}",
       )
 
       val shopNorm = normalizeShopDomain(shopDomain)
-      val token = shopNorm?.let { tokenStore[it] }
+      val token = shopNorm?.let { storeRepo.getAccessToken(it) }
       if (shopNorm == null || token == null) {
         call.application.log.warn(
           "Webhook: no access token for shopDomain=$shopDomain (install app / persist tokens in production)",
@@ -332,7 +352,38 @@ fun Application.configureRouting(
           val id = graphqlResourceIdFromShopifyWebhook("products/delete", bodyStr)
           call.application.log.info("Webhook product deleted id=$id")
         }
-        "orders/create", "orders/updated" -> {
+        "orders/create" -> {
+          val id = graphqlResourceIdFromShopifyWebhook(topic, bodyStr)
+          if (id != null && monolithClient != null) {
+            val r =
+              graphQLClient.execute(GetOrderForDss(GetOrderForDss.Variables(id))) {
+                header("X-Shopify-Access-Token", token)
+              }
+            val order = r.data?.order
+            if (order != null) {
+              val req =
+                orderToCreateShopifyOrderRequest(shopifySubdomainShort(shopNorm), order)
+              monolithClient.postCreateOrder(req).fold(
+                onSuccess = {
+                  call.application.log.info("Monolith create order ok: httpStatus=${it.status}")
+                },
+                onFailure = { e -> call.application.log.warn("Monolith create order failed", e) },
+              )
+            } else {
+              call.application.log.warn("Webhook orders/create: order null errors=${r.errors}")
+            }
+          } else if (id != null) {
+            val r =
+              graphQLClient.execute(GetOrderById(GetOrderById.Variables(id))) {
+                header("X-Shopify-Access-Token", token)
+              }
+            val name = r.data?.order?.name
+            call.application.log.info("Webhook order loaded id=$id name=$name errors=${r.errors}")
+          } else {
+            call.application.log.warn("Webhook order: could not parse GraphQL id from body")
+          }
+        }
+        "orders/updated" -> {
           val id = graphqlResourceIdFromShopifyWebhook(topic, bodyStr)
           if (id != null) {
             val r =
@@ -349,5 +400,7 @@ fun Application.configureRouting(
       }
       call.respond(HttpStatusCode.OK)
     }
+
+    configureDssRoutes(config, dssConfig, storeRepo, httpClient, fulfillmentService)
   }
 }
