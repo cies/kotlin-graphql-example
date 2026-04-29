@@ -1,0 +1,14 @@
+{
+    "stores": [
+        {
+            "id": 1,
+            "shopifySubdomain": "harness-sandbox.myshopify.com",
+            "shopifyShopId": 9000000000001,
+            "accessToken": "shpat_sandbox_harness_not_for_production",
+            "productVariantIds": [
+                5000000000000
+            ]
+        }
+    ],
+    "nextStoreId": 2
+}

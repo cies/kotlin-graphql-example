@@ -1,11 +1,11 @@
-package com.example.dss
+package com.example.lib.dss
 
-import com.example.dss.dto.CreateShopifyOrderRequest
-import com.example.dss.dto.OrderLineItem
-import com.example.dss.dto.ShippingAddress
-import com.example.graphql.generated.getorderfordss.MailingAddress
+import com.example.lib.dss.dto.CreateShopifyOrderRequest
+import com.example.lib.dss.dto.OrderLineItem
+import com.example.lib.dss.dto.ShippingAddress
 import com.example.graphql.generated.enums.OrderDisplayFinancialStatus
 import com.example.graphql.generated.enums.OrderDisplayFulfillmentStatus
+import com.example.graphql.generated.getorderfordss.MailingAddress
 import com.example.graphql.generated.getorderfordss.Order
 import com.example.graphql.generated.getorderfordss.ProductVariant
 import kotlin.math.roundToLong
@@ -17,7 +17,7 @@ fun orderToCreateShopifyOrderRequest(
   val orderLegacy = legacyIdFromGid(order.id.toString()) ?: order.legacyResourceId.toString().toLong()
   val shipping =
     order.shippingAddress?.toDto()
-      ?: ShippingAddress(address1 = "", city = "", country_code = "")
+      ?: ShippingAddress(address1 = "", city = "", countryCode = "")
   val lineItems =
     order.lineItems.edges.mapNotNull { edge ->
       val li = edge.node
@@ -27,24 +27,28 @@ fun orderToCreateShopifyOrderRequest(
       val lineId = legacyIdFromGid(li.id.toString()) ?: return@mapNotNull null
       val minor = priceToMinorUnits(li.originalUnitPriceSet.shopMoney.amount.toString())
       OrderLineItem(
-        order_line_item_id = lineId,
-        product_variant_id = variantLegacy,
+        orderLineItemId = lineId,
+        productVariantId = variantLegacy,
         quantity = li.quantity,
-        fulfillment_order_id = foId,
-        snapshot_of_variant_title = li.name,
-        snapshot_of_product_title = li.title,
-        snapshot_of_price_in_minor_units = minor,
+        fulfillmentOrderId = foId,
+        snapshotOfVariantTitle = li.name,
+        snapshotOfProductTitle = li.title,
+        snapshotOfPriceInMinorUnits = minor,
       )
     }
+  val totalMinor =
+    order.totalPriceSet?.shopMoney?.amount?.toString()?.let { priceToMinorUnits(it) }
+      ?: lineItems.sumOf { it.snapshotOfPriceInMinorUnits * it.quantity.toLong() }.coerceAtLeast(0L)
   return CreateShopifyOrderRequest(
-    shopify_subdomain = shopifySubdomain,
-    shopify_order_id = orderLegacy,
+    shopifySubdomain = shopifySubdomain,
+    shopifyOrderId = orderLegacy,
     name = order.name,
-    financial_status = order.displayFinancialStatus?.toFinancialString() ?: "unknown",
-    fulfillment_status = order.displayFulfillmentStatus.toFulfillmentString(),
-    created_at = order.createdAt,
-    shipping_address = shipping,
-    line_items = lineItems,
+    financialStatus = order.displayFinancialStatus?.toFinancialString() ?: "unknown",
+    fulfillmentStatus = order.displayFulfillmentStatus.toFulfillmentString(),
+    createdAt = order.createdAt,
+    shippingAddress = shipping,
+    lineItems = lineItems,
+    totalInMinorUnits = totalMinor,
   )
 }
 
@@ -71,14 +75,14 @@ private fun findFulfillmentOrderLegacyIdForVariant(order: Order, variant: Produc
 
 private fun MailingAddress.toDto(): ShippingAddress =
   ShippingAddress(
-    first_name = firstName,
-    last_name = lastName,
+    firstName = firstName,
+    lastName = lastName,
     address1 = address1 ?: "",
     address2 = address2,
     city = city ?: "",
     province = province,
-    province_code = provinceCode,
-    country_code = countryCodeV2?.name ?: "",
+    provinceCode = provinceCode,
+    countryCode = countryCodeV2?.name ?: "",
     zip = zip,
     phone = phone,
   )

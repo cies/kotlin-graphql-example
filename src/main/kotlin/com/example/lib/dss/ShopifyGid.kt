@@ -1,4 +1,4 @@
-package com.example.dss
+package com.example.lib.dss
 
 /** Numeric REST-style id from a Shopify Admin GraphQL GID (`gid://shopify/Resource/123`). */
 fun legacyIdFromGid(gid: String): Long? =

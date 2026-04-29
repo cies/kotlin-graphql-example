@@ -1,9 +1,10 @@
 package com.example
 
-import com.example.dss.DssAppConfig
-import com.example.dss.DssFulfillmentService
-import com.example.dss.MonolithClient
-import com.example.dss.persistence.FileStoreRepository
+import com.example.lib.dss.DssAppConfig
+import com.example.lib.dss.DssFulfillmentService
+import com.example.lib.dss.DssHttpHandlers
+import com.example.lib.monolith.HttpMonolithClient
+import com.example.lib.monolith.MonolithCreateOrderPort
 import com.example.shopify.OAuthStateStore
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.log
@@ -24,25 +25,37 @@ fun main() {
       )
   val config = dssConfig.shopify
   val stateStore = OAuthStateStore()
-  val storeRepo = FileStoreRepository(dssConfig.dataDir)
-  val fulfillmentService = DssFulfillmentService()
+  if (dssConfig.enableTestHarness) {
+    println(
+      "[test-harness] /demo/* routes are enabled (same as ENABLE_DEMO_ROUTES=true for this process)",
+    )
+    println(
+      "[test-harness] Stateless tokens: set DSS_SHOP_ACCESS_TOKENS or X-Shopify-Access-Token on DSS calls; SANDBOX_* merged when harness is on.",
+    )
+  }
   val httpClient = createSharedHttpClient()
-  val monolithClient =
+  val httpMonolithClient: MonolithCreateOrderPort? =
     dssConfig.monolithBaseUrl?.let { base ->
-      MonolithClient(
+      HttpMonolithClient(
         httpClient = httpClient,
         baseUrl = base,
         apiKey = dssConfig.monolithApiKey,
         createOrderPath = dssConfig.monolithCreateOrderPath,
       )
     }
+  val dssHandlers =
+    DssHttpHandlers(
+      shopifyConfig = config,
+      dssConfig = dssConfig,
+      httpClient = httpClient,
+      fulfillmentService = DssFulfillmentService(),
+    )
 
   embeddedServer(CIO, port = config.serverPort, host = "0.0.0.0") {
     install(CallLogging)
     install(StatusPages) {
       exception<Throwable> { call, cause ->
         call.application.log.error("Unhandled error", cause)
-        // Do not return exception messages to clients (may leak paths, SQL, or secrets).
         call.respondText(
           text = "internal error",
           status = io.ktor.http.HttpStatusCode.InternalServerError,
@@ -60,10 +73,9 @@ fun main() {
     configureRouting(
       dssConfig = dssConfig,
       stateStore = stateStore,
-      storeRepo = storeRepo,
       httpClient = httpClient,
-      fulfillmentService = fulfillmentService,
-      monolithClient = monolithClient,
+      httpMonolithClient = httpMonolithClient,
+      dssHandlers = dssHandlers,
     )
   }.start(wait = true)
 }

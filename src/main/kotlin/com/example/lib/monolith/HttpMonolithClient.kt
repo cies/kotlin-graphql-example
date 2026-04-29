@@ -1,6 +1,6 @@
-package com.example.dss
+package com.example.lib.monolith
 
-import com.example.dss.dto.CreateShopifyOrderRequest
+import com.example.lib.dss.dto.CreateShopifyOrderRequest
 import io.ktor.client.HttpClient
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -11,19 +11,19 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import kotlinx.serialization.json.Json
 
-class MonolithClient(
+class HttpMonolithClient(
   private val httpClient: HttpClient,
   private val baseUrl: String,
   private val apiKey: String?,
   private val createOrderPath: String,
-) {
+) : MonolithCreateOrderPort {
   private val json =
     Json {
       ignoreUnknownKeys = true
       encodeDefaults = true
     }
 
-  suspend fun postCreateOrder(request: CreateShopifyOrderRequest): Result<HttpResponseSummary> {
+  override suspend fun postCreateOrder(request: CreateShopifyOrderRequest): Result<HttpResponseSummary> {
     val url = baseUrl.trimEnd('/') + createOrderPath
     val response =
       httpClient.post(url) {
@@ -42,8 +42,3 @@ class MonolithClient(
     }
   }
 }
-
-data class HttpResponseSummary(
-  val status: Int,
-  val body: String,
-)

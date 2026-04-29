@@ -1,9 +1,9 @@
-package com.example.dss
+package com.example.lib.dss
 
-import com.example.dss.dto.SyncShipmentsWithFulfillmentsPayload
-import com.example.dss.dto.SyncShipmentsWithFulfillmentsResponse
-import com.example.dss.dto.TrackingUpdatePayload
-import com.example.dss.dto.TrackingUpdateResponse
+import com.example.lib.dss.dto.SyncShipmentsWithFulfillmentsPayload
+import com.example.lib.dss.dto.SyncShipmentsWithFulfillmentsResponse
+import com.example.lib.dss.dto.TrackingUpdatePayload
+import com.example.lib.dss.dto.TrackingUpdateResponse
 import com.example.graphql.generated.FulfillmentCancelMutation
 import com.example.graphql.generated.FulfillmentCreateWithLineItems
 import com.example.graphql.generated.FulfillmentEventCreateMutation
@@ -24,8 +24,8 @@ class DssFulfillmentService {
     accessToken: String,
     payload: SyncShipmentsWithFulfillmentsPayload,
   ): Result<SyncShipmentsWithFulfillmentsResponse> {
-    val orderGid = orderGid(payload.shopify_order_id)
-    for (fid in payload.replace_fulfillment_ids) {
+    val orderGid = orderGid(payload.shopifyOrderId)
+    for (fid in payload.replaceFulfillmentIds) {
       val r =
         graphQLClient.execute(FulfillmentCancelMutation(FulfillmentCancelMutation.Variables(fulfillmentGid(fid)))) {
           header("X-Shopify-Access-Token", accessToken)
@@ -41,17 +41,17 @@ class DssFulfillmentService {
       loadOrder(graphQLClient, accessToken, orderGid)
         ?: return Result.failure(RuntimeException("order not found after cancel"))
     val newIds = mutableListOf<Long>()
-    for (nf in payload.new_fulfillments) {
+    for (nf in payload.newFulfillments) {
       val fo =
-        findFulfillmentOrder(orderAfter, nf.fulfillment_order_id)
-          ?: return Result.failure(RuntimeException("fulfillment order ${nf.fulfillment_order_id} not found"))
+        findFulfillmentOrder(orderAfter, nf.fulfillmentOrderId)
+          ?: return Result.failure(RuntimeException("fulfillment order ${nf.fulfillmentOrderId} not found"))
       val lineInputs =
-        buildFoLineInputs(fo, nf.line_items).getOrElse { return Result.failure(it) }
+        buildFoLineInputs(fo, nf.lineItems).getOrElse { return Result.failure(it) }
       val tracking =
         FulfillmentTrackingInput(
           company = nf.carrier,
-          number = nf.tracking_number,
-          url = nf.tracking_url,
+          number = nf.trackingNumber,
+          url = nf.trackingUrl,
         )
       val variables =
         FulfillmentCreateWithLineItems.Variables(
@@ -81,7 +81,7 @@ class DssFulfillmentService {
         leg?.toString()?.toLongOrNull() ?: legacyIdFromGid(f?.id.toString())
       if (idNum != null) newIds.add(idNum)
     }
-    return Result.success(SyncShipmentsWithFulfillmentsResponse(new_fulfillment_ids = newIds))
+    return Result.success(SyncShipmentsWithFulfillmentsResponse(newFulfillmentIds = newIds))
   }
 
   suspend fun createTrackingEvent(
@@ -91,8 +91,8 @@ class DssFulfillmentService {
   ): Result<TrackingUpdateResponse> {
     val input =
       FulfillmentEventInput(
-        fulfillmentId = fulfillmentGid(payload.fulfillment_id),
-        happenedAt = payload.happened_at,
+        fulfillmentId = fulfillmentGid(payload.fulfillmentId),
+        happenedAt = payload.happenedAt,
         status = parseFulfillmentEventStatus(payload.status),
         message = payload.message,
       )
@@ -110,7 +110,7 @@ class DssFulfillmentService {
     val eid =
       legacyIdFromGid(ev?.id.toString())
         ?: return Result.failure(RuntimeException("missing fulfillment event id"))
-    return Result.success(TrackingUpdateResponse(fulfillment_event_id = eid))
+    return Result.success(TrackingUpdateResponse(fulfillmentEventId = eid))
   }
 
   private suspend fun loadOrder(
@@ -135,7 +135,7 @@ class DssFulfillmentService {
 
   private fun buildFoLineInputs(
     fo: FulfillmentOrder,
-    requested: List<com.example.dss.dto.ShipmentLineItem>,
+    requested: List<com.example.lib.dss.dto.ShipmentLineItem>,
   ): Result<List<FulfillmentOrderLineItemInput>?> {
     if (requested.isEmpty()) return Result.success(null)
     val inputs = mutableListOf<FulfillmentOrderLineItemInput>()
@@ -144,10 +144,10 @@ class DssFulfillmentService {
         fo.lineItems.edges
           .map { it.node }
           .find { node ->
-            node.variant?.legacyResourceId?.toString()?.toLongOrNull() == req.product_variant_id
+            node.variant?.legacyResourceId?.toString()?.toLongOrNull() == req.productVariantId
           }
           ?: return Result.failure(
-            RuntimeException("variant ${req.product_variant_id} not found on fulfillment order"),
+            RuntimeException("variant ${req.productVariantId} not found on fulfillment order"),
           )
       val qty = min(req.quantity, match.remainingQuantity)
       if (qty <= 0) continue

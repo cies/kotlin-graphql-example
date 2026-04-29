@@ -1,6 +1,6 @@
-package com.example.dss
+package com.example.lib.dss
 
-import com.example.dss.dto.ErrorResponse
+import com.example.lib.dss.dto.ErrorResponse
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.respond
@@ -10,7 +10,7 @@ suspend fun ApplicationCall.requireDssInternalSecret(secret: String?): Boolean {
   if (secret.isNullOrBlank()) return true
   val provided = request.headers["X-DSS-Internal-Secret"] ?: ""
   if (!constantTimeEquals(secret, provided)) {
-    respond(HttpStatusCode.Unauthorized, ErrorResponse("unauthorized"))
+    respond(HttpStatusCode.Unauthorized, ErrorResponse(error = "unauthorized"))
     return false
   }
   return true

@@ -1,4 +1,4 @@
-package com.example.dss
+package com.example.lib.dss
 
 import com.example.graphql.generated.enums.FulfillmentEventStatus
 

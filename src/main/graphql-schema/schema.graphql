@@ -23168,7 +23168,7 @@ type Mutation {
     """
     discountId: ID!
   ): DiscountRedeemCodeBulkAddPayload
-  "Updates a dispute evidence."
+  "Updates the evidence package for a Shopify Payments dispute. Merchants submit evidence — such as shipping confirmations, customer communications, and refund policies — to contest a dispute filed by a cardholder. This mutation updates the evidence fields."
   disputeEvidenceUpdate(
     "The ID of the dispute evidence to be updated."
     id: ID!,
@@ -27139,25 +27139,25 @@ type Mutation {
     input: SubscriptionDraftInput!
   ): SubscriptionDraftUpdatePayload
   """
-  Adds tags to a resource in the store. Supported resources include [`Order`](https://shopify.dev/docs/api/admin-graphql/latest/objects/Order), [`DraftOrder`](https://shopify.dev/docs/api/admin-graphql/latest/objects/DraftOrder), [`Customer`](https://shopify.dev/docs/api/admin-graphql/latest/objects/Customer), [`Product`](https://shopify.dev/docs/api/admin-graphql/latest/objects/Product), and [`Article`](https://shopify.dev/docs/api/admin-graphql/latest/objects/Article).
+  Adds tags to a resource. If the resource type doesn't support tagging, the `id` argument returns a resource-not-found error.
   
   Tags help merchants organize and filter resources. See the [`tags`](https://shopify.dev/docs/api/admin-graphql/latest/mutations/tagsAdd#arguments-tags) argument for supported input formats.
   
   Learn more about [using tags to organize subscription orders](https://shopify.dev/docs/apps/build/purchase-options/subscriptions/fulfillments/sync-orders-subscriptions#order-tagging).
   """
   tagsAdd(
-    "The ID of a resource to add tags to."
+    "The ID of a resource to add tags to. Supported resources: [`Order`](https://shopify.dev/docs/api/admin-graphql/latest/objects/Order), [`DraftOrder`](https://shopify.dev/docs/api/admin-graphql/latest/objects/DraftOrder), [`Customer`](https://shopify.dev/docs/api/admin-graphql/latest/objects/Customer), [`Product`](https://shopify.dev/docs/api/admin-graphql/latest/objects/Product), [`Article`](https://shopify.dev/docs/api/admin-graphql/latest/objects/Article), and [`DiscountNode`](https://shopify.dev/docs/api/admin-graphql/latest/objects/DiscountNode)."
     id: ID!,
     "A list of tags to add to the resource. Can be an array of strings or a single string composed of a comma-separated list of values. Example values: `[\"tag1\", \"tag2\", \"tag3\"]`, `\"tag1, tag2, tag3\"`."
     tags: [String!]!
   ): TagsAddPayload
   """
-  Removes tags from an [`Order`](https://shopify.dev/docs/api/admin-graphql/latest/objects/Order), [`DraftOrder`](https://shopify.dev/docs/api/admin-graphql/latest/objects/DraftOrder), [`Customer`](https://shopify.dev/docs/api/admin-graphql/latest/objects/Customer), [`Product`](https://shopify.dev/docs/api/admin-graphql/latest/objects/Product), or [`Article`](https://shopify.dev/docs/api/admin-graphql/latest/objects/Article).
+  Removes tags from a resource. If the resource type doesn't support tagging, the `id` argument returns a resource-not-found error.
   
   Tags are searchable keywords that help organize and filter these resources.
   """
   tagsRemove(
-    "The ID of the resource to remove tags from."
+    "The ID of the resource to remove tags from. Supported resources: [`Order`](https://shopify.dev/docs/api/admin-graphql/latest/objects/Order), [`DraftOrder`](https://shopify.dev/docs/api/admin-graphql/latest/objects/DraftOrder), [`Customer`](https://shopify.dev/docs/api/admin-graphql/latest/objects/Customer), [`Product`](https://shopify.dev/docs/api/admin-graphql/latest/objects/Product), [`Article`](https://shopify.dev/docs/api/admin-graphql/latest/objects/Article), and [`DiscountNode`](https://shopify.dev/docs/api/admin-graphql/latest/objects/DiscountNode)."
     id: ID!,
     "A list of tags to remove from the resource in the form of an array of strings. Example value: `[\"tag1\", \"tag2\", \"tag3\"]`."
     tags: [String!]!
@@ -35136,7 +35136,7 @@ type QueryRoot {
     "The ID of the `ShopifyPaymentsDisputeEvidence` to return."
     id: ID!
   ): ShopifyPaymentsDisputeEvidence
-  "All disputes related to the Shop."
+  "Returns a paginated list of all Shopify Payments disputes for the shop. Disputes occur when a buyer files a complaint with their payments provider, and the merchant must provide evidence to contest it. Each dispute includes the status, amount, reason, and associated order. Use this to monitor and manage open chargebacks and track dispute resolution outcomes."
   disputes(
     "The elements that come after the specified [cursor](https://shopify.dev/api/usage/pagination-graphql)."
     after: String,
@@ -36781,7 +36781,7 @@ type QueryRoot {
     | taxable | boolean | Filter by the product variant [`taxable`](https://shopify.dev/api/admin-graphql/latest/objects/ProductVariant#field-taxable) field. | | | - `taxable:false` |
     | title | string | Filter by the product variant [`title`](https://shopify.dev/api/admin-graphql/latest/objects/ProductVariant#field-title) field. | | | - `title:ice` |
     | updated_at | time | Filter by date and time when the product variant was updated. | | | - `updated_at:>2020-10-21T23:39:20Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
-    | vendor | string | Filter by the origin or source of the product variant. Learn more about [vendors and managing vendor information](https://help.shopify.com/manual/products/managing-vendor-info). | | | - `vendor:Snowdevil`<br/> - `vendor:Snowdevil OR vendor:Icedevil` |
+    | vendor | string | Filter by the origin or source of the product variant. Learn more about [vendors and managing vendor information](https://help.shopify.com/manual/products/managing-vendor-info). | | | - `vendor:Snowdevil`<br/> - `vendor:Snowdevil,Icedevil`<br/> - `vendor:Snowdevil OR vendor:Icedevil` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
     query: String,
@@ -40889,7 +40889,7 @@ type Shop implements HasMetafieldDefinitions & HasMetafields & HasPublishedTrans
     | taxable | boolean | Filter by the product variant [`taxable`](https://shopify.dev/api/admin-graphql/latest/objects/ProductVariant#field-taxable) field. | | | - `taxable:false` |
     | title | string | Filter by the product variant [`title`](https://shopify.dev/api/admin-graphql/latest/objects/ProductVariant#field-title) field. | | | - `title:ice` |
     | updated_at | time | Filter by date and time when the product variant was updated. | | | - `updated_at:>2020-10-21T23:39:20Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
-    | vendor | string | Filter by the origin or source of the product variant. Learn more about [vendors and managing vendor information](https://help.shopify.com/manual/products/managing-vendor-info). | | | - `vendor:Snowdevil`<br/> - `vendor:Snowdevil OR vendor:Icedevil` |
+    | vendor | string | Filter by the origin or source of the product variant. Learn more about [vendors and managing vendor information](https://help.shopify.com/manual/products/managing-vendor-info). | | | - `vendor:Snowdevil`<br/> - `vendor:Snowdevil,Icedevil`<br/> - `vendor:Snowdevil OR vendor:Icedevil` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
     query: String,
@@ -46184,6 +46184,8 @@ enum BillingAttemptUserErrorCode {
   ORIGIN_TIME_BEFORE_CONTRACT_CREATION
   "Origin time needs to be within the selected billing cycle's start and end at date."
   ORIGIN_TIME_OUT_OF_RANGE
+  "Failed to process the billing attempt."
+  PROCESSING_FAILED
   "Billing attempt rate limit exceeded - try later."
   THROTTLED
   "Billing cycle selector cannot select upcoming billing cycle past limit."
@@ -53357,6 +53359,8 @@ enum OrderCreateManualPaymentOrderCreateManualPaymentErrorCode {
   AMOUNT_EXCEEDS_BALANCE
   "Amount must be positive."
   AMOUNT_NOT_POSITIVE
+  "The currency of the amount doesn't match the presentment currency of the order."
+  CURRENCY_MISMATCH
   "Payment gateway is not found."
   GATEWAY_NOT_FOUND
   "Order is temporarily unavailable."

@@ -5,6 +5,12 @@ query GetOrderForDss($id: ID!) {
     email
     legacyResourceId
     createdAt
+    totalPriceSet {
+      shopMoney {
+        amount
+        currencyCode
+      }
+    }
     displayFinancialStatus
     displayFulfillmentStatus
     shippingAddress {

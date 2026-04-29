@@ -1,5 +1,6 @@
 import com.expediagroup.graphql.plugin.gradle.config.GraphQLSerializer
 import com.expediagroup.graphql.plugin.gradle.graphql
+import org.gradle.api.tasks.testing.logging.TestLogEvent
 
 description = "GraphQL client Kotlin with compile-time query validation and IDE integration"
 
@@ -32,6 +33,20 @@ dependencies {
   implementation(libs.ktorServerStatusPages)
   implementation(libs.ktorServerContentNegotiation)
   implementation(libs.ktorServerCallLogging)
+  testImplementation(kotlin("test"))
+  testImplementation("org.junit.jupiter:junit-jupiter:5.11.0")
+  testImplementation(libs.konsist)
+  testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+tasks.test {
+  useJUnitPlatform()
+  val fakesVerbose = providers.gradleProperty("fakesVerbose").orElse("false").get() == "true"
+  systemProperty("fakes.verbose", fakesVerbose.toString())
+  testLogging {
+    events(TestLogEvent.PASSED, TestLogEvent.SKIPPED, TestLogEvent.FAILED)
+    showStandardStreams = fakesVerbose
+  }
 }
 
 application {

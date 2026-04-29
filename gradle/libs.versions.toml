@@ -2,8 +2,10 @@
 kotlinVersion = "2.2.20"
 ktorVersion = "3.4.1"
 kotlinGraphqlVersion = "9.0.0"
+konsistVersion = "0.17.3"
 
 [libraries]
+konsist = { group = "com.lemonappdev", name = "konsist", version.ref = "konsistVersion" }
 graphqlKotlinKtorClient = { group = "com.expediagroup", name = "graphql-kotlin-ktor-client", version.ref = "kotlinGraphqlVersion" }
 graphqlKotlinClientSerialization = { group = "com.expediagroup", name = "graphql-kotlin-client-serialization", version.ref = "kotlinGraphqlVersion" }
 ktorClientOkhttp = { group = "io.ktor", name = "ktor-client-okhttp", version.ref = "ktorVersion" }

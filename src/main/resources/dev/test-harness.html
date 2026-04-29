@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>DSS / demo test harness</title>
+  <style>
+    :root { font-family: system-ui, sans-serif; color: #1a1a1a; background: #e4e4e7; }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    h1 { font-size: 1.1rem; margin: 0 0 0.4rem; }
+    h2 { font-size: 0.88rem; margin: 0.5rem 0 0.35rem; border-bottom: 1px solid #d4d4d8; padding-bottom: 0.2rem; }
+    h3 { font-size: 0.8rem; color: #52525b; margin: 0.5rem 0 0.2rem; }
+    .app { min-height: 100%; }
+    .left {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: 40%;
+      min-width: 280px;
+      max-width: 560px;
+      height: 100vh;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      background: #18181b;
+      color: #e4e4e7;
+      padding: 0.6rem 0.75rem 0.5rem;
+      overflow: hidden;
+    }
+    .left h2 { color: #a1a1aa; border-color: #3f3f46; }
+    .right {
+      margin-left: 40%;
+      min-width: 320px;
+      min-height: 100vh;
+      overflow: auto;
+      padding: 0.75rem 1.1rem 2.5rem 1.1rem;
+      background: #f4f4f5;
+    }
+    @media (max-width: 900px) {
+      .left { width: 100%; max-width: none; height: auto; min-height: 50vh; position: relative; }
+      .right { margin-left: 0; }
+    }
+    .console-wrap {
+      flex: 1 1 0;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      border: 1px solid #3f3f46;
+      border-radius: 6px;
+      background: #27272a;
+      margin: 0 0 0.4rem;
+      overflow: hidden;
+    }
+    .console {
+      font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+      font-size: 0.72rem;
+      line-height: 1.35;
+      white-space: pre-wrap;
+      word-break: break-word;
+      flex: 1 1 0;
+      min-height: 0;
+      padding: 0.5rem 0.6rem;
+      margin: 0;
+      border: 0;
+      background: transparent;
+      color: #e4e4e7;
+      overflow: hidden;
+    }
+    .testlog {
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 0.68rem;
+      line-height: 1.3;
+      white-space: pre-wrap;
+      word-break: break-word;
+      height: 7.5rem;
+      min-height: 4rem;
+      flex: 0 0 auto;
+      padding: 0.45rem 0.5rem;
+      border-radius: 6px;
+      background: #1f1f23;
+      border: 1px solid #3f3f46;
+      margin: 0 0 0.35rem;
+      overflow-y: auto;
+    }
+    .row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin: 0.3rem 0; }
+    label { min-width: 8.5rem; font-size: 0.8rem; }
+    input[type="text"], input[type="url"] { flex: 1; min-width: 180px; padding: 0.3rem 0.45rem; }
+    textarea {
+      width: 100%;
+      min-height: 100px;
+      font-family: ui-monospace, monospace;
+      font-size: 0.75rem;
+      padding: 0.4rem 0.5rem;
+    }
+    button { padding: 0.35rem 0.6rem; cursor: pointer; margin: 0.1rem 0.2rem 0.1rem 0; font-size: 0.8rem; }
+    .btn-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; }
+    .warn { background: #fef3c7; border: 1px solid #f59e0b; padding: 0.5rem; border-radius: 6px; font-size: 0.8rem; margin-bottom: 0.6rem; }
+    .muted { color: #71717a; font-size: 0.78rem; }
+    a { color: #2563eb; }
+    .ok { color: #4ade80; }
+    .bad { color: #f87171; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="left">
+      <h1>Response</h1>
+      <p class="muted" style="margin:0 0 0.25rem; font-size:0.72rem">Fills the panel (no internal scroll). Full body is kept in memory — <strong>Copy full</strong>. Stateless DSS: set <strong>Shopify access token</strong> below or configure <code>DSS_SHOP_ACCESS_TOKENS</code> / <code>SANDBOX_ACCESS_TOKEN</code> on the server.</p>
+      <div class="btn-row" style="margin:0.15rem 0 0.35rem; flex-wrap:wrap">
+        <button type="button" id="btnCopyFull" title="Copy last full response to clipboard">Copy full</button>
+        <button type="button" id="btnClearOut">Clear</button>
+        <span id="outMeta" class="muted" style="font-size:0.7rem; flex:1 0 8rem">0 bytes</span>
+      </div>
+      <div class="console-wrap">
+        <pre id="out" class="console" aria-live="polite">(no request yet)</pre>
+      </div>
+      <h2>Quick test</h2>
+      <p class="muted" style="margin:0 0 0.35rem">GET /health. <strong>Full DSS</strong> runs fulfillment paths from <code>docs/openapi/dss-api.yaml</code> (no store persistence).</p>
+      <div class="btn-row">
+        <button type="button" data-act="quickTest">Run quick test</button>
+        <button type="button" data-act="dssOpenApiFull" title="All paths in dss-api.yaml">Run full DSS (OpenAPI)</button>
+        <button type="button" id="btnClearTest">Clear test log</button>
+      </div>
+      <div id="testlog" class="testlog">(not run yet)</div>
+    </aside>
+    <main class="right">
+      <h1>Controls</h1>
+      <p class="muted" style="margin:0 0 0.5rem">
+        <strong>Stateless DSS:</strong> tokens are not stored on disk. Use <strong>Shopify access token</strong> below (sent as <code>X-Shopify-Access-Token</code> on DSS POSTs) or configure <code>DSS_SHOP_ACCESS_TOKENS</code> / <code>SANDBOX_ACCESS_TOKEN</code> on the server.
+        With <code>ENABLE_TEST_HARNESS=true</code>, <strong>/demo/*</strong> is on. For <strong>fully offline</strong> testing, set <code style="background:#fef9c3">DSS_SANDBOX_FAKE_SHOPIFY=true</code> and restart.
+      </p>
+      <div class="warn">
+        <strong>DSS secret:</strong> If the server has <code>DSS_INTERNAL_SECRET</code> set, paste it here for <code>X-DSS-Internal-Secret</code>.
+      </div>
+
+      <div class="row">
+        <label for="baseUrl">Base URL</label>
+        <input type="url" id="baseUrl" placeholder="http://127.0.0.1:8080"/>
+      </div>
+      <div class="row">
+        <label for="dssSecret">DSS internal secret</label>
+        <input type="text" id="dssSecret" placeholder="(optional)" autocomplete="off"/>
+      </div>
+      <div class="row">
+        <label for="shopifyAccessToken">Shopify access token</label>
+        <input type="text" id="shopifyAccessToken" placeholder="Optional; overrides env map for DSS POSTs" autocomplete="off"/>
+      </div>
+      <div class="row">
+        <label for="shop">Shop (short or full)</label>
+        <input type="text" id="shop" value="harness-sandbox" title="e.g. harness-sandbox or harness-sandbox.myshopify.com"/>
+        <button type="button" id="btnSyncShop" title="Copy shop into JSON bodies">Sync shop → JSON</button>
+      </div>
+
+      <h2>Quick</h2>
+      <div class="btn-row">
+        <button type="button" data-act="health">GET /health</button>
+        <button type="button" data-act="install">Open /install (OAuth)</button>
+      </div>
+
+      <h2>DSS REST <span class="muted" style="font-weight:normal">(see <code>docs/openapi/dss-api.yaml</code> in repo)</span></h2>
+      <p class="muted">Fulfillment sync and tracking only. Example order id in JSON is arbitrary for sandbox.</p>
+
+      <h3>POST /sync-shipments-with-fulfillments</h3>
+      <textarea id="syncBody" spellcheck="false">{
+  "shopify_subdomain": "harness-sandbox",
+  "shopify_order_id": 5600000000000,
+  "replace_fulfillment_ids": [],
+  "new_fulfillments": [
+    {
+      "fulfillment_order_id": 6400000000000,
+      "tracking_number": "FAKE-TRACK-1",
+      "carrier": "Fake Carrier",
+      "tracking_url": "https://example.com/track/FAKE",
+      "line_items": [
+        { "product_variant_id": 5000000000000, "quantity": 1 }
+      ]
+    }
+  ]
+}</textarea>
+      <div class="btn-row">
+        <button type="button" data-act="sync">Send sync</button>
+        <button type="button" data-act="dummy2">POST /dummy2</button>
+      </div>
+
+      <h3>POST /tracking-updates</h3>
+      <textarea id="trackBody" spellcheck="false">{
+  "shopify_subdomain": "harness-sandbox",
+  "fulfillment_id": 4500000000000,
+  "status": "IN_TRANSIT",
+  "happened_at": "2026-04-14T12:00:00Z",
+  "message": "harness test"
+}</textarea>
+      <div class="btn-row">
+        <button type="button" data-act="tracking">POST /tracking-updates</button>
+        <button type="button" data-act="trackingSingular" title="OpenAPI: hyphen, singular">POST /tracking-update</button>
+        <button type="button" data-act="dummy1">POST /dummy1</button>
+      </div>
+
+      <h2>Demo <span class="muted">(on with <code>ENABLE_TEST_HARNESS</code> — use a real <code>SANDBOX_ACCESS_TOKEN</code> for Shopify to succeed)</span></h2>
+      <div class="btn-row">
+        <button type="button" data-act="demoProducts">GET /demo/products</button>
+        <button type="button" data-act="demoOrder">GET /demo/order</button>
+      </div>
+      <h3>POST /demo/fulfillment/create</h3>
+      <textarea id="demoCreate" spellcheck="false">{
+  "shop": "harness-sandbox.myshopify.com",
+  "fulfillmentOrderId": "gid://shopify/FulfillmentOrder/123456789",
+  "trackingNumber": "DEMO-1",
+  "company": "FakeCo",
+  "notifyCustomer": false
+}</textarea>
+      <div class="btn-row"><button type="button" data-act="demoFulfillCreate">Send</button></div>
+      <h3>POST /demo/fulfillment/tracking</h3>
+      <textarea id="demoTrack" spellcheck="false">{
+  "shop": "harness-sandbox.myshopify.com",
+  "fulfillmentId": "gid://shopify/Fulfillment/987654321",
+  "trackingNumber": "DEMO-2",
+  "notifyCustomer": false
+}</textarea>
+      <div class="btn-row"><button type="button" data-act="demoFulfillTrack">Send</button></div>
+
+      <h2>Webhook</h2>
+      <p class="muted">HMAC not available from the browser. Use Partner dashboard or a signed tool → <code>POST /webhooks/shopify</code></p>
+    </main>
+  </div>
+
+  <script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const out = $('out');
+  const outMeta = $('outMeta');
+  const testlog = $('testlog');
+  const TS = () => new Date().toISOString().replace('T', ' ').slice(0, 19);
+  const DISP_MAX = 14_000;
+  let lastResponseFull = '';
+
+  function setView(full, isErr) {
+    lastResponseFull = full;
+    const t = (isErr ? 'ERROR\n' : '') + full;
+    if (t.length > DISP_MAX) {
+      out.textContent = t.slice(0, DISP_MAX) + '\n\n… truncated for display (no panel scroll). ' + t.length + ' bytes — use Copy full.';
+    } else {
+      out.textContent = t;
+    }
+    outMeta.textContent = t.length + ' bytes' + (t.length > DISP_MAX ? ' (display truncated)' : '');
+  }
+  function log(msg, isErr) {
+    const t = typeof msg === 'string' ? msg : JSON.stringify(msg, null, 2);
+    setView(t, isErr);
+  }
+  function logRaw(text) {
+    setView(text, false);
+  }
+  function appendTest(line) {
+    const cur = testlog.textContent;
+    testlog.textContent = (cur === '(not run yet)' ? '' : cur + '\n') + line;
+  }
+
+  function base() {
+    const u = ($('baseUrl').value || '').trim() || window.location.origin;
+    return u.replace(/\/$/, '');
+  }
+  function headersJson() {
+    const h = { 'Content-Type': 'application/json' };
+    const s = ($('dssSecret').value || '').trim();
+    if (s) h['X-DSS-Internal-Secret'] = s;
+    const tok = ($('shopifyAccessToken').value || '').trim();
+    if (tok) h['X-Shopify-Access-Token'] = tok;
+    return h;
+  }
+  function headersPlain() {
+    const h = {};
+    const s = ($('dssSecret').value || '').trim();
+    if (s) h['X-DSS-Internal-Secret'] = s;
+    const tok = ($('shopifyAccessToken').value || '').trim();
+    if (tok) h['X-Shopify-Access-Token'] = tok;
+    return h;
+  }
+  function shortShop() {
+    let s = ($('shop').value || '').trim() || 'harness-sandbox';
+    s = s.replace(/^https?:\/\//i, '').split('/')[0];
+    s = s.replace(/\.myshopify\.com$/i, '');
+    return s;
+  }
+  function fullShop() {
+    return shortShop() + '.myshopify.com';
+  }
+
+  /** Push shop field into all JSON textareas. */
+  function applyShopToBodies() {
+    const sh = shortShop();
+    const full = fullShop();
+    const ids = ['syncBody', 'trackBody', 'demoCreate', 'demoTrack'];
+    ids.forEach((id) => {
+      const el = $(id);
+      try {
+        const o = JSON.parse(el.value);
+        if (Object.prototype.hasOwnProperty.call(o, 'shopify_subdomain')) o.shopify_subdomain = sh;
+        if (Object.prototype.hasOwnProperty.call(o, 'shop')) o.shop = full;
+        el.value = JSON.stringify(o, null, 2);
+      } catch (e) { /* keep */ }
+    });
+  }
+
+  document.getElementById('baseUrl').value = window.location.origin;
+  $('btnCopyFull').addEventListener('click', function () {
+    if (!lastResponseFull) return;
+    navigator.clipboard.writeText(lastResponseFull).then(function () {
+      outMeta.textContent = 'Copied ' + lastResponseFull.length + ' bytes';
+    }).catch(function () { outMeta.textContent = 'Copy failed (browser blocked)'; });
+  });
+  $('btnClearOut').addEventListener('click', function () { lastResponseFull = ''; out.textContent = '(cleared)'; outMeta.textContent = '0 bytes'; });
+  $('btnClearTest').addEventListener('click', function () { testlog.textContent = '(cleared)'; });
+  $('btnSyncShop').addEventListener('click', function () { applyShopToBodies(); appendTest('[' + TS() + '] Synced shop → JSON: ' + shortShop()); });
+  document.getElementById('shop').addEventListener('change', function () { applyShopToBodies(); });
+
+  async function go(method, path, body) {
+    const opts = { method, headers: body != null ? headersJson() : headersPlain() };
+    if (body != null) opts.body = body;
+    const r = await fetch(base() + path, opts);
+    const text = await r.text();
+    let pretty = text;
+    try { pretty = JSON.stringify(JSON.parse(text), null, 2); } catch (e) { /* plain */ }
+    const line = (r.status + ' ' + r.statusText + '\n\n') + pretty;
+    setView(line, !r.ok);
+    return { ok: r.ok, status: r.status, text, pretty };
+  }
+
+  document.querySelectorAll('button[data-act]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const act = btn.getAttribute('data-act');
+      try {
+        if (act === 'quickTest') {
+          appendTest('[' + TS() + '] --- quick test start ---');
+          const h = await go('GET', '/health', null);
+          appendTest('[' + TS() + '] /health => ' + h.status + (h.ok ? ' OK' : ' FAIL'));
+          appendTest('[' + TS() + '] --- done ---');
+          return;
+        }
+        if (act === 'dssOpenApiFull') {
+          appendTest('[' + TS() + '] === dss-api.yaml: fulfillment paths ===');
+          const steps = [
+            ['POST /sync-shipments-with-fulfillments', function () { return go('POST', '/sync-shipments-with-fulfillments', $('syncBody').value); }],
+            ['POST /dummy2', function () { return go('POST', '/dummy2', $('syncBody').value); }],
+            ['POST /tracking-updates', function () { return go('POST', '/tracking-updates', $('trackBody').value); }],
+            ['POST /tracking-update', function () { return go('POST', '/tracking-update', $('trackBody').value); }],
+            ['POST /dummy1', function () { return go('POST', '/dummy1', $('trackBody').value); }],
+          ];
+          for (var si = 0; si < steps.length; si++) {
+            const label = steps[si][0];
+            const run = steps[si][1];
+            const res = await run();
+            const tail = res.ok ? 'ok' : ('HTTP ' + res.status + (res.status === 400 ? ' (expected w/ fake Shopify token)' : ''));
+            appendTest('[' + TS() + '] ' + label + ' → ' + tail);
+          }
+          appendTest('[' + TS() + '] === done: 401 without token/header; 400 from Shopify with fake token is OK ===');
+          return;
+        }
+        switch (act) {
+          case 'health': await go('GET', '/health', null); break;
+          case 'install':
+            window.open(base() + '/install?shop=' + encodeURIComponent(fullShop()), '_blank');
+            setView('Opened /install in a new tab (OAuth).', false);
+            break;
+          case 'sync': await go('POST', '/sync-shipments-with-fulfillments', $('syncBody').value); break;
+          case 'dummy2': await go('POST', '/dummy2', $('syncBody').value); break;
+          case 'tracking': await go('POST', '/tracking-updates', $('trackBody').value); break;
+          case 'trackingSingular': await go('POST', '/tracking-update', $('trackBody').value); break;
+          case 'dummy1': await go('POST', '/dummy1', $('trackBody').value); break;
+          case 'demoProducts': await go('GET', '/demo/products?shop=' + encodeURIComponent(fullShop()) + '&first=5', null); break;
+          case 'demoOrder': await go('GET', '/demo/order?shop=' + encodeURIComponent(fullShop()) + '&id=5600000000000', null); break;
+          case 'demoFulfillCreate': await go('POST', '/demo/fulfillment/create', $('demoCreate').value); break;
+          case 'demoFulfillTrack': await go('POST', '/demo/fulfillment/tracking', $('demoTrack').value); break;
+          default: log('Unknown action: ' + act, true);
+        }
+      } catch (e) {
+        log(String(e && e.message ? e.message : e), true);
+        appendTest('[' + TS() + '] ERROR: ' + e);
+      }
+    });
+  });
+})();
+  </script>
+</body>
+</html>
