@@ -41,9 +41,74 @@ Codegen and IDE tooling use the public Shopify Admin schema proxy (`https://shop
 
 At runtime, the app calls the **shop-specific** endpoint `https://{shop}/admin/api/{version}/graphql.json` with the access token.
 
+## Docker workflow
+
+This repository includes `Dockerfile`, `.dockerignore`, `docker-compose.yml`, and `.env.example`.
+The container runs the same Ktor service and uses the same environment variables as local runs.
+
+### Prepare environment variables
+
+Copy `.env.example` to `.env` and provide at least:
+
+* `SHOPIFY_API_KEY`
+* `SHOPIFY_API_SECRET`
+* `SHOPIFY_SCOPES`
+* `PUBLIC_BASE_URL`
+
+PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+### Build and run with Docker
+
+Build:
+
+```bash
+docker build -t kotlin-shopify-app:local .
+```
+
+Run with env file:
+
+```bash
+docker run --rm --env-file .env -p 8080:8080 kotlin-shopify-app:local
+```
+
+If you set `PORT` to a different value, publish the same port on both sides (for example `-p 9090:9090` when `PORT=9090`).
+
+### Run with Docker Compose profiles
+
+Standard app:
+
+```bash
+docker compose up --build app
+```
+
+Test harness profile (`ENABLE_TEST_HARNESS=true`):
+
+```bash
+docker compose --profile harness up --build app-harness
+```
+
+Local monolith profile (`DSS_ALLOW_INSECURE_MONOLITH=true`, local-only):
+
+```bash
+docker compose --profile local-monolith up --build app-local-monolith
+```
+
+Do not commit real secrets in `.env`; use your platform secret manager in production.
+
 ## Shopify Partner app: OAuth, Admin GraphQL, webhooks, orders, fulfillment
 
-The runnable app is a **Ktor server** (`com.example.ShopifyServerKt`) that implements the [authorization code grant](https://shopify.dev/docs/apps/auth/oauth/getting-started), syncs catalog pages with variants, registers product and order webhooks, loads full **order** data when webhooks fire, optional **DSS** internal REST (stores, variants, fulfillment sync, tracking), optional **monolith** forwarding on `orders/create`, and (when enabled) demo endpoints to create fulfillments and update tracking. Incoming webhooks are verified with `X-Shopify-Hmac-Sha256`.
+The runnable app is a **Ktor server** (`shopify.service.app.ShopifyServerKt`) that implements the [authorization code grant](https://shopify.dev/docs/apps/auth/oauth/getting-started), syncs catalog pages with variants, registers product and order webhooks, loads full **order** data when webhooks fire, optional **DSS** internal REST (fulfillment sync, tracking), optional **monolith** forwarding on `orders/create`, and (when enabled) demo endpoints to create fulfillments and update tracking. Incoming webhooks are verified with `X-Shopify-Hmac-Sha256`.
+
+Architecture notes:
+
+* The app is intentionally **stateless**. It does not keep in-memory stores for OAuth/token/order state.
+* Routing stays lightweight; request handling lives in dedicated handlers/services.
+* Tests prefer **fakes** over mocks/stubs for integration confidence at HTTP boundaries.
+* Production code avoids `lateinit`, and favors immutable `val` modeling.
 
 ### API version
 
@@ -147,4 +212,12 @@ Demo routes are off by default; they are not authenticated beyond knowing an ins
 
 * If webhook registration returns user errors (e.g. duplicate subscription), check logs; delivery may still work for existing subscriptions.
 * GraphQL `URL` scalar handling uses the GraphQL Kotlin client defaults (Kotlin `String` typealias).
-* Order webhooks can be delivered more than once; add idempotency if you add side effects beyond logging.
+* Order webhooks can be delivered more than once. Because this app is stateless, deduplication is not kept in-process; multi-instance deployments should use persistent idempotency at the platform boundary.
+
+### Troubleshooting
+
+* Startup exits quickly: verify required vars `SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET`, `SHOPIFY_SCOPES`, and `PUBLIC_BASE_URL`.
+* OAuth callback mismatch in Shopify: ensure `{PUBLIC_BASE_URL}{OAUTH_REDIRECT_PATH}` exactly matches Partner Dashboard redirect URL.
+* DSS auth failures (`401`): provide `X-Shopify-Access-Token` or configure `DSS_SHOP_ACCESS_TOKENS`; include `X-DSS-Internal-Secret` when `DSS_INTERNAL_SECRET` is set.
+* `DSS_SHOP_ACCESS_TOKENS` parse issues: use comma-separated `shop.myshopify.com|shpat_...` pairs.
+* Insecure monolith URL rejected: set `DSS_ALLOW_INSECURE_MONOLITH=true` only for local development; production should remain HTTPS.

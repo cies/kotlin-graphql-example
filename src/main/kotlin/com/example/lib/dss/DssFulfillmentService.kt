@@ -89,11 +89,18 @@ class DssFulfillmentService {
     accessToken: String,
     payload: TrackingUpdatePayload,
   ): Result<TrackingUpdateResponse> {
+    val parsedStatus = parseFulfillmentEventStatus(payload.status)
+    val status =
+      when (parsedStatus) {
+        is ParsedFulfillmentStatus.Known -> parsedStatus.value
+        is ParsedFulfillmentStatus.Unknown ->
+          return Result.failure(RuntimeException("unsupported tracking status: ${parsedStatus.raw}"))
+      }
     val input =
       FulfillmentEventInput(
         fulfillmentId = fulfillmentGid(payload.fulfillmentId),
         happenedAt = payload.happenedAt,
-        status = parseFulfillmentEventStatus(payload.status),
+        status = status,
         message = payload.message,
       )
     val r =

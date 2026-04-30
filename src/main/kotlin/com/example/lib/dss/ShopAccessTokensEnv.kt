@@ -1,6 +1,6 @@
 package com.example.lib.dss
 
-import com.example.shopify.normalizeShopDomain
+import com.example.lib.shopify.normalizeShopDomain
 
 private const val DEFAULT_HARNESS_FAKE_TOKEN = "shpat_sandbox_harness_not_for_production"
 

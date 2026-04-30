@@ -1,4 +1,4 @@
-package com.example.shopify
+package com.example.lib.shopify
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull

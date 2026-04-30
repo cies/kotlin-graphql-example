@@ -1,4 +1,4 @@
-package com.example.shopify
+package com.example.lib.shopify
 
 import io.ktor.http.Parameters
 import java.nio.charset.StandardCharsets

@@ -1,32 +1,36 @@
 # DSS implementation log
 
-This document records what was implemented for the **DropNext Shopify Service (DSS)** in this repository: OpenAPI-shaped REST, Shopify Admin GraphQL (`2026-04`), file-backed store tokens, monolith order forwarding, fulfillment sync, and security hooks.
+This document records what was implemented for the **DropNext Shopify Service (DSS)** in this repository: OpenAPI-shaped REST, Shopify Admin GraphQL (`2026-04`), **stateless** Admin token resolution (no `stores.json`), monolith order forwarding, fulfillment sync, and security hooks.
 
 ## Configuration
 
-- **`DssAppConfig`** (`com.example.dss`): reads `MONOLITH_BASE_URL`, `MONOLITH_API_KEY`, `MONOLITH_CREATE_ORDER_PATH`, `DSS_INTERNAL_SECRET`, `DSS_DATA_DIR`, `ENABLE_DEMO_ROUTES` (see `README.md`).
-- **Persistence**: `FileStoreRepository` writes `stores.json` under `DSS_DATA_DIR` (default `./data`).
+- **`DssAppConfig`** (`com.example.lib.dss`): reads `MONOLITH_BASE_URL`, `MONOLITH_API_KEY`, `MONOLITH_CREATE_ORDER_PATH`, `DSS_INTERNAL_SECRET`, `DSS_SHOP_ACCESS_TOKENS`, `SANDBOX_SHOP`, `SANDBOX_ACCESS_TOKEN`, harness flags (see `README.md`).
+- **Tokens**: Map `shop.myshopify.com` → Admin API token from env (`DSS_SHOP_ACCESS_TOKENS` as comma-separated `shop|token` pairs), merged with `SANDBOX_*` when the test harness is on. Callers may send **`X-Shopify-Access-Token`** on DSS POSTs instead.
 
 ## REST API
 
-- Canonical OpenAPI: `docs/openapi/dss-api.yaml` (aligned with monolith contract: title **DropNext Shopify Service API**, `v1`).
-- Kotlin routes: `com.example.dss.DssRoutes` - `GET /stores`, **`PUT /stores/api-key`** (canonical; **`PUT /stores`** kept as backward-compatible alias), `GET`/`POST`/`DELETE` `/product-variants`, `POST` `/sync-shipments-with-fulfillments`, `POST` `/tracking-updates`, `POST` `/tracking-update`, and dummy routes **`POST /dummy1`** = **TrackingUpdatePayload**, **`POST /dummy2`** = **SyncShipmentsWithFulfillmentsPayload** (matches attached OpenAPI / http4k#1516 - not swapped).
-- `PUT /stores/api-key` updates an **existing** store only (`FileStoreRepository.updateApiKeyForExistingStoreOnly`); OAuth install continues to use `upsert`.
+- Canonical OpenAPI: `docs/openapi/dss-api.yaml` (fulfillment routes only; no store persistence).
+- Routing vs handling: `com.example.lib.dss.DssRouting` (`installDssRoutes`) wires paths; `com.example.lib.dss.DssHttpHandlers` implements sync/tracking.
+- Paths: `POST` `/sync-shipments-with-fulfillments`, `/tracking-updates`, `/tracking-update`, **`POST /dummy1`** = **TrackingUpdatePayload**, **`POST /dummy2`** = **SyncShipmentsWithFulfillmentsPayload**.
 - When `DSS_INTERNAL_SECRET` is set, DSS routes require header `X-DSS-Internal-Secret` (see `DssInternalAuth`).
+
+## Monolith client
+
+- **`MonolithCreateOrderPort`** + **`HttpMonolithClient`** in `com.example.lib.monolith` (Ktor **client** only; no server dependency — see `ArchitectureTest`).
 
 ## Shopify integration
 
-- **OAuth callback**: after code exchange, runs `ShopIdentity`, resolves numeric shop id from `shop.id` GID, normalizes `myshopifyDomain`, and **upserts** the access token via `FileStoreRepository`.
-- **Webhooks**: `orders/create` - if `MONOLITH_BASE_URL` is set, loads the order with `GetOrderForDss`, maps to `CreateShopifyOrderRequest` (`MonolithOrderMapper`), and POSTs via `MonolithClient`. Otherwise logs with `GetOrderById` as before. `orders/updated` continues to log via `GetOrderById`.
-- **Fulfillment**: `DssFulfillmentService` - `fulfillmentCancel` for replace ids, then `FulfillmentCreateWithLineItems` per new fulfillment; tracking uses `FulfillmentEventCreateMutation` with string status parsing (`FulfillmentEventStatusParser`).
+- **OAuth callback**: after code exchange, runs `ShopIdentity`, sync sample products, registers webhooks; **does not persist tokens** — success page shows a `DSS_SHOP_ACCESS_TOKENS` example line.
+- **Webhooks**: require a token in the env map for the shop; otherwise log and return 200 without GraphQL.
+- **Fulfillment**: `DssFulfillmentService` — same GraphQL flow as before; tracking uses `FulfillmentEventCreateMutation` with string status parsing (`FulfillmentEventStatusParser`).
 
 ## GraphQL documents
 
-- `GetOrderForDss.graphql`, `FulfillmentCancel.graphql`, `FulfillmentCreateWithLineItems.graphql`, `FulfillmentEventCreate.graphql`, `ShopIdentity.graphql` under `src/main/resources/`.
+- `GetOrderForDss.graphql` (includes `totalPriceSet` for monolith payload), `FulfillmentCancel.graphql`, `FulfillmentCreateWithLineItems.graphql`, `FulfillmentEventCreate.graphql`, `ShopIdentity.graphql` under `src/main/resources/`.
 
 ## Demo routes
 
-- `/demo/*` is registered only when `ENABLE_DEMO_ROUTES=true`.
+- `/demo/*` when `ENABLE_DEMO_ROUTES=true` or test harness is on; resolves Admin token from env map like webhooks.
 
 ## Notes
 
@@ -35,7 +39,5 @@ This document records what was implemented for the **DropNext Shopify Service (D
 ## Operational / security practices (implemented)
 
 - **Internal API secret:** `X-DSS-Internal-Secret` compared with `MessageDigest.isEqual` (constant-time).
-- **Outbound HTTP:** No Ktor client body logging; timeouts configured (`HttpTimeout` + OkHttp). Monolith error bodies truncated in exceptions (avoid huge payloads in logs).
-- **Persistence:** `stores.json` written via temp file + atomic replace when possible; all store mutations serialized on one lock to avoid lost updates.
-- **Errors:** Global handler returns generic “internal error”; webhook logs omit JSON bodies (size only) to reduce PII in logs.
-- **Monolith URL:** `https` required unless `DSS_ALLOW_INSECURE_MONOLITH=true` (local dev).
+- **Outbound HTTP:** No Ktor client body logging; timeouts configured. Monolith error bodies truncated in exceptions.
+- **Errors:** Global handler returns generic “internal error”; webhook logs omit JSON bodies (size only).

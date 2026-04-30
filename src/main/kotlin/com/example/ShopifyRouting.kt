@@ -1,6 +1,6 @@
-package com.example
-
-import com.example.dev.TestHarnessPage
+package shopify.service.app
+import shopify.service.app.handlers.FulfillmentCreateDemoBody
+import shopify.service.app.handlers.FulfillmentTrackingUpdateDemoBody
 import com.example.lib.dss.DssAppConfig
 import com.example.lib.dss.DssHttpHandlers
 import com.example.lib.dss.ShopifyAdminToken
@@ -10,7 +10,7 @@ import com.example.lib.dss.installDssRoutes
 import com.example.lib.dss.legacyIdFromGid
 import com.example.lib.dss.orderToCreateShopifyOrderRequest
 import com.example.lib.dss.shopifyAdminTokenForNormalizedShop
-import com.example.config.ShopifyConfig
+import com.example.lib.shopify.ShopifyConfig
 import com.example.graphql.generated.FulfillmentCreateWithTracking
 import com.example.graphql.generated.FulfillmentTrackingInfoUpdateMutation
 import com.example.graphql.generated.GetOrderById
@@ -20,18 +20,16 @@ import com.example.graphql.generated.ShopIdentity
 import com.example.graphql.generated.SyncProductsPage
 import com.example.graphql.generated.inputs.FulfillmentTrackingInput
 import com.example.lib.monolith.MonolithCreateOrderPort
-import com.example.shopify.FulfillmentCreateDemoBody
-import com.example.shopify.FulfillmentTrackingUpdateDemoBody
-import com.example.shopify.OAuthStateStore
-import com.example.shopify.ShopifySignatures
-import com.example.shopify.adminGraphqlJsonUrl
-import com.example.shopify.buildOAuthAuthorizeUrl
-import com.example.shopify.exchangeAuthorizationCode
-import com.example.shopify.graphqlResourceIdFromShopifyWebhook
-import com.example.shopify.normalizeShopDomain
-import com.example.shopify.randomOAuthState
-import com.example.shopify.registerStandardWebhooks
-import com.example.shopify.shopifySubdomainShort
+import com.example.lib.shopify.ShopifySignatures
+import com.example.lib.shopify.adminGraphqlJsonUrl
+import com.example.lib.shopify.buildOAuthAuthorizeUrl
+import com.example.lib.shopify.exchangeAuthorizationCode
+import com.example.lib.shopify.graphqlResourceIdFromShopifyWebhook
+import com.example.lib.shopify.isValidSignedOAuthState
+import com.example.lib.shopify.normalizeShopDomain
+import com.example.lib.shopify.registerStandardWebhooks
+import com.example.lib.shopify.shopifySubdomainShort
+import com.example.lib.shopify.signedOAuthState
 import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
 import io.ktor.client.HttpClient
 import io.ktor.client.request.header
@@ -46,39 +44,103 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
+import kotlinx.serialization.Serializable
 import java.net.URI
 
 fun Application.configureRouting(
   dssConfig: DssAppConfig,
-  stateStore: OAuthStateStore,
   httpClient: HttpClient,
   httpMonolithClient: MonolithCreateOrderPort?,
   dssHandlers: DssHttpHandlers,
 ) {
   val config: ShopifyConfig = dssConfig.shopify
+  val runtimeConfigIssues = runtimeConfigIssues(config)
   routing {
-    get("/health") { call.respondText("ok") }
-
-    get("/dev/test-harness") {
-      if (dssConfig.enableTestHarness) {
-        call.respondText(TestHarnessPage.html(), ContentType.Text.Html, HttpStatusCode.OK)
-      } else {
-        val msg =
-          """
-          <!DOCTYPE html>
-          <html><head><meta charset="utf-8"/><title>Test harness disabled</title></head>
-          <body style="font-family:system-ui;max-width:40rem;margin:2rem">
-          <h1>Test harness is off</h1>
-          <p>The API tester at this URL is disabled by default.</p>
-          <p><strong>PowerShell (same window as <code>gradlew run</code>):</strong></p>
-          <pre style="background:#f4f4f5;padding:1rem">${'$'}env:ENABLE_TEST_HARNESS = "true"; .\gradlew.bat run</pre>
-          <p>Or in IntelliJ / VS Code, add environment variable <code>ENABLE_TEST_HARNESS=true</code> to your run configuration, then restart the server and reload this page.</p>
-          <p><a href="/health">GET /health</a> to confirm the app is up.</p>
-          </body></html>
-          """.trimIndent()
-        call.respondText(msg, ContentType.Text.Html, HttpStatusCode.OK)
-      }
+    get("/") {
+      call.respondText(
+        """
+        API is running.
+        Use:
+          GET /health
+          GET /api
+          GET /api/ready
+          GET /install?shop=your-store.myshopify.com
+        """.trimIndent(),
+        ContentType.Text.Plain,
+        HttpStatusCode.OK,
+      )
     }
+
+    get("/api") {
+      call.respond(
+        ApiStatusResponse(
+          status = "ok",
+          bind = "0.0.0.0:${config.serverPort}",
+          publicBaseUrl = config.publicBaseUrl,
+          oauthRedirectPath = config.oauthRedirectPath,
+          configIssues = runtimeConfigIssues,
+        ),
+      )
+    }
+
+    get("/api/check") {
+      val rawShop = call.request.queryParameters["shop"]
+      val normalizedShop = rawShop?.let { normalizeShopDomain(it) }
+      val shopParamIssue =
+        when {
+          rawShop == null -> "Missing query parameter: shop"
+          normalizedShop == null -> "Invalid shop domain format"
+          else -> null
+        }
+      val headerToken = call.request.headers["X-Shopify-Access-Token"]
+      val hasHeaderToken = !headerToken.isNullOrBlank()
+      val hasMappedToken =
+        normalizedShop != null &&
+          dssConfig.shopAccessTokens[normalizedShop]
+            ?.isNotBlank() == true
+      val tokenIssue =
+        if (hasHeaderToken || hasMappedToken) {
+          null
+        } else {
+          "Missing Admin token. Provide X-Shopify-Access-Token header or configure DSS_SHOP_ACCESS_TOKENS."
+        }
+      val issues =
+        buildList {
+          addAll(runtimeConfigIssues)
+          if (shopParamIssue != null) add(shopParamIssue)
+          if (tokenIssue != null) add(tokenIssue)
+        }
+      val status = if (issues.isEmpty()) "ready" else "missing_requirements"
+      call.respond(
+        ApiCheckResponse(
+          status = status,
+          shop = normalizedShop,
+          checks =
+            ApiCheckDetails(
+              hasHeaderToken = hasHeaderToken,
+              hasTokenMappedForShop = hasMappedToken,
+              demoRoutesEnabled = dssConfig.enableDemoRoutes,
+              testHarnessEnabled = dssConfig.enableTestHarness,
+              monolithConfigured = !dssConfig.monolithBaseUrl.isNullOrBlank(),
+            ),
+          issues = issues,
+        ),
+      )
+    }
+
+    get("/api/ready") {
+      if (runtimeConfigIssues.isNotEmpty()) {
+        call.respondText(
+          "API not ready. Missing/invalid config: ${runtimeConfigIssues.joinToString()}",
+          ContentType.Text.Plain,
+          HttpStatusCode.BadRequest,
+        )
+        return@get
+      }
+      call.respondText("API ready", ContentType.Text.Plain, HttpStatusCode.OK)
+    }
+
+    get("/health") { call.respondText("ok") }
 
     get("/install") {
       val rawShop =
@@ -90,8 +152,7 @@ fun Application.configureRouting(
       val shop =
         normalizeShopDomain(rawShop)
           ?: return@get call.respondText("Invalid shop domain", status = HttpStatusCode.BadRequest)
-      val state = randomOAuthState()
-      stateStore.put(state, shop)
+      val state = signedOAuthState(shop = shop, clientSecret = config.apiSecret)
       call.respondRedirect(buildOAuthAuthorizeUrl(shop, config, state))
     }
 
@@ -113,8 +174,7 @@ fun Application.configureRouting(
       if (!ShopifySignatures.verifyOAuthCallback(params, config.apiSecret, hmac)) {
         return@get call.respondText("Invalid HMAC", status = HttpStatusCode.Forbidden)
       }
-      val expectedShop = stateStore.remove(state)
-      if (expectedShop == null || expectedShop != shop) {
+      if (!isValidSignedOAuthState(state = state, expectedShop = shop, clientSecret = config.apiSecret)) {
         return@get call.respondText("Invalid or expired state", status = HttpStatusCode.Forbidden)
       }
 
@@ -410,6 +470,7 @@ fun Application.configureRouting(
 
     post("/webhooks/shopify") {
       val hmacHeader = call.request.headers["X-Shopify-Hmac-Sha256"]
+      val webhookId = call.request.headers["X-Shopify-Webhook-Id"]
       val topic = call.request.headers["X-Shopify-Topic"] ?: "unknown"
       val shopDomain = call.request.headers["X-Shopify-Shop-Domain"] ?: "unknown"
       val body = call.receive<ByteArray>()
@@ -421,7 +482,6 @@ fun Application.configureRouting(
       call.application.log.info(
         "Webhook verified topic=$topic shopDomain=$shopDomain bodyBytes=${body.size}",
       )
-
       val shopNorm = normalizeShopDomain(shopDomain)
       val token =
         if (shopNorm != null) {
@@ -512,3 +572,47 @@ fun Application.configureRouting(
   }
   installDssRoutes(dssHandlers)
 }
+
+private fun runtimeConfigIssues(config: ShopifyConfig): List<String> {
+  val issues = mutableListOf<String>()
+
+  if (isPlaceholder(config.apiKey)) issues += "SHOPIFY_API_KEY is placeholder"
+  if (isPlaceholder(config.apiSecret)) issues += "SHOPIFY_API_SECRET is placeholder"
+  if (isPlaceholder(config.publicBaseUrl) || config.publicBaseUrl.contains("example.com", ignoreCase = true)) {
+    issues += "PUBLIC_BASE_URL is placeholder"
+  }
+  if (!config.publicBaseUrl.startsWith("https://", ignoreCase = true)) {
+    issues += "PUBLIC_BASE_URL should use https://"
+  }
+
+  return issues
+}
+
+private fun isPlaceholder(value: String): Boolean =
+  value.contains("your_", ignoreCase = true) || value.contains("change_me", ignoreCase = true)
+
+@Serializable
+private data class ApiStatusResponse(
+  val status: String,
+  val bind: String,
+  val publicBaseUrl: String,
+  val oauthRedirectPath: String,
+  val configIssues: List<String>,
+)
+
+@Serializable
+private data class ApiCheckResponse(
+  val status: String,
+  val shop: String?,
+  val checks: ApiCheckDetails,
+  val issues: List<String>,
+)
+
+@Serializable
+private data class ApiCheckDetails(
+  val hasHeaderToken: Boolean,
+  val hasTokenMappedForShop: Boolean,
+  val demoRoutesEnabled: Boolean,
+  val testHarnessEnabled: Boolean,
+  val monolithConfigured: Boolean,
+)

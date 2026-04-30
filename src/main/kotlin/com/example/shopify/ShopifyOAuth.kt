@@ -1,6 +1,6 @@
-package com.example.shopify
+package com.example.lib.shopify
 
-import com.example.config.ShopifyConfig
+import com.example.lib.shopify.ShopifyConfig
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.post
@@ -12,15 +12,15 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 private data class OAuthAccessTokenRequest(
-  @SerialName("client_id") val clientId: String,
-  @SerialName("client_secret") val clientSecret: String,
-  val code: String,
+  @SerialName(value = "client_id") val clientId: String,
+  @SerialName(value = "client_secret") val clientSecret: String,
+  @SerialName(value = "code") val code: String,
 )
 
 @Serializable
 data class OAuthAccessTokenResponse(
-  @SerialName("access_token") val accessToken: String,
-  val scope: String,
+  @SerialName(value = "access_token") val accessToken: String,
+  @SerialName(value = "scope") val scope: String,
 )
 
 suspend fun exchangeAuthorizationCode(

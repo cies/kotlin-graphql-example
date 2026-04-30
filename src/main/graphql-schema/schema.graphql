@@ -12965,6 +12965,17 @@ type DiscountCombinesWith {
   """
   productDiscounts: Boolean!
   """
+  The product discount tags that determine which product discounts can apply together on
+  the same cart line. By default, only one product discount applies per cart line. When
+  each of two product discounts lists a tag in this field that matches a tag on the other
+  discount, both discounts can apply to the same cart line. For example, if Discount A
+  lists "SEASONAL" in this field and Discount B is tagged "SEASONAL", and Discount B
+  lists "LOYALTY" in this field and Discount A is tagged "LOYALTY", both discounts can
+  apply to the same cart line. To use this field, `productDiscounts` must also be set to
+  true. This field is available only on a Shopify Plus plan.
+  """
+  productDiscountsWithTagsOnSameCartLine: [String!]
+  """
   Whether the discount combines with the
   [shipping discount](https://help.shopify.com/manual/discounts/combining-discounts/discount-combinations)
   class.
@@ -33805,6 +33816,7 @@ type QueryRoot {
     | name | type | description | acceptable_values | default_value | example_use |
     | ---- | ---- | ---- | ---- | ---- | ---- |
     | default | string | Filter by a case-insensitive search of multiple fields in a document. | | | - `query=Bob Norman`<br/> - `query=title:green hoodie` |
+    | combines_with.product_discounts_with_tags_on_same_cart_line | string | Filter by a combines with tag applied to discounts on the same cart line. Supports multiple tags separated by commas (e.g., combines_with.product_discounts_with_tags_on_same_cart_line:priority,exclusive). | | | - `combines_with.product_discounts_with_tags_on_same_cart_line:priority`<br/> - `combines_with.product_discounts_with_tags_on_same_cart_line:priority,exclusive` |
     | id | id | Filter by `id` range. | | | - `id:1234`<br/> - `id:>=1234`<br/> - `id:<=1234` |
     | status | string | Filter by the discount status. | - `active`<br/> - `expired`<br/> - `scheduled` | | - `status:scheduled` |
     | tag | string | Filter by a tag applied to the discount. | | | - `tag:loyalty`<br/> - `tag:clearance` |
@@ -33850,6 +33862,7 @@ type QueryRoot {
     | name | type | description | acceptable_values | default_value | example_use |
     | ---- | ---- | ---- | ---- | ---- | ---- |
     | default | string | Filter by a case-insensitive search of multiple fields in a document. | | | - `query=Bob Norman`<br/> - `query=title:green hoodie` |
+    | combines_with.product_discounts_with_tags_on_same_cart_line | string | Filter by a combines with tag applied to discounts on the same cart line. Supports multiple tags separated by commas (e.g., combines_with.product_discounts_with_tags_on_same_cart_line:priority,exclusive). | | | - `combines_with.product_discounts_with_tags_on_same_cart_line:priority`<br/> - `combines_with.product_discounts_with_tags_on_same_cart_line:priority,exclusive` |
     | id | id | Filter by `id` range. | | | - `id:1234`<br/> - `id:>=1234`<br/> - `id:<=1234` |
     | status | string | Filter by the discount status. | - `active`<br/> - `expired`<br/> - `scheduled` | | - `status:scheduled` |
     | tag | string | Filter by a tag applied to the discount. | | | - `tag:loyalty`<br/> - `tag:clearance` |
@@ -34330,6 +34343,7 @@ type QueryRoot {
     | ---- | ---- | ---- | ---- | ---- | ---- |
     | default | string | Filter by a case-insensitive search of multiple fields in a document. | | | - `query=Bob Norman`<br/> - `query=title:green hoodie` |
     | combines_with | string | Filter by the [discount classes](https://help.shopify.com/manual/discounts/combining-discounts/discount-combinations) that you can use in combination with [Shopify discount types](https://help.shopify.com/manual/discounts/discount-types). | - `order_discounts`<br/> - `product_discounts`<br/> - `shipping_discounts` | | - `combines_with:product_discounts` |
+    | combines_with.product_discounts_with_tags_on_same_cart_line | string | Filter by a combines with tag applied to discounts on the same cart line. Supports multiple tags separated by commas (e.g., combines_with.product_discounts_with_tags_on_same_cart_line:priority,exclusive). | | | - `combines_with.product_discounts_with_tags_on_same_cart_line:priority`<br/> - `combines_with.product_discounts_with_tags_on_same_cart_line:priority,exclusive` |
     | created_at | time | Filter by the date and time when the discount was created. | | | - `created_at:>'2020-10-21T23:39:20Z'`<br/> - `created_at:<now`<br/> - `created_at:<='2024'` |
     | discount_type | string | Filter by the [discount type](https://help.shopify.com/manual/discounts/discount-types). | - `app`<br/> - `bogo`<br/> - `fixed_amount`<br/> - `free_shipping`<br/> - `percentage` | | - `discount_type:fixed_amount` |
     | ends_at | time | Filter by the date and time when the discount expires and is no longer available for customer use. | | | - `ends_at:>'2020-10-21T23:39:20Z'`<br/> - `ends_at:<now`<br/> - `ends_at:<='2024'` |
@@ -35011,6 +35025,7 @@ type QueryRoot {
     | default | string | Filter by a case-insensitive search of multiple fields in a document. | | | - `query=Bob Norman`<br/> - `query=title:green hoodie` |
     | code | string | Filter by the discount code. Not supported for bulk discounts. | | | - `code:WELCOME10` |
     | combines_with | string | Filter by the [Shopify Functions discount classes](https://shopify.dev/docs/apps/build/discounts#discount-classes) that the [discount type](https://shopify.dev/docs/api/admin-graphql/latest/queries/discountnodes#argument-query-filter-discount_type) can combine with. Supports multiple values separated by commas (e.g., combines_with:product_discounts,order_discounts). | - `order_discounts`<br/> - `product_discounts`<br/> - `shipping_discounts` | | - `combines_with:product_discounts`<br/> - `combines_with:product_discounts,order_discounts` |
+    | combines_with.product_discounts_with_tags_on_same_cart_line | string | Filter by a combines with tag applied to discounts on the same cart line. Supports multiple tags separated by commas (e.g., combines_with.product_discounts_with_tags_on_same_cart_line:priority,exclusive). | | | - `combines_with.product_discounts_with_tags_on_same_cart_line:priority`<br/> - `combines_with.product_discounts_with_tags_on_same_cart_line:priority,exclusive` |
     | created_at | time | Filter by the date and time, in the shop's timezone, when the discount was created. | | | - `created_at:>'2020-10-21T23:39:20Z'`<br/> - `created_at:<now`<br/> - `created_at:<='2024'` |
     | discount_class | string | Filter by the [discount class](https://shopify.dev/docs/apps/build/discounts#discount-classes). Supports multiple classes separated by commas (e.g., discount_class:product,order). | - `order`<br/> - `product`<br/> - `shipping` | | - `discount_class:product`<br/> - `discount_class:product,order` |
     | discount_type | string | Filter by the [discount type](https://help.shopify.com/manual/discounts/discount-types). Supports multiple types separated by commas (e.g., discount_type:percentage,fixed_amount). | - `app`<br/> - `bogo`<br/> - `fixed_amount`<br/> - `free_shipping`<br/> - `percentage` | | - `discount_type:fixed_amount`<br/> - `discount_type:percentage,fixed_amount` |
@@ -35048,6 +35063,7 @@ type QueryRoot {
     | default | string | Filter by a case-insensitive search of multiple fields in a document. | | | - `query=Bob Norman`<br/> - `query=title:green hoodie` |
     | code | string | Filter by the discount code. Not supported for bulk discounts. | | | - `code:WELCOME10` |
     | combines_with | string | Filter by the [Shopify Functions discount classes](https://shopify.dev/docs/apps/build/discounts#discount-classes) that the [discount type](https://shopify.dev/docs/api/admin-graphql/latest/queries/discountnodes#argument-query-filter-discount_type) can combine with. Supports multiple values separated by commas (e.g., combines_with:product_discounts,order_discounts). | - `order_discounts`<br/> - `product_discounts`<br/> - `shipping_discounts` | | - `combines_with:product_discounts`<br/> - `combines_with:product_discounts,order_discounts` |
+    | combines_with.product_discounts_with_tags_on_same_cart_line | string | Filter by a combines with tag applied to discounts on the same cart line. Supports multiple tags separated by commas (e.g., combines_with.product_discounts_with_tags_on_same_cart_line:priority,exclusive). | | | - `combines_with.product_discounts_with_tags_on_same_cart_line:priority`<br/> - `combines_with.product_discounts_with_tags_on_same_cart_line:priority,exclusive` |
     | created_at | time | Filter by the date and time, in the shop's timezone, when the discount was created. | | | - `created_at:>'2020-10-21T23:39:20Z'`<br/> - `created_at:<now`<br/> - `created_at:<='2024'` |
     | discount_class | string | Filter by the [discount class](https://shopify.dev/docs/apps/build/discounts#discount-classes). Supports multiple classes separated by commas (e.g., discount_class:product,order). | - `order`<br/> - `product`<br/> - `shipping` | | - `discount_class:product`<br/> - `discount_class:product,order` |
     | discount_type | string | Filter by the [discount type](https://help.shopify.com/manual/discounts/discount-types). Supports multiple types separated by commas (e.g., discount_type:percentage,fixed_amount). | - `app`<br/> - `bogo`<br/> - `fixed_amount`<br/> - `free_shipping`<br/> - `percentage` | | - `discount_type:fixed_amount`<br/> - `discount_type:percentage,fixed_amount` |
@@ -49533,6 +49549,12 @@ enum DiscountErrorCode {
   INVALID_COMBINES_WITH_FOR_DISCOUNT_CLASS
   "The discountClass is invalid for the price rule."
   INVALID_DISCOUNT_CLASS_FOR_PRICE_RULE
+  "The `productDiscounts` field can't be set to false when `productDiscountsWithTagsOnSameCartLine` tags exist on the discount."
+  INVALID_PRODUCT_DISCOUNTS_FALSE_WITH_EXISTING_TAGS_ON_SAME_CART_LINE
+  "The `productDiscountsWithTagsOnSameCartLine` field is only valid for discounts with the PRODUCT discount class."
+  INVALID_PRODUCT_DISCOUNTS_WITH_TAGS_ON_SAME_CART_LINE_FOR_DISCOUNT_CLASS
+  "The `productDiscountsWithTagsOnSameCartLine` field can only be specified when `productDiscounts` is true."
+  INVALID_PRODUCT_DISCOUNTS_WITH_TAGS_ON_SAME_CART_LINE_WITHOUT_PRODUCT_DISCOUNTS
   "The tag title exceeds the maximum length of 255 characters."
   INVALID_TAG_LENGTH
   "The input value should be less than the maximum value allowed."
@@ -49553,6 +49575,8 @@ enum DiscountErrorCode {
   MULTIPLE_RECURRING_CYCLE_LIMIT_FOR_NON_SUBSCRIPTION_ITEMS
   "The input value needs to be blank."
   PRESENT
+  "The shop's plan does not allow setting `productDiscountsWithTagsOnSameCartLine`."
+  PRODUCT_DISCOUNTS_WITH_TAGS_ON_SAME_CART_LINE_NOT_ENTITLED
   "Recurring cycle limit must be a valid integer greater than or equal to 0."
   RECURRING_CYCLE_LIMIT_NOT_A_VALID_INTEGER
   "The input value is already taken."
@@ -49561,6 +49585,8 @@ enum DiscountErrorCode {
   TOO_LONG
   "Too many arguments provided."
   TOO_MANY_ARGUMENTS
+  "The number of tags in `productDiscountsWithTagsOnSameCartLine` exceeds the maximum of 10."
+  TOO_MANY_PRODUCT_DISCOUNTS_WITH_TAGS_ON_SAME_CART_LINE
   "The number of tags exceeds the maximum of 5."
   TOO_MANY_TAGS
   "The input value is too short."
@@ -61460,7 +61486,9 @@ input DiscountAutomaticAppInput {
   The
   [discount classes](https://help.shopify.com/manual/discounts/combining-discounts/discount-combinations)
   that you can use in combination with
-  [Shopify discount types](https://help.shopify.com/manual/discounts/discount-types).
+  [Shopify discount types](https://help.shopify.com/manual/discounts/discount-types),
+  and the product discount tags that determine which product discounts can apply
+  together on the same cart line.
   """
   combinesWith: DiscountCombinesWithInput
   """
@@ -61524,9 +61552,11 @@ During creation the required fields are:
 input DiscountAutomaticBasicInput {
   """
   The
-  [discount class](https://help.shopify.com/manual/discounts/combining-discounts/discount-combinations)
+  [discount classes](https://help.shopify.com/manual/discounts/combining-discounts/discount-combinations)
   that you can use in combination with
-  [Shopify discount types](https://help.shopify.com/manual/discounts/discount-types).
+  [Shopify discount types](https://help.shopify.com/manual/discounts/discount-types),
+  and the product discount tags that determine which product discounts can apply
+  together on the same cart line.
   """
   combinesWith: DiscountCombinesWithInput
   """
@@ -61583,9 +61613,11 @@ When creating, required fields are:
 input DiscountAutomaticBxgyInput {
   """
   The
-  [discount class](https://help.shopify.com/manual/discounts/combining-discounts/discount-combinations)
+  [discount classes](https://help.shopify.com/manual/discounts/combining-discounts/discount-combinations)
   that you can use in combination with
-  [Shopify discount types](https://help.shopify.com/manual/discounts/discount-types).
+  [Shopify discount types](https://help.shopify.com/manual/discounts/discount-types),
+  and the product discount tags that determine which product discounts can apply
+  together on the same cart line.
   """
   combinesWith: DiscountCombinesWithInput
   """
@@ -61708,7 +61740,9 @@ input DiscountCodeAppInput {
   The
   [discount classes](https://help.shopify.com/manual/discounts/combining-discounts/discount-combinations)
   that you can use in combination with
-  [Shopify discount types](https://help.shopify.com/manual/discounts/discount-types).
+  [Shopify discount types](https://help.shopify.com/manual/discounts/discount-types),
+  and the product discount tags that determine which product discounts can apply
+  together on the same cart line.
   """
   combinesWith: DiscountCombinesWithInput
   """
@@ -61769,9 +61803,11 @@ input DiscountCodeBasicInput {
   code: String
   """
   The
-  [discount class](https://help.shopify.com/manual/discounts/combining-discounts/discount-combinations)
+  [discount classes](https://help.shopify.com/manual/discounts/combining-discounts/discount-combinations)
   that you can use in combination with
-  [Shopify discount types](https://help.shopify.com/manual/discounts/discount-types).
+  [Shopify discount types](https://help.shopify.com/manual/discounts/discount-types),
+  and the product discount tags that determine which product discounts can apply
+  together on the same cart line.
   """
   combinesWith: DiscountCombinesWithInput
   """
@@ -61833,9 +61869,11 @@ input DiscountCodeBxgyInput {
   code: String
   """
   The
-  [discount class](https://help.shopify.com/manual/discounts/combining-discounts/discount-combinations)
+  [discount classes](https://help.shopify.com/manual/discounts/combining-discounts/discount-combinations)
   that you can use in combination with
-  [Shopify discount types](https://help.shopify.com/manual/discounts/discount-types).
+  [Shopify discount types](https://help.shopify.com/manual/discounts/discount-types),
+  and the product discount tags that determine which product discounts can apply
+  together on the same cart line.
   """
   combinesWith: DiscountCombinesWithInput
   """
@@ -61972,6 +62010,17 @@ input DiscountCombinesWithInput {
   class.
   """
   productDiscounts: Boolean = false
+  """
+  The product discount tags that determine which product discounts can apply together on
+  the same cart line. By default, only one product discount applies per cart line. When
+  each of two product discounts lists a tag in this field that matches a tag on the other
+  discount, both discounts can apply to the same cart line. For example, if Discount A
+  lists "SEASONAL" in this field and Discount B is tagged "SEASONAL", and Discount B
+  lists "LOYALTY" in this field and Discount A is tagged "LOYALTY", both discounts can
+  apply to the same cart line. To use this field, `productDiscounts` must also be set to
+  true. This field is available only on a Shopify Plus plan.
+  """
+  productDiscountsWithTagsOnSameCartLine: ProductDiscountsWithTagsOnSameCartLineInput
   """
   Whether the discount combines
   with the
@@ -65769,6 +65818,37 @@ input ProductCreateInput {
 input ProductDeleteInput {
   "The ID of the product."
   id: ID!
+}
+
+"""
+The product discount tags that determine which product discounts can apply
+together on the same cart line. By default, only one product discount
+applies per cart line. When each of two product discounts lists a tag in
+this field that matches a tag on the other discount, both discounts can
+apply to the same cart line. For example, if Discount A lists "SEASONAL"
+in this field and Discount B is tagged "SEASONAL", and Discount B lists
+"LOYALTY" in this field and Discount A is tagged "LOYALTY", both discounts
+can apply to the same cart line. To use this field, `productDiscounts`
+must also be set to true. This field is available only on a Shopify Plus
+plan.
+"""
+input ProductDiscountsWithTagsOnSameCartLineInput {
+  """
+  The tags to add to this discount's combination list. When this discount and
+  another product discount share a matching tag, both discounts can apply to
+  the same cart line. For example, adding the tag "SEASONAL" allows this
+  discount to combine with any other product discount that also has the
+  "SEASONAL" tag on the same cart line.
+  """
+  add: [String!]
+  """
+  The tags to remove from this discount's combination list. When you remove a
+  tag, this discount will no longer combine with product discounts that only
+  have the removed tag. If this discount and another product discount share
+  additional tags after the removal, both discounts can still apply to the
+  same cart line.
+  """
+  remove: [String!]
 }
 
 "The input fields required to create a product feed."

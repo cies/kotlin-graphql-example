@@ -1,4 +1,4 @@
-package com.example.shopify
+package shopify.service.app.handlers
 
 import kotlinx.serialization.Serializable
 

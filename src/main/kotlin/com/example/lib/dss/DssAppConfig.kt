@@ -1,6 +1,6 @@
 package com.example.lib.dss
 
-import com.example.config.ShopifyConfig
+import com.example.lib.shopify.ShopifyConfig
 
 data class DssAppConfig(
   val shopify: ShopifyConfig,

@@ -1,4 +1,4 @@
-package com.example.shopify
+package com.example.lib.shopify
 
 import kotlin.test.assertEquals
 import kotlin.test.assertNull

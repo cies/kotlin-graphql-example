@@ -1,4 +1,4 @@
-package com.example.config
+package com.example.lib.shopify
 
 data class ShopifyConfig(
   val apiKey: String,

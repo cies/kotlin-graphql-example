@@ -1,4 +1,4 @@
-package com.example.shopify
+package com.example.lib.shopify
 
 private val shopRegex =
   Regex("^(?:https?://)?([a-zA-Z0-9][a-zA-Z0-9\\-]*)\\.myshopify\\.com/?.*$")

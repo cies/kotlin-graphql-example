@@ -8,6 +8,7 @@ konsistVersion = "0.17.3"
 konsist = { group = "com.lemonappdev", name = "konsist", version.ref = "konsistVersion" }
 graphqlKotlinKtorClient = { group = "com.expediagroup", name = "graphql-kotlin-ktor-client", version.ref = "kotlinGraphqlVersion" }
 graphqlKotlinClientSerialization = { group = "com.expediagroup", name = "graphql-kotlin-client-serialization", version.ref = "kotlinGraphqlVersion" }
+logbackClassic = { group = "ch.qos.logback", name = "logback-classic", version = "1.5.18" }
 ktorClientOkhttp = { group = "io.ktor", name = "ktor-client-okhttp", version.ref = "ktorVersion" }
 ktorClientContentNegotiation = { group = "io.ktor", name = "ktor-client-content-negotiation", version.ref = "ktorVersion" }
 ktorSerializationKotlinxJson = { group = "io.ktor", name = "ktor-serialization-kotlinx-json", version.ref = "ktorVersion" }

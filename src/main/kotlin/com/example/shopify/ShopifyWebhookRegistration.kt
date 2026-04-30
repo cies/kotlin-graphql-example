@@ -1,4 +1,4 @@
-package com.example.shopify
+package com.example.lib.shopify
 
 import com.example.graphql.generated.RegisterWebhook
 import com.example.graphql.generated.URL

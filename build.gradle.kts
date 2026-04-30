@@ -1,6 +1,5 @@
 import com.expediagroup.graphql.plugin.gradle.config.GraphQLSerializer
 import com.expediagroup.graphql.plugin.gradle.graphql
-import org.gradle.api.tasks.testing.logging.TestLogEvent
 
 description = "GraphQL client Kotlin with compile-time query validation and IDE integration"
 
@@ -24,6 +23,7 @@ repositories {
 
 dependencies {
   implementation(kotlin("stdlib-jdk8"))
+  implementation(libs.logbackClassic)
   implementation(libs.graphqlKotlinKtorClient)
   implementation(libs.graphqlKotlinClientSerialization)
   implementation(libs.ktorClientOkhttp)
@@ -32,7 +32,6 @@ dependencies {
   implementation(libs.ktorServerCio)
   implementation(libs.ktorServerStatusPages)
   implementation(libs.ktorServerContentNegotiation)
-  implementation(libs.ktorServerCallLogging)
   testImplementation(kotlin("test"))
   testImplementation("org.junit.jupiter:junit-jupiter:5.11.0")
   testImplementation(libs.konsist)
@@ -41,16 +40,10 @@ dependencies {
 
 tasks.test {
   useJUnitPlatform()
-  val fakesVerbose = providers.gradleProperty("fakesVerbose").orElse("false").get() == "true"
-  systemProperty("fakes.verbose", fakesVerbose.toString())
-  testLogging {
-    events(TestLogEvent.PASSED, TestLogEvent.SKIPPED, TestLogEvent.FAILED)
-    showStandardStreams = fakesVerbose
-  }
 }
 
 application {
-  mainClass.set("com.example.ShopifyServerKt")
+  mainClass.set("shopify.service.app.ShopifyServerKt")
 }
 
 kotlin {

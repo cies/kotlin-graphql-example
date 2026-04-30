@@ -1,17 +1,14 @@
-package com.example
+package shopify.service.app
 
 import com.example.lib.dss.DssAppConfig
 import com.example.lib.dss.DssFulfillmentService
 import com.example.lib.dss.DssHttpHandlers
 import com.example.lib.monolith.HttpMonolithClient
 import com.example.lib.monolith.MonolithCreateOrderPort
-import com.example.shopify.OAuthStateStore
 import io.ktor.serialization.kotlinx.json.json
-import io.ktor.server.application.log
 import io.ktor.server.application.install
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.embeddedServer
-import io.ktor.server.plugins.calllogging.CallLogging
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.response.respondText
@@ -24,7 +21,6 @@ fun main() {
         "Set env vars: SHOPIFY_API_KEY, SHOPIFY_API_SECRET, SHOPIFY_SCOPES, PUBLIC_BASE_URL",
       )
   val config = dssConfig.shopify
-  val stateStore = OAuthStateStore()
   if (dssConfig.enableTestHarness) {
     println(
       "[test-harness] /demo/* routes are enabled (same as ENABLE_DEMO_ROUTES=true for this process)",
@@ -52,10 +48,10 @@ fun main() {
     )
 
   embeddedServer(CIO, port = config.serverPort, host = "0.0.0.0") {
-    install(CallLogging)
     install(StatusPages) {
       exception<Throwable> { call, cause ->
-        call.application.log.error("Unhandled error", cause)
+        System.err.println("Unhandled error: ${cause.message}")
+        cause.printStackTrace()
         call.respondText(
           text = "internal error",
           status = io.ktor.http.HttpStatusCode.InternalServerError,
@@ -72,7 +68,6 @@ fun main() {
     }
     configureRouting(
       dssConfig = dssConfig,
-      stateStore = stateStore,
       httpClient = httpClient,
       httpMonolithClient = httpMonolithClient,
       dssHandlers = dssHandlers,

@@ -1,0 +1,43 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kotlin-shopify-app:local
+    env_file:
+      - .env
+    environment:
+      PORT: ${PORT:-8080}
+    ports:
+      - "${PORT:-8080}:${PORT:-8080}"
+    restart: unless-stopped
+
+  app-harness:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kotlin-shopify-app:local
+    profiles: ["harness"]
+    env_file:
+      - .env
+    environment:
+      PORT: ${PORT:-8080}
+      ENABLE_TEST_HARNESS: "true"
+    ports:
+      - "${PORT:-8080}:${PORT:-8080}"
+    restart: unless-stopped
+
+  app-local-monolith:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kotlin-shopify-app:local
+    profiles: ["local-monolith"]
+    env_file:
+      - .env
+    environment:
+      PORT: ${PORT:-8080}
+      DSS_ALLOW_INSECURE_MONOLITH: "true"
+    ports:
+      - "${PORT:-8080}:${PORT:-8080}"
+    restart: unless-stopped

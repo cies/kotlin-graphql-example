@@ -3,162 +3,25 @@ info:
   title: DropNext Shopify Service API
   version: v1
   description: |
-    This API is how our **main backend app** (we call it the monolith) talks to the **Shopify service**.
-    The Shopify service is a small server that holds store tokens and calls Shopify for you.
+    This API is how our **main backend app** (monolith) asks the **Shopify service** to call Shopify Admin API.
 
-    **Normal URLs to use:** send shipment syncs to `/sync-shipments-with-fulfillments` and tracking updates
-    to `/tracking-updates` (or `/tracking-update` - same thing).
+    The service is **stateless**: it does not persist shop rows or tokens. For each fulfillment call, pass either
+    header **`X-Shopify-Access-Token`** (Admin API token for that shop) or configure env **`DSS_SHOP_ACCESS_TOKENS`**
+    (`shop.myshopify.com|shpat_…` pairs, comma-separated). Optional **`DSS_INTERNAL_SECRET`** still gates these routes.
 
-    **`/dummy1` and `/dummy2`:** These exist only because of a bug in some OpenAPI tooling (see
-    https://github.com/http4k/http4k/issues/1516). They are **not** “fake” features - they do the real work:
-    `/dummy1` = same as tracking, `/dummy2` = same as shipment sync. Prefer the normal URLs above when you can.
+    **Normal URLs:** `/sync-shipments-with-fulfillments` and `/tracking-updates` (or `/tracking-update`).
+
+    **`/dummy1` and `/dummy2`:** Workaround for some OpenAPI tooling (http4k#1516). `/dummy1` = tracking,
+    `/dummy2` = shipment sync.
 
 servers:
   - url: /
     description: Your app’s base URL (same server that runs this API)
 
 tags:
-  - name: stores
-  - name: product-variants
   - name: fulfillments
 
 paths:
-  /stores:
-    get:
-      tags: [stores]
-      summary: Look up one store
-      parameters:
-        - name: shopify_subdomain
-          in: query
-          required: true
-          schema:
-            type: string
-          description: Which shop - you can pass `cool-shop` or `cool-shop.myshopify.com`
-      responses:
-        "200":
-          description: Found - returns store id, Shopify shop id, and saved token field
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/StoreResponse"
-        "400":
-          description: Something wrong with the request (for example missing query param)
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          description: Wrong or missing secret header - only if the server was set up with `DSS_INTERNAL_SECRET`
-        "404":
-          description: We don’t know this store yet
-    put:
-      tags: [stores]
-      summary: Old path - same as “set API key” below
-      description: |
-        **Prefer `PUT /stores/api-key` instead.** This path does the same thing; we keep it so older clients don’t break.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateStoreApiKeyRequest"
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/UpdateStoreApiKeyResponse"
-        "404":
-          description: No store with that subdomain, or the shop id doesn’t match (safety check)
-
-  /stores/api-key:
-    put:
-      tags: [stores]
-      summary: Save the Shopify access token after install
-      description: |
-        Call this to **update the token and shop id** for a store we already know about.
-
-        **Important:** This only works if the store is **already** in our database. When someone installs the app
-        through Shopify, the server saves the store automatically - you usually don’t call this by hand unless
-        your flow is different.
-
-        If you send a shop id that doesn’t match what we have for that subdomain, we return 404 on purpose
-        (so one shop can’t steal another’s token by typo).
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateStoreApiKeyRequest"
-      responses:
-        "200":
-          description: Saved - returns the internal `store_id`
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/UpdateStoreApiKeyResponse"
-        "401":
-          description: Wrong or missing secret header (if the server uses a secret)
-        "404":
-          description: No store with that subdomain, or shop id mismatch - see description above
-
-  /product-variants:
-    get:
-      tags: [product-variants]
-      summary: List variant IDs we’re tracking for a store
-      parameters:
-        - name: shopify_subdomain
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/VariantIdsResponse"
-        "401":
-          description: Wrong or missing secret header (if configured)
-        "404":
-          description: We don’t have this store yet
-    post:
-      tags: [product-variants]
-      summary: Add or update many product variants at once
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpsertProductVariantsRequest"
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/UpsertProductVariantsResponse"
-        "401":
-          description: Unauthorized
-        "404":
-          description: We don’t have this store yet
-    delete:
-      tags: [product-variants]
-      summary: Remove variant IDs from our list (soft-delete style)
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/DeleteProductVariantsRequest"
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/DeleteProductVariantsResponse"
-        "401":
-          description: Wrong or missing secret header (if configured)
-
   /sync-shipments-with-fulfillments:
     post:
       tags: [fulfillments]
@@ -178,9 +41,7 @@ paths:
         "400":
           description: Shopify said no, or we couldn’t match variants / fulfillment orders - check the error text
         "401":
-          description: Wrong or missing secret header (if configured)
-        "404":
-          description: No saved token for this store - install the app first
+          description: Wrong or missing `X-DSS-Internal-Secret`, missing Admin token header / env map, or invalid token
 
   /tracking-updates:
     post:
@@ -267,169 +128,68 @@ components:
       properties:
         error:
           type: string
-    StoreResponse:
+    ShippingAddress:
       type: object
-      required: [store_id, shopify_shop_id, api_key]
+      required: [address1, city, country_code]
       properties:
-        store_id:
-          type: integer
-          format: int64
-        shopify_shop_id:
-          type: integer
-          format: int64
-        api_key:
-          type: string
-          nullable: true
-          description: |
-            The Shopify Admin API token for this store (the field is named `api_key` in the contract).
-            **Keep it secret** - it’s like a password for the shop.
-    UpdateStoreApiKeyRequest:
-      type: object
-      required: [shopify_subdomain, shopify_shop_id, api_key]
-      properties:
-        shopify_subdomain:
-          type: string
-        shopify_shop_id:
-          type: integer
-          format: int64
-        api_key:
-          type: string
-    UpdateStoreApiKeyResponse:
-      type: object
-      required: [store_id]
-      properties:
-        store_id:
-          type: integer
-          format: int64
-    VariantIdsResponse:
-      type: object
-      required: [product_variant_ids]
-      properties:
-        product_variant_ids:
-          type: array
-          items:
-            type: integer
-            format: int64
-    ProductStatus:
-      type: string
-      enum: [active, draft, archived]
-    SelectedOption:
-      type: object
-      required: [name, value]
-      properties:
-        name:
-          type: string
-        value:
-          type: string
-    ProductVariantItem:
+        first_name: { type: string, nullable: true }
+        last_name: { type: string, nullable: true }
+        address1: { type: string }
+        address2: { type: string, nullable: true }
+        city: { type: string }
+        province: { type: string, nullable: true }
+        province_code: { type: string, nullable: true }
+        country_code: { type: string }
+        zip: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+    OrderLineItem:
       type: object
       required:
+        - order_line_item_id
         - product_variant_id
-        - product_id
-        - product_title
-        - product_description
-        - product_description_html
-        - product_vendor
-        - product_type
-        - product_tags
-        - product_handle
-        - product_status
-        - product_images
-        - product_created_at
-        - product_updated_at
-        - title
-        - price_in_minor_units
-        - price_currency
-        - selected_options
+        - quantity
+        - fulfillment_order_id
+        - snapshot_of_variant_title
+        - snapshot_of_product_title
+        - snapshot_of_price_in_minor_units
       properties:
-        product_variant_id:
+        order_line_item_id: { type: integer, format: int64 }
+        product_variant_id: { type: integer, format: int64 }
+        quantity: { type: integer }
+        fulfillment_order_id: { type: integer, format: int64 }
+        snapshot_of_variant_title: { type: string }
+        snapshot_of_product_title: { type: string }
+        snapshot_of_price_in_minor_units: { type: integer, format: int64 }
+    CreateShopifyOrderRequest:
+      type: object
+      description: JSON the Shopify service POSTs to the monolith on `orders/create` (outbound contract).
+      required:
+        - shopify_subdomain
+        - shopify_order_id
+        - name
+        - financial_status
+        - fulfillment_status
+        - created_at
+        - shipping_address
+        - line_items
+        - total_in_minor_units
+      properties:
+        shopify_subdomain: { type: string }
+        shopify_order_id: { type: integer, format: int64 }
+        name: { type: string }
+        financial_status: { type: string }
+        fulfillment_status: { type: string }
+        created_at: { type: string }
+        shipping_address:
+          $ref: "#/components/schemas/ShippingAddress"
+        line_items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderLineItem"
+        total_in_minor_units:
           type: integer
           format: int64
-        product_id:
-          type: integer
-          format: int64
-        product_title:
-          type: string
-        product_description:
-          type: string
-        product_description_html:
-          type: string
-        product_vendor:
-          type: string
-        product_type:
-          type: string
-        product_tags:
-          type: array
-          items:
-            type: string
-        product_handle:
-          type: string
-        product_status:
-          $ref: "#/components/schemas/ProductStatus"
-        product_images:
-          type: array
-          items:
-            type: string
-        product_published_at:
-          type: string
-          nullable: true
-        product_created_at:
-          type: string
-        product_updated_at:
-          type: string
-        title:
-          type: string
-        sku:
-          type: string
-          nullable: true
-        barcode:
-          type: string
-          nullable: true
-        price_in_minor_units:
-          type: integer
-          format: int64
-        price_currency:
-          type: string
-        selected_options:
-          type: array
-          items:
-            $ref: "#/components/schemas/SelectedOption"
-        image_url:
-          type: string
-          nullable: true
-    UpsertProductVariantsRequest:
-      type: object
-      required: [shopify_subdomain, product_variants]
-      properties:
-        shopify_subdomain:
-          type: string
-        product_variants:
-          type: array
-          items:
-            $ref: "#/components/schemas/ProductVariantItem"
-    UpsertProductVariantsResponse:
-      type: object
-      required: [upserted]
-      properties:
-        upserted:
-          type: integer
-    DeleteProductVariantsRequest:
-      type: object
-      required: [shopify_subdomain, product_variant_ids]
-      properties:
-        shopify_subdomain:
-          type: string
-        product_variant_ids:
-          type: array
-          items:
-            type: integer
-            format: int64
-    DeleteProductVariantsResponse:
-      type: object
-      required: [deleted]
-      properties:
-        deleted:
-          type: integer
+          description: Order total in minor currency units (non-negative).
     ShipmentLineItem:
       type: object
       required: [product_variant_id, quantity]
@@ -531,3 +291,12 @@ components:
       description: |
         If whoever deployed the server set the `DSS_INTERNAL_SECRET` environment variable,
         every request must send this header with that same value - like a shared password between services.
+    ShopifyAccessToken:
+      name: X-Shopify-Access-Token
+      in: header
+      required: false
+      schema:
+        type: string
+      description: |
+        Shopify Admin API access token for the shop in the JSON body (`shopify_subdomain`). Required unless
+        the server was configured with `DSS_SHOP_ACCESS_TOKENS` / `SANDBOX_ACCESS_TOKEN` for that shop.

@@ -1,6 +1,6 @@
 package com.example.lib.dss
 
-import com.example.shopify.normalizeShopDomain
+import com.example.lib.shopify.normalizeShopDomain
 import io.ktor.server.application.ApplicationCall
 
 /**

@@ -1,13 +1,13 @@
 package com.example.lib.dss
 
-import com.example.config.ShopifyConfig
+import com.example.lib.shopify.ShopifyConfig
 import com.example.lib.dss.dto.ErrorResponse
 import com.example.lib.dss.dto.SyncShipmentsWithFulfillmentsPayload
 import com.example.lib.dss.dto.SyncShipmentsWithFulfillmentsResponse
 import com.example.lib.dss.dto.TrackingUpdatePayload
 import com.example.lib.dss.dto.TrackingUpdateResponse
-import com.example.shopify.adminGraphqlJsonUrl
-import com.example.shopify.normalizeShopDomain
+import com.example.lib.shopify.adminGraphqlJsonUrl
+import com.example.lib.shopify.normalizeShopDomain
 import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
 import io.ktor.client.HttpClient
 import io.ktor.http.HttpStatusCode

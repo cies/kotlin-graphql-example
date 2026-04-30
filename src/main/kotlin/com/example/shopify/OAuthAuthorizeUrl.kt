@@ -1,6 +1,6 @@
-package com.example.shopify
+package com.example.lib.shopify
 
-import com.example.config.ShopifyConfig
+import com.example.lib.shopify.ShopifyConfig
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.security.SecureRandom

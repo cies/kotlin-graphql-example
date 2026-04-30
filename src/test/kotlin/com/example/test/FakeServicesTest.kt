@@ -1,6 +1,6 @@
 package com.example.test
 
-import com.example.createSharedHttpClient
+import shopify.service.app.createSharedHttpClient
 import com.example.lib.dss.dto.CreateShopifyOrderRequest
 import com.example.lib.dss.dto.ShippingAddress
 import com.example.lib.monolith.HttpMonolithClient
@@ -32,7 +32,6 @@ class FakeServicesTest {
             )
           val req = minimalCreateOrder(shopifyOrderId = 9001L)
           val r = httpMonolithClient.postCreateOrder(req)
-          logFakeExchange(fakeMonolithClient, r)
           assertTrue(r.isSuccess, r.toString())
           assertEquals(1, fakeMonolithClient.ordersPostCount.get())
         }
@@ -59,7 +58,6 @@ class FakeServicesTest {
               createOrderPath = "/orders",
             )
           val r = httpMonolithClient.postCreateOrder(minimalCreateOrder(1L))
-          logFakeExchange(fakeMonolithClient, r)
           assertTrue(r.isFailure)
         }
       } finally {
@@ -85,7 +83,6 @@ class FakeServicesTest {
               createOrderPath = "/orders",
             )
           val r = httpMonolithClient.postCreateOrder(minimalCreateOrder(2L))
-          logFakeExchange(fakeMonolithClient, r)
           assertTrue(r.isSuccess, r.toString())
           assertEquals("Bearer secret-test-token", fakeMonolithClient.lastAuthorizationHeader)
         }
@@ -93,14 +90,6 @@ class FakeServicesTest {
         fakeMonolithClient.stop()
       }
     }
-
-  private fun logFakeExchange(fake: FakeMonolithService, result: Result<*>) {
-    if (System.getProperty("fakes.verbose") != "true") return
-    println("--- FakeMonolithService ${fake.baseUrl} ---")
-    println("Authorization seen by fake: ${fake.lastAuthorizationHeader}")
-    println("POST body seen by fake:\n${fake.lastOrderJson}")
-    println("HttpMonolithClient result: $result")
-  }
 
   private fun minimalCreateOrder(shopifyOrderId: Long) =
     CreateShopifyOrderRequest(
