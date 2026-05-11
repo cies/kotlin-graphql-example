@@ -105,6 +105,39 @@ paths:
               schema:
                 $ref: "#/components/schemas/TrackingUpdateResponse"
 
+  /stores/api-key:
+    put:
+      summary: Set Shopify Admin API token for a store
+      description: |
+        Stores the Shopify Admin API access token for a shop without going through OAuth.
+        Use this when you already have a token (e.g. from a previous OAuth flow or a manual setup)
+        and want to register it with the running service.
+
+        - Saves the token to the token file (`TOKEN_FILE_PATH`) and the in-memory map immediately —
+          no restart needed.
+        - If the monolith is configured (`MONOLITH_BASE_URL`) and `shopify_shop_id` is provided,
+          the token is also forwarded to the monolith via `PUT /stores/api-key`.
+        - Requires `X-DSS-Internal-Secret` header if `DSS_INTERNAL_SECRET` is set.
+      parameters:
+        - $ref: "#/components/parameters/DssInternalSecret"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PutShopAccessTokenRequest"
+      responses:
+        "200":
+          description: Token saved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PutShopAccessTokenResponse"
+        "400":
+          description: Missing or invalid `shopify_subdomain`.
+        "401":
+          description: Wrong or missing `X-DSS-Internal-Secret`.
+
   /dummy2:
     post:
       tags: [fulfillments]
@@ -300,6 +333,33 @@ components:
         shopify_order_id:
           type: integer
           format: int64
+
+    # --- Inbound: set shop access token ---
+    PutShopAccessTokenRequest:
+      type: object
+      required: [shopify_subdomain, api_key]
+      properties:
+        shopify_subdomain:
+          type: string
+          description: Short handle (e.g. `my-shop`) or full `*.myshopify.com` host.
+        api_key:
+          type: string
+          description: Shopify Admin API access token (`shpat_…`).
+        shopify_shop_id:
+          type: integer
+          format: int64
+          nullable: true
+          description: |
+            Optional numeric Shopify shop ID. When provided (and monolith is configured),
+            the token is forwarded to the monolith via PUT /stores/api-key.
+
+    PutShopAccessTokenResponse:
+      type: object
+      required: [shop]
+      properties:
+        shop:
+          type: string
+          description: Normalized `*.myshopify.com` host the token was saved under.
 
     # --- Outbound: stores ---
     StoreResponse:

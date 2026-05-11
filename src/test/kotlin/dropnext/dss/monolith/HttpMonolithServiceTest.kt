@@ -4,6 +4,7 @@ import dropnext.dss.createSharedHttpClient
 import dropnext.dss.lib.dss.dto.CreateShopifyOrderRequest
 import dropnext.dss.lib.dss.dto.ShippingAddress
 import dropnext.dss.lib.monolith.CreateOrderResult
+import dropnext.dss.lib.monolith.GetStoreResult
 import dropnext.dss.lib.monolith.HttpMonolithService
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.runBlocking
@@ -74,6 +75,56 @@ class HttpMonolithServiceTest {
           val response = httpMonolithService.postCreateOrder(minimalCreateOrder(2L))
           assert(response is CreateOrderResult.HttpResponseSummary) { "Expected success but got: $response" }
           assert(fakeMonolithHttpEndpoint.lastAuthorizationHeader == "Bearer secret-test-token")
+        }
+      } finally {
+        fakeMonolithHttpEndpoint.stop()
+      }
+    }
+
+  @Test
+  fun `httpMonolithClient getStore returns Ok with store details on 200`() =
+    runBlocking {
+      val fakeMonolithHttpEndpoint = FakeMonolithHttpEndpoint()
+      fakeMonolithHttpEndpoint.start()
+      try {
+        createSharedHttpClient().use { httpClient ->
+          val httpMonolithService = HttpMonolithService(
+            httpClient = httpClient,
+            baseUrl = fakeMonolithHttpEndpoint.baseUrl,
+            apiKey = null,
+          )
+          val result = httpMonolithService.getStore("acme-store")
+          assert(result is GetStoreResult.Ok) { "Expected Ok but got: $result" }
+          val ok = result as GetStoreResult.Ok
+          assert(ok.storeId == 1L) { "Expected storeId=1 but got: ${ok.storeId}" }
+          assert(ok.shopifyShopId == 1234567890L) { "Expected shopifyShopId=1234567890 but got: ${ok.shopifyShopId}" }
+          assert(ok.apiKey == "shpat_fake") { "Expected apiKey=shpat_fake but got: ${ok.apiKey}" }
+        }
+      } finally {
+        fakeMonolithHttpEndpoint.stop()
+      }
+    }
+
+  @Test
+  fun `httpMonolithClient getStore returns NotFound when store does not exist`() =
+    runBlocking {
+      val fakeMonolithHttpEndpoint = FakeMonolithHttpEndpoint(
+        initialConfig = FakeMonolithConfig(storeNotFound = true),
+      )
+      fakeMonolithHttpEndpoint.start()
+      try {
+        createSharedHttpClient().use { httpClient ->
+          val httpMonolithService = HttpMonolithService(
+            httpClient = httpClient,
+            baseUrl = fakeMonolithHttpEndpoint.baseUrl,
+            apiKey = null,
+          )
+          val result = httpMonolithService.getStore("unknown-store")
+          assert(result is GetStoreResult.NotFound) { "Expected NotFound but got: $result" }
+          val notFound = result as GetStoreResult.NotFound
+          assert(notFound.shopifySubdomain == "unknown-store") {
+            "Expected subdomain=unknown-store but got: ${notFound.shopifySubdomain}"
+          }
         }
       } finally {
         fakeMonolithHttpEndpoint.stop()

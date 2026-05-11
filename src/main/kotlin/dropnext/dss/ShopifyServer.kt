@@ -55,6 +55,7 @@ fun main() {
       dssConfig = dssConfig,
       httpClient = httpClient,
       fulfillmentService = DssFulfillmentService(),
+      monolithService = httpMonolithClient,
     )
   val gqlClientCache = GraphQLClientCache(httpClient)
 

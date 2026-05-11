@@ -4,14 +4,17 @@ import dropnext.dss.lib.dss.DssAppConfig
 import dropnext.dss.lib.dss.DssHttpHandlers
 import dropnext.dss.lib.dss.ShopifyAdminToken
 import dropnext.dss.lib.dss.clientErrorMessage
+import dropnext.dss.lib.dss.shopifyAdminTokenWithMonolithFallback
 import dropnext.dss.lib.dss.dto.DeleteProductVariantsRequest
 import dropnext.dss.lib.dss.dto.ErrorResponse
+import dropnext.dss.lib.dss.dto.PutShopAccessTokenRequest
+import dropnext.dss.lib.dss.dto.PutShopAccessTokenResponse
 import dropnext.dss.lib.dss.dto.UpsertProductVariantsRequest
 import dropnext.dss.lib.dss.dto.UpdateStoreApiKeyRequest
 import dropnext.dss.lib.dss.installDssRoutes
+import dropnext.dss.lib.dss.requireDssInternalSecret
 import dropnext.dss.lib.dss.legacyIdFromGid
 import dropnext.dss.lib.dss.orderToCreateShopifyOrderRequest
-import dropnext.dss.lib.dss.shopifyAdminTokenForNormalizedShop
 import dropnext.dss.lib.monolith.CreateOrderResult
 import dropnext.dss.lib.monolith.DeleteVariantsResult
 import dropnext.dss.lib.monolith.MonolithService
@@ -55,6 +58,7 @@ import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
+import io.ktor.server.routing.put
 import io.ktor.server.routing.routing
 import kotlinx.serialization.Serializable
 
@@ -91,6 +95,7 @@ fun Application.configureRouting(
           POST /webhooks/shopify        Shopify webhook receiver (products/*, orders/*)
 
         --- DSS Internal API (X-DSS-Internal-Secret header required if configured) ---
+          PUT  /stores/api-key                     Set Shopify Admin API token for a store (no OAuth needed)
           POST /sync-shipments-with-fulfillments   Sync shipments with Shopify fulfillments
           POST /tracking-updates                   Create a fulfillment tracking update
           POST /tracking-update                    Same as /tracking-updates (alternate name)
@@ -311,7 +316,7 @@ fun Application.configureRouting(
           normalizeShopDomain(rawShop)
             ?: return@get call.respondText("Invalid shop", status = HttpStatusCode.BadRequest)
         val token =
-          when (val t = shopifyAdminTokenForNormalizedShop(shop, dssConfig)) {
+          when (val t = shopifyAdminTokenWithMonolithFallback(shop, dssConfig, httpMonolithClient)) {
             ShopifyAdminToken.Missing -> {
               call.respondText(
                 "No Admin token for this shop. Set DSS_SHOP_ACCESS_TOKENS or SANDBOX_ACCESS_TOKEN (+ SANDBOX_SHOP), or complete OAuth and configure env from the success page.",
@@ -374,7 +379,7 @@ fun Application.configureRouting(
           normalizeShopDomain(rawShop)
             ?: return@get call.respondText("Invalid shop", status = HttpStatusCode.BadRequest)
         val token =
-          when (val t = shopifyAdminTokenForNormalizedShop(shop, dssConfig)) {
+          when (val t = shopifyAdminTokenWithMonolithFallback(shop, dssConfig, httpMonolithClient)) {
             ShopifyAdminToken.Missing -> {
               call.respondText(
                 "No Admin token for this shop. Configure DSS_SHOP_ACCESS_TOKENS or SANDBOX_ACCESS_TOKEN.",
@@ -432,7 +437,7 @@ fun Application.configureRouting(
           normalizeShopDomain(body.shop)
             ?: return@post call.respondText("Invalid shop", status = HttpStatusCode.BadRequest)
         val token =
-          when (val t = shopifyAdminTokenForNormalizedShop(shop, dssConfig)) {
+          when (val t = shopifyAdminTokenWithMonolithFallback(shop, dssConfig, httpMonolithClient)) {
             ShopifyAdminToken.Missing -> {
               call.respondText(
                 "No Admin token for this shop",
@@ -489,7 +494,7 @@ fun Application.configureRouting(
           normalizeShopDomain(body.shop)
             ?: return@post call.respondText("Invalid shop", status = HttpStatusCode.BadRequest)
         val token =
-          when (val t = shopifyAdminTokenForNormalizedShop(shop, dssConfig)) {
+          when (val t = shopifyAdminTokenWithMonolithFallback(shop, dssConfig, httpMonolithClient)) {
             ShopifyAdminToken.Missing -> {
               call.respondText("No Admin token for this shop", status = HttpStatusCode.Unauthorized)
               return@post
@@ -540,6 +545,33 @@ fun Application.configureRouting(
       }
     }
 
+    put("/stores/api-key") {
+      if (!call.requireDssInternalSecret(dssConfig.dssInternalSecret)) return@put
+      val body = call.receive<PutShopAccessTokenRequest>()
+      val shop =
+        normalizeShopDomain(body.shopifySubdomain)
+          ?: return@put call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = "invalid shopify_subdomain"))
+
+      tokenFileStore.saveToken(shop, body.apiKey)
+      dssConfig.shopAccessTokens[shop] = body.apiKey
+      log.info("PUT /stores/api-key: token saved for shop=$shop")
+
+      httpMonolithClient?.let { monolith ->
+        val apiKeyReq =
+          UpdateStoreApiKeyRequest(
+            shopifySubdomain = shopifySubdomainShort(shop),
+            shopifyShopId = body.shopifyShopId ?: 0L,
+            apiKey = body.apiKey,
+          )
+        when (val r = monolith.putStoreApiKey(apiKeyReq)) {
+          is StoreApiKeyResult.Ok -> log.info("Monolith store api-key updated storeId=${r.storeId} shop=$shop")
+          is StoreApiKeyResult.Error -> log.warn("Monolith store api-key update failed: status=${r.status} ${r.errorMessage}")
+        }
+      }
+
+      call.respond(PutShopAccessTokenResponse(shop = shop))
+    }
+
     post("/webhooks/shopify") {
       val hmacHeader = call.request.headers["X-Shopify-Hmac-Sha256"]
       val topic = call.request.headers["X-Shopify-Topic"] ?: "unknown"
@@ -556,7 +588,7 @@ fun Application.configureRouting(
       val shopNorm = normalizeShopDomain(shopDomain)
       val token =
         if (shopNorm != null) {
-          when (val t = shopifyAdminTokenForNormalizedShop(shopNorm, dssConfig)) {
+          when (val t = shopifyAdminTokenWithMonolithFallback(shopNorm, dssConfig, httpMonolithClient)) {
             ShopifyAdminToken.Missing -> null
             is ShopifyAdminToken.Resolved -> t.token
           }

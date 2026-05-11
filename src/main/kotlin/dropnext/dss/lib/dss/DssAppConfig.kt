@@ -1,6 +1,7 @@
 package dropnext.dss.lib.dss
 
 import dropnext.dss.config.ShopifyConfig
+import java.util.concurrent.ConcurrentHashMap
 
 data class DssAppConfig(
   val shopify: ShopifyConfig,
@@ -15,7 +16,8 @@ data class DssAppConfig(
   /**
    * Normalized `shop.myshopify.com` → Admin API access token. No server-side database; callers pass
    * `X-Shopify-Access-Token` or configure this map via env (see [shopAccessTokensFromEnv]).
-   * Declared as [MutableMap] so [TokenFileStore] can hot-add tokens after OAuth without a restart.
+   * Backed by a [ConcurrentHashMap] so OAuth callbacks, webhook handlers, and the monolith-fallback
+   * token resolver can all write concurrently without data races.
    */
   val shopAccessTokens: MutableMap<String, String>,
   val enableDemoRoutes: Boolean,
@@ -63,7 +65,7 @@ data class DssAppConfig(
         monolithApiKey = key,
         monolithCreateOrderPath = path,
         dssInternalSecret = secret,
-        shopAccessTokens = shopAccessTokensFromEnv(enableTestHarness = testHarness).toMutableMap(),
+        shopAccessTokens = ConcurrentHashMap(shopAccessTokensFromEnv(enableTestHarness = testHarness)),
         enableDemoRoutes = demos,
         enableTestHarness = testHarness,
         sandboxFakeShopify = fakeShopify,

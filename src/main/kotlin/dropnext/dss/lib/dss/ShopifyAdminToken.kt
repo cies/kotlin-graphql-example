@@ -1,6 +1,9 @@
 package dropnext.dss.lib.dss
 
+import dropnext.dss.lib.monolith.GetStoreResult
+import dropnext.dss.lib.monolith.MonolithService
 import dropnext.dss.shopify.normalizeShopDomain
+import dropnext.dss.shopify.shopifySubdomainShort
 import io.ktor.server.application.ApplicationCall
 
 /**
@@ -32,6 +35,36 @@ fun shopifyAdminTokenForNormalizedShop(
     dssConfig.shopAccessTokens[key]
       ?: dssConfig.shopAccessTokens.entries.firstOrNull { (k, _) -> k.equals(key, ignoreCase = true) }?.value
   return if (token != null) ShopifyAdminToken.Resolved(token) else ShopifyAdminToken.Missing
+}
+
+/**
+ * Resolves the Shopify Admin API token for [shopMyshopifyHost], first from the in-memory
+ * [DssAppConfig.shopAccessTokens] map (fast path, no network), then by calling
+ * [MonolithService.getStore] if a [monolith] is configured.
+ *
+ * When the monolith supplies a token it is cached into [DssAppConfig.shopAccessTokens]
+ * (which is a [java.util.concurrent.ConcurrentHashMap]) so subsequent calls are fast.
+ *
+ * The token value is never logged; only the store-id and subdomain are.
+ */
+suspend fun shopifyAdminTokenWithMonolithFallback(
+  shopMyshopifyHost: String,
+  dssConfig: DssAppConfig,
+  monolith: MonolithService?,
+): ShopifyAdminToken {
+  val fast = shopifyAdminTokenForNormalizedShop(shopMyshopifyHost, dssConfig)
+  if (fast is ShopifyAdminToken.Resolved) return fast
+  if (monolith == null) return ShopifyAdminToken.Missing
+  val subdomain = shopifySubdomainShort(shopMyshopifyHost)
+  return when (val result = monolith.getStore(subdomain)) {
+    is GetStoreResult.Ok -> {
+      val token = result.apiKey ?: return ShopifyAdminToken.Missing
+      dssConfig.shopAccessTokens[shopMyshopifyHost] = token
+      ShopifyAdminToken.Resolved(token)
+    }
+    is GetStoreResult.NotFound -> ShopifyAdminToken.Missing
+    is GetStoreResult.Error -> ShopifyAdminToken.Missing
+  }
 }
 
 private fun ApplicationCall.fallbackTokenFromConfig(
