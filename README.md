@@ -50,8 +50,8 @@ The container runs the same Ktor service and uses the same environment variables
 
 Copy `.env.example` to `.env` and provide at least:
 
-* `SHOPIFY_API_KEY`
-* `SHOPIFY_API_SECRET`
+* `SHOPIFY_APP_CLIENT_ID`
+* `SHOPIFY_APP_CLIENT_SECRET`
 * `SHOPIFY_SCOPES`
 * `PUBLIC_BASE_URL`
 
@@ -138,8 +138,8 @@ For local development, expose the server with **HTTPS** (e.g. [ngrok](https://ng
 
 | Variable | Required | Description |
 | -------- | -------- | ----------- |
-| `SHOPIFY_API_KEY` | yes | App API key (Client ID) |
-| `SHOPIFY_API_SECRET` | yes | App secret (OAuth HMAC, token exchange, webhook HMAC) |
+| `SHOPIFY_APP_CLIENT_ID` | yes | App Client ID (OAuth client id used for install flow) |
+| `SHOPIFY_APP_CLIENT_SECRET` | yes | App secret (OAuth HMAC, token exchange, webhook HMAC) |
 | `SHOPIFY_SCOPES` | yes | Comma-separated scopes (see below) |
 | `PUBLIC_BASE_URL` | yes | Public https origin of this server (tunnel URL in dev) |
 | `OAUTH_REDIRECT_PATH` | no | Default `/oauth/callback` (must match Partner redirect URL) |
@@ -156,6 +156,8 @@ For local development, expose the server with **HTTPS** (e.g. [ngrok](https://ng
 | `SANDBOX_SHOP` | no | Short handle merged into the token map when the harness is on (default `harness-sandbox`). |
 | `SANDBOX_ACCESS_TOKEN` | no | Optional real dev-store Admin token for that sandbox shop; if unset with harness on, a **non-production placeholder** is used. |
 | `DSS_SANDBOX_FAKE_SHOPIFY` | no | Only with **`ENABLE_TEST_HARNESS=true`**. If `true`, sync/tracking/demo **skip real Shopify HTTP** and return stub **200** JSON/text so the test page does not hit 500/GraphQL throws. Use for local UI checks; never in production. |
+
+Legacy compatibility: `SHOPIFY_API_KEY` and `SHOPIFY_API_SECRET` are still accepted as fallbacks when the new `SHOPIFY_APP_CLIENT_ID` / `SHOPIFY_APP_CLIENT_SECRET` vars are not set.
 
 ### Security notes (production)
 
@@ -216,7 +218,7 @@ Demo routes are off by default; they are not authenticated beyond knowing an ins
 
 ### Troubleshooting
 
-* Startup exits quickly: verify required vars `SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET`, `SHOPIFY_SCOPES`, and `PUBLIC_BASE_URL`.
+* Startup exits quickly: verify required vars `SHOPIFY_APP_CLIENT_ID` and `SHOPIFY_APP_CLIENT_SECRET` (or legacy `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET`), plus `SHOPIFY_SCOPES` and `PUBLIC_BASE_URL`.
 * OAuth callback mismatch in Shopify: ensure `{PUBLIC_BASE_URL}{OAUTH_REDIRECT_PATH}` exactly matches Partner Dashboard redirect URL.
 * DSS auth failures (`401`): provide `X-Shopify-Access-Token` or configure `DSS_SHOP_ACCESS_TOKENS`; include `X-DSS-Internal-Secret` when `DSS_INTERNAL_SECRET` is set.
 * `DSS_SHOP_ACCESS_TOKENS` parse issues: use comma-separated `shop.myshopify.com|shpat_...` pairs.

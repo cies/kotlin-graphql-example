@@ -1,10 +1,10 @@
 package dropnext.dss
 
-import com.example.lib.dss.DssAppConfig
-import com.example.lib.dss.DssFulfillmentService
-import com.example.lib.dss.DssHttpHandlers
-import com.example.lib.monolith.HttpMonolithClient
-import com.example.lib.monolith.MonolithCreateOrderPort
+import dropnext.dss.lib.dss.DssAppConfig
+import dropnext.dss.lib.dss.DssFulfillmentService
+import dropnext.dss.lib.dss.DssHttpHandlers
+import dropnext.dss.lib.monolith.HttpMonolithService
+import dropnext.dss.lib.monolith.MonolithService
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.install
@@ -13,15 +13,24 @@ import io.ktor.server.engine.embeddedServer
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.response.respondText
-import kotlinx.serialization.json.Json
 
 fun main() {
   val dssConfig =
     DssAppConfig.fromEnv()
       ?: error(
-        "Set env vars: SHOPIFY_API_KEY, SHOPIFY_API_SECRET, SHOPIFY_SCOPES, PUBLIC_BASE_URL",
+        "Set env vars: SHOPIFY_APP_CLIENT_ID (or SHOPIFY_API_KEY), SHOPIFY_APP_CLIENT_SECRET (or SHOPIFY_API_SECRET), SHOPIFY_SCOPES, PUBLIC_BASE_URL",
       )
   val config = dssConfig.shopify
+
+  val tokenFilePath =
+    System.getenv("TOKEN_FILE_PATH")?.trim()?.takeIf { it.isNotBlank() } ?: "./shop-tokens.txt"
+  val tokenFileStore = TokenFileStore(tokenFilePath)
+  val fileTokens = tokenFileStore.loadTokens()
+  if (fileTokens.isNotEmpty()) {
+    fileTokens.forEach { (shop, token) -> dssConfig.shopAccessTokens[shop] = token }
+    println("[token-store] Loaded ${fileTokens.size} token(s) from $tokenFilePath")
+  }
+
   if (dssConfig.enableTestHarness) {
     println(
       "[test-harness] /demo/* routes are enabled (same as ENABLE_DEMO_ROUTES=true for this process)",
@@ -31,9 +40,9 @@ fun main() {
     )
   }
   val httpClient = createSharedHttpClient()
-  val httpMonolithClient: MonolithCreateOrderPort? =
+  val httpMonolithClient: MonolithService? =
     dssConfig.monolithBaseUrl?.let { base ->
-      HttpMonolithClient(
+      HttpMonolithService(
         httpClient = httpClient,
         baseUrl = base,
         apiKey = dssConfig.monolithApiKey,
@@ -47,6 +56,7 @@ fun main() {
       httpClient = httpClient,
       fulfillmentService = DssFulfillmentService(),
     )
+  val gqlClientCache = GraphQLClientCache(httpClient)
 
   embeddedServer(CIO, port = config.serverPort, host = "0.0.0.0") {
     install(StatusPages) {
@@ -60,18 +70,15 @@ fun main() {
       }
     }
     install(ContentNegotiation) {
-      json(
-        Json {
-          ignoreUnknownKeys = true
-          isLenient = true
-        },
-      )
+      json(AppJson)
     }
     configureRouting(
       dssConfig = dssConfig,
       httpClient = httpClient,
       httpMonolithClient = httpMonolithClient,
       dssHandlers = dssHandlers,
+      gqlClientCache = gqlClientCache,
+      tokenFileStore = tokenFileStore,
     )
   }.start(wait = true)
 }

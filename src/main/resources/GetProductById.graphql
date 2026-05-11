@@ -1,18 +1,45 @@
 query GetProductById($id: ID!) {
+  shop {
+    currencyCode
+  }
   product(id: $id) {
     id
+    legacyResourceId
     title
+    description
+    descriptionHtml
+    vendor
+    productType
+    tags
     handle
+    status
+    publishedAt
+    createdAt
     updatedAt
+    images(first: 20) {
+      edges {
+        node {
+          url
+        }
+      }
+    }
     variants(first: 100) {
       edges {
         node {
           id
+          legacyResourceId
           title
           sku
           barcode
-          inventoryQuantity
           price
+          updatedAt
+          selectedOptions {
+            name
+            value
+          }
+          image {
+            url
+          }
         }
       }
     }

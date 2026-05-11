@@ -6,8 +6,10 @@ description = "GraphQL client Kotlin with compile-time query validation and IDE 
 plugins {
   application
   kotlin("jvm") version "2.2.20"
+  id("org.jetbrains.kotlin.plugin.power-assert") version "2.2.20"
   alias(libs.plugins.kotlinSerialization)
   alias(libs.plugins.kotlinGraphql)
+  id("org.openapi.generator") version "7.6.0"
 }
 
 buildscript {
@@ -43,7 +45,7 @@ tasks.test {
 }
 
 application {
-  mainClass.set("shopify.service.app.ShopifyServerKt")
+  mainClass.set("dropnext.dss.ShopifyServerKt")
 }
 
 kotlin {
@@ -71,4 +73,34 @@ graphql {
 
 tasks.graphqlIntrospectSchema {
   outputFile = file("src/main/graphql-schema/schema.graphql")
+}
+
+powerAssert {
+  functions = listOf("kotlin.assert", "kotlin.test.assertTrue", "kotlin.test.assertEquals", "kotlin.test.assertNull")
+}
+
+openApiGenerate {
+  generatorName.set("kotlin")
+  inputSpec.set("$rootDir/docs/openapi/dss-api.yaml")
+  outputDir.set("${layout.buildDirectory.get()}/generated/openapi")
+  modelPackage.set("dropnext.dss.lib.dss.dto")
+  generateApiTests.set(false)
+  generateModelTests.set(false)
+  globalProperties.set(mapOf(
+    "models" to "",
+    "apis" to "false",
+    "supportingFiles" to "false",
+  ))
+  configOptions.set(mapOf(
+    "library" to "jvm-ktor",
+    "serializationLibrary" to "kotlinx_serialization",
+    "dateLibrary" to "string",
+    "enumPropertyNaming" to "UPPERCASE",
+  ))
+}
+
+sourceSets["main"].kotlin.srcDir("${layout.buildDirectory.get()}/generated/openapi/src/main/kotlin")
+
+tasks.named("compileKotlin") {
+  dependsOn(tasks.named("openApiGenerate"))
 }

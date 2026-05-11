@@ -9,24 +9,22 @@ import kotlin.io.path.extension
 import kotlin.io.path.isRegularFile
 import kotlin.io.path.name
 import kotlin.io.path.pathString
-import kotlin.test.assertFalse as assertConditionFalse
 import org.junit.jupiter.api.Test
 
 class ArchitectureTest {
   @Test
   fun `monolith lib does not depend on Ktor server`() {
-    Konsist.scopeFromProject().files.withPackage("com.example.lib.monolith").assertFalse { file ->
+    Konsist.scopeFromProject().files.withPackage("dropnext.dss.lib.monolith").assertFalse { file ->
       file.imports.any { import -> import.name.startsWith("io.ktor.server") }
     }
   }
 
   @Test
-  fun `production code does not reference legacy com example dss package`() {
+  fun `production code does not import from legacy com example packages`() {
     Konsist.scopeFromProduction().files.assertFalse { file ->
       file.imports.any { import ->
-        import.name == "com.example.dss" ||
-          import.name.startsWith("com.example.dss.") &&
-          !import.name.startsWith("com.example.lib.dss")
+        import.name.startsWith("com.example.") &&
+          !import.name.startsWith("com.example.graphql.generated")
       }
     }
   }
@@ -41,13 +39,19 @@ class ArchitectureTest {
   }
 
   @Test
+  fun `no star imports anywhere`() {
+    Konsist.scopeFromProject().files.assertFalse { file ->
+      file.imports.any { it.isWildcard }
+    }
+  }
+
+  @Test
   fun `production code does not use lateinit`() {
     val offenders = productionKotlinFiles()
       .filter { path -> Files.readString(path).contains("lateinit ") }
-    assertConditionFalse(
-      offenders.isNotEmpty(),
+    assert(offenders.isEmpty()) {
       "lateinit is forbidden in production: ${offenders.joinToString()}"
-    )
+    }
   }
 
   @Test
@@ -58,17 +62,16 @@ class ArchitectureTest {
       val content = Files.readString(path)
       propertyVarRegex.containsMatchIn(content)
     }
-    assertConditionFalse(
-      offenders.isNotEmpty(),
+    assert(offenders.isEmpty()) {
       "mutable var properties are forbidden: ${offenders.joinToString()}"
-    )
+    }
   }
 
   @Test
   fun `dss routing stays pure and avoids graphql generated types`() {
     Konsist.scopeFromProduction()
       .files
-      .withPackage("com.example.lib.dss")
+      .withPackage("dropnext.dss.lib.dss")
       .filter { file -> file.name == "DssRouting.kt" }
       .assertFalse { file ->
         file.imports.any { import -> import.name.startsWith("com.example.graphql.generated") }

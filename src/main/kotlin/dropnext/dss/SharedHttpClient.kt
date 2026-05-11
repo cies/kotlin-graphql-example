@@ -6,7 +6,6 @@ import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
 import java.util.concurrent.TimeUnit
-import kotlinx.serialization.json.Json
 
 fun createSharedHttpClient(): HttpClient =
   HttpClient(OkHttp) {
@@ -23,12 +22,7 @@ fun createSharedHttpClient(): HttpClient =
       socketTimeoutMillis = 120_000
     }
     install(ContentNegotiation) {
-      json(
-        Json {
-          ignoreUnknownKeys = true
-          isLenient = true
-        },
-      )
+      json(AppJson)
     }
     // No Logging plugin: avoids accidentally logging Authorization headers or JSON bodies to monolith/Shopify.
   }

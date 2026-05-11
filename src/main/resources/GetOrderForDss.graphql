@@ -65,5 +65,12 @@ query GetOrderForDss($id: ID!) {
         }
       }
     }
+    fulfillments(first: 50) {
+      id
+      legacyResourceId
+      trackingInfo {
+        number
+      }
+    }
   }
 }

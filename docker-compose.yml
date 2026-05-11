@@ -7,6 +7,8 @@ services:
     env_file:
       - .env
     environment:
+      SHOPIFY_APP_CLIENT_ID: ${SHOPIFY_APP_CLIENT_ID:-}
+      SHOPIFY_APP_CLIENT_SECRET: ${SHOPIFY_APP_CLIENT_SECRET:-}
       PORT: ${PORT:-8080}
     ports:
       - "${PORT:-8080}:${PORT:-8080}"
@@ -21,6 +23,8 @@ services:
     env_file:
       - .env
     environment:
+      SHOPIFY_APP_CLIENT_ID: ${SHOPIFY_APP_CLIENT_ID:-}
+      SHOPIFY_APP_CLIENT_SECRET: ${SHOPIFY_APP_CLIENT_SECRET:-}
       PORT: ${PORT:-8080}
       ENABLE_TEST_HARNESS: "true"
     ports:
@@ -36,6 +40,8 @@ services:
     env_file:
       - .env
     environment:
+      SHOPIFY_APP_CLIENT_ID: ${SHOPIFY_APP_CLIENT_ID:-}
+      SHOPIFY_APP_CLIENT_SECRET: ${SHOPIFY_APP_CLIENT_SECRET:-}
       PORT: ${PORT:-8080}
       DSS_ALLOW_INSECURE_MONOLITH: "true"
     ports:

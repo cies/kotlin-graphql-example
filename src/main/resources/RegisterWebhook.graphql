@@ -1,7 +1,7 @@
-mutation RegisterWebhook($topic: WebhookSubscriptionTopic!, $callbackUrl: URL!) {
+mutation RegisterWebhook($topic: WebhookSubscriptionTopic!, $callbackUrl: URL!, $includeFields: [String!]) {
   webhookSubscriptionCreate(
     topic: $topic,
-    webhookSubscription: { callbackUrl: $callbackUrl }
+    webhookSubscription: { callbackUrl: $callbackUrl, includeFields: $includeFields }
   ) {
     userErrors {
       field
@@ -10,6 +10,7 @@ mutation RegisterWebhook($topic: WebhookSubscriptionTopic!, $callbackUrl: URL!) 
     webhookSubscription {
       id
       topic
+      includeFields
     }
   }
 }

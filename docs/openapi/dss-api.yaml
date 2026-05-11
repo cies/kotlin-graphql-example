@@ -16,7 +16,7 @@ info:
 
 servers:
   - url: /
-    description: Your app’s base URL (same server that runs this API)
+    description: Your app's base URL (same server that runs this API)
 
 tags:
   - name: fulfillments
@@ -31,36 +31,38 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/SyncShipmentsWithFulfillmentsPayload"
+              $ref: "#/components/schemas/SyncShipmentsWithFulfillmentsRequest"
       responses:
         "200":
+          description: Shipments were synced and new fulfillment IDs were returned.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/SyncShipmentsWithFulfillmentsResponse"
         "400":
-          description: Shopify said no, or we couldn’t match variants / fulfillment orders - check the error text
+          description: Shopify said no, or we couldn't match variants / fulfillment orders - check the error text
         "401":
           description: Wrong or missing `X-DSS-Internal-Secret`, missing Admin token header / env map, or invalid token
 
   /tracking-updates:
     post:
       tags: [fulfillments]
-      summary: Post a tracking update (like “in transit” or “delivered”)
+      summary: Post a tracking update (like "in transit" or "delivered")
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/TrackingUpdatePayload"
+              $ref: "#/components/schemas/TrackingUpdateRequest"
       responses:
         "200":
+          description: Tracking update was accepted and a fulfillment event was created.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/TrackingUpdateResponse"
         "400":
-          description: Shopify rejected the event or we couldn’t build it - see error message
+          description: Shopify rejected the event or we couldn't build it - see error message
         "401":
           description: Wrong or missing secret header (if configured)
 
@@ -73,9 +75,10 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/TrackingUpdatePayload"
+              $ref: "#/components/schemas/TrackingUpdateRequest"
       responses:
         "200":
+          description: Tracking update was accepted and a fulfillment event was created.
           content:
             application/json:
               schema:
@@ -84,7 +87,7 @@ paths:
   /dummy1:
     post:
       tags: [fulfillments]
-      summary: Workaround route - same as “post tracking update”
+      summary: Workaround route - same as "post tracking update"
       description: |
         **Same as `/tracking-updates`.** Only exists because some code generators mishandle certain OpenAPI layouts.
         Use `/tracking-updates` in new code; use this only if your client was generated with `dummy1` in the spec.
@@ -93,9 +96,10 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/TrackingUpdatePayload"
+              $ref: "#/components/schemas/TrackingUpdateRequest"
       responses:
         "200":
+          description: Tracking update was accepted and a fulfillment event was created.
           content:
             application/json:
               schema:
@@ -104,7 +108,7 @@ paths:
   /dummy2:
     post:
       tags: [fulfillments]
-      summary: Workaround route - same as “sync shipments with fulfillments”
+      summary: Workaround route - same as "sync shipments with fulfillments"
       description: |
         **Same as `/sync-shipments-with-fulfillments`.** See `/dummy1` - tooling workaround only.
       requestBody:
@@ -112,9 +116,10 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/SyncShipmentsWithFulfillmentsPayload"
+              $ref: "#/components/schemas/SyncShipmentsWithFulfillmentsRequest"
       responses:
         "200":
+          description: Shipments were synced and new fulfillment IDs were returned.
           content:
             application/json:
               schema:
@@ -122,12 +127,103 @@ paths:
 
 components:
   schemas:
+    # --- Shared ---
     ErrorResponse:
       type: object
       required: [error]
       properties:
         error:
           type: string
+
+    # --- Inbound: monolith → DSS (webhook contracts) ---
+    ShipmentLineItem:
+      type: object
+      required: [product_variant_id, quantity]
+      properties:
+        product_variant_id:
+          type: integer
+          format: int64
+        quantity:
+          type: integer
+
+    Shipment:
+      type: object
+      required: [tracking_number, line_items]
+      properties:
+        tracking_number:
+          type: string
+        carrier:
+          type: string
+          nullable: true
+        tracking_url:
+          type: string
+          nullable: true
+        line_items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ShipmentLineItem"
+
+    SyncShipmentsWithFulfillmentsRequest:
+      type: object
+      description: |
+        Sent by the monolith when a supplier creates or re-organises shipments.
+        The DSS cancels all existing Shopify fulfillments for the order, then creates
+        new ones from the provided shipments.
+      required: [shopify_subdomain, shopify_order_id, shipments]
+      properties:
+        shopify_subdomain:
+          type: string
+        shopify_order_id:
+          type: integer
+          format: int64
+        shipments:
+          type: array
+          items:
+            $ref: "#/components/schemas/Shipment"
+
+    SyncShipmentsWithFulfillmentsResponse:
+      type: object
+      required: [new_fulfillment_ids]
+      properties:
+        new_fulfillment_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+
+    TrackingUpdateRequest:
+      type: object
+      description: |
+        Sent by the monolith when a tracking status update arrives (e.g. from AfterShip).
+        The DSS locates the Shopify fulfillment by order + tracking number and creates a FulfillmentEvent.
+      required: [shopify_subdomain, shopify_order_id, tracking_number, status, happened_at]
+      properties:
+        shopify_subdomain:
+          type: string
+        shopify_order_id:
+          type: integer
+          format: int64
+        tracking_number:
+          type: string
+        status:
+          type: string
+          description: |
+            Plain-text status (for example `in_transit`). The service maps this to what Shopify expects.
+        happened_at:
+          type: string
+        message:
+          type: string
+          nullable: true
+
+    TrackingUpdateResponse:
+      type: object
+      required: [fulfillment_event_id]
+      properties:
+        fulfillment_event_id:
+          type: integer
+          format: int64
+
+    # --- Outbound: DSS → monolith (client DTOs) ---
     ShippingAddress:
       type: object
       required: [address1, city, country_code]
@@ -142,10 +238,11 @@ components:
         country_code: { type: string }
         zip: { type: string, nullable: true }
         phone: { type: string, nullable: true }
+
     OrderLineItem:
       type: object
       required:
-        - order_line_item_id
+        - shopify_line_item_id
         - product_variant_id
         - quantity
         - fulfillment_order_id
@@ -153,13 +250,14 @@ components:
         - snapshot_of_product_title
         - snapshot_of_price_in_minor_units
       properties:
-        order_line_item_id: { type: integer, format: int64 }
+        shopify_line_item_id: { type: integer, format: int64 }
         product_variant_id: { type: integer, format: int64 }
         quantity: { type: integer }
         fulfillment_order_id: { type: integer, format: int64 }
         snapshot_of_variant_title: { type: string }
         snapshot_of_product_title: { type: string }
         snapshot_of_price_in_minor_units: { type: integer, format: int64 }
+
     CreateShopifyOrderRequest:
       type: object
       description: JSON the Shopify service POSTs to the monolith on `orders/create` (outbound contract).
@@ -173,12 +271,13 @@ components:
         - shipping_address
         - line_items
         - total_in_minor_units
+        - currency
       properties:
         shopify_subdomain: { type: string }
         shopify_order_id: { type: integer, format: int64 }
         name: { type: string }
         financial_status: { type: string }
-        fulfillment_status: { type: string }
+        fulfillment_status: { type: string, nullable: true }
         created_at: { type: string }
         shipping_address:
           $ref: "#/components/schemas/ShippingAddress"
@@ -190,96 +289,146 @@ components:
           type: integer
           format: int64
           description: Order total in minor currency units (non-negative).
-    ShipmentLineItem:
+        currency:
+          type: string
+          description: ISO 4217 currency code (e.g. "USD").
+
+    CreateOrderResponse:
       type: object
-      required: [product_variant_id, quantity]
+      required: [shopify_order_id]
       properties:
-        product_variant_id:
-          type: integer
-          format: int64
-        quantity:
-          type: integer
-    FulfillmentPayload:
-      type: object
-      description: |
-        One shipment you want Shopify to know about: which fulfillment order, tracking number,
-        optional carrier/URL, and which line items (by variant id) ship in this box.
-      required: [fulfillment_order_id, tracking_number, line_items]
-      properties:
-        fulfillment_order_id:
-          type: integer
-          format: int64
-        tracking_number:
-          type: string
-        carrier:
-          type: string
-          nullable: true
-        tracking_url:
-          type: string
-          nullable: true
-        line_items:
-          type: array
-          items:
-            $ref: "#/components/schemas/ShipmentLineItem"
-    SyncShipmentsWithFulfillmentsPayload:
-      type: object
-      description: |
-        **When a supplier ships something:** tell us the shop, the Shopify order id, any old fulfillments
-        to cancel, and the new shipments to create with tracking.
-      required: [shopify_subdomain, shopify_order_id, replace_fulfillment_ids, new_fulfillments]
-      properties:
-        shopify_subdomain:
-          type: string
         shopify_order_id:
           type: integer
           format: int64
-        replace_fulfillment_ids:
+
+    # --- Outbound: stores ---
+    StoreResponse:
+      type: object
+      required: [store_id, shopify_shop_id, api_key]
+      properties:
+        store_id: { type: integer, format: int64 }
+        shopify_shop_id: { type: integer, format: int64 }
+        api_key: { type: string, nullable: true }
+
+    UpdateStoreApiKeyRequest:
+      type: object
+      required: [shopify_subdomain, shopify_shop_id, api_key]
+      properties:
+        shopify_subdomain: { type: string }
+        shopify_shop_id: { type: integer, format: int64 }
+        api_key: { type: string }
+
+    UpdateStoreApiKeyResponse:
+      type: object
+      required: [store_id]
+      properties:
+        store_id: { type: integer, format: int64 }
+
+    # --- Outbound: product variants ---
+    ProductStatus:
+      type: string
+      enum: [active, draft, archived]
+
+    SelectedOption:
+      type: object
+      required: [name, value]
+      properties:
+        name: { type: string }
+        value: { type: string }
+
+    ProductVariantItem:
+      type: object
+      required:
+        - product_variant_id
+        - product_id
+        - product_title
+        - product_description
+        - product_description_html
+        - product_vendor
+        - product_type
+        - product_tags
+        - product_handle
+        - product_status
+        - product_images
+        - product_published_at
+        - product_created_at
+        - product_updated_at
+        - title
+        - sku
+        - barcode
+        - price_in_minor_units
+        - price_currency
+        - selected_options
+        - image_url
+      properties:
+        product_variant_id: { type: integer, format: int64 }
+        product_id: { type: integer, format: int64 }
+        product_title: { type: string }
+        product_description: { type: string }
+        product_description_html: { type: string }
+        product_vendor: { type: string }
+        product_type: { type: string }
+        product_tags:
+          type: array
+          items: { type: string }
+        product_handle: { type: string }
+        product_status:
+          $ref: "#/components/schemas/ProductStatus"
+        product_images:
+          type: array
+          items: { type: string }
+        product_published_at: { type: string, nullable: true }
+        product_created_at: { type: string }
+        product_updated_at: { type: string }
+        title: { type: string }
+        sku: { type: string, nullable: true }
+        barcode: { type: string, nullable: true }
+        price_in_minor_units: { type: integer, format: int64 }
+        price_currency: { type: string }
+        selected_options:
           type: array
           items:
-            type: integer
-            format: int64
-        new_fulfillments:
+            $ref: "#/components/schemas/SelectedOption"
+        image_url: { type: string, nullable: true }
+
+    UpsertProductVariantsRequest:
+      type: object
+      required: [shopify_subdomain, product_variants]
+      properties:
+        shopify_subdomain: { type: string }
+        product_variants:
           type: array
           items:
-            $ref: "#/components/schemas/FulfillmentPayload"
-    SyncShipmentsWithFulfillmentsResponse:
+            $ref: "#/components/schemas/ProductVariantItem"
+
+    UpsertProductVariantsResponse:
       type: object
-      required: [new_fulfillment_ids]
+      required: [upserted]
       properties:
-        new_fulfillment_ids:
+        upserted: { type: integer, format: int32 }
+
+    DeleteProductVariantsRequest:
+      type: object
+      required: [shopify_subdomain, product_variant_ids]
+      properties:
+        shopify_subdomain: { type: string }
+        product_variant_ids:
           type: array
-          items:
-            type: integer
-            format: int64
-    TrackingUpdatePayload:
+          items: { type: integer, format: int64 }
+
+    DeleteProductVariantsResponse:
       type: object
-      description: |
-        **When tracking changes** (for example from a carrier): which shop, which fulfillment,
-        what status, when it happened, and an optional note.
-      required: [shopify_subdomain, fulfillment_id, status, happened_at]
+      required: [deleted]
       properties:
-        shopify_subdomain:
-          type: string
-        fulfillment_id:
-          type: integer
-          format: int64
-        status:
-          type: string
-          description: |
-            Plain-text status (for example `in_transit`). The service maps this to what Shopify expects
-            (things like “on the way” or “delivered”).
-        happened_at:
-          type: string
-        message:
-          type: string
-          nullable: true
-    TrackingUpdateResponse:
+        deleted: { type: integer, format: int32 }
+
+    VariantIdsResponse:
       type: object
-      required: [fulfillment_event_id]
+      required: [product_variant_ids]
       properties:
-        fulfillment_event_id:
-          type: integer
-          format: int64
+        product_variant_ids:
+          type: array
+          items: { type: integer, format: int64 }
 
   parameters:
     DssInternalSecret:

@@ -1,6 +1,6 @@
 package dropnext.dss.lib.dss
 
-import com.example.lib.dss.dto.ErrorResponse
+import dropnext.dss.lib.dss.dto.ErrorResponse
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.respond

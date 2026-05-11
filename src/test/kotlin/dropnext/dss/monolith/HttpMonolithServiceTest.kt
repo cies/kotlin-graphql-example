@@ -5,14 +5,12 @@ import dropnext.dss.lib.dss.dto.CreateShopifyOrderRequest
 import dropnext.dss.lib.dss.dto.ShippingAddress
 import dropnext.dss.lib.monolith.CreateOrderResult
 import dropnext.dss.lib.monolith.HttpMonolithService
-import io.ktor.http.*
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
+import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 
 /**
- * Verifies the outbound monolith client against [FakeMonolithService] (fake HTTP server, not mocks).
+ * Verifies the outbound monolith client against [FakeMonolithHttpEndpoint] (fake HTTP server, not mocks).
  */
 class HttpMonolithServiceTest {
   @Test
@@ -29,8 +27,8 @@ class HttpMonolithServiceTest {
           )
           val req = minimalCreateOrder(shopifyOrderId = 9001L)
           val response = httpMonolithService.postCreateOrder(req)
-          assertTrue(response is CreateOrderResult.HttpResponseSummary, response.toString())
-          assertEquals(1, fakeMonolithHttpEndpoint.ordersPostCount.get())
+          assert(response is CreateOrderResult.HttpResponseSummary) { "Expected success but got: $response" }
+          assert(fakeMonolithHttpEndpoint.ordersPostCount.get() == 1)
         }
       } finally {
         fakeMonolithHttpEndpoint.stop()
@@ -52,7 +50,7 @@ class HttpMonolithServiceTest {
             apiKey = null,
           )
           val response = httpMonolithService.postCreateOrder(minimalCreateOrder(1L))
-          assertTrue(response is CreateOrderResult.Error)
+          assert(response is CreateOrderResult.Error) { "Expected error but got: $response" }
         }
       } finally {
         fakeMonolithHttpEndpoint.stop()
@@ -74,8 +72,8 @@ class HttpMonolithServiceTest {
             apiKey = "secret-test-token",
           )
           val response = httpMonolithService.postCreateOrder(minimalCreateOrder(2L))
-          assertTrue(response is CreateOrderResult.HttpResponseSummary, response.toString())
-          assertEquals("Bearer secret-test-token", fakeMonolithHttpEndpoint.lastAuthorizationHeader)
+          assert(response is CreateOrderResult.HttpResponseSummary) { "Expected success but got: $response" }
+          assert(fakeMonolithHttpEndpoint.lastAuthorizationHeader == "Bearer secret-test-token")
         }
       } finally {
         fakeMonolithHttpEndpoint.stop()
@@ -97,5 +95,6 @@ class HttpMonolithServiceTest {
       ),
       lineItems = emptyList(),
       totalInMinorUnits = 0L,
+      currency = "USD",
     )
 }

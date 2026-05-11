@@ -2,6 +2,7 @@ package dropnext.dss.shopify
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
@@ -25,4 +26,17 @@ fun graphqlResourceIdFromShopifyWebhook(topic: String, bodyUtf8: String): String
       else -> return null
     }
   return "gid://shopify/$resource/$numericId"
+}
+
+/**
+ * Parses the legacy (integer) variant IDs from a Shopify `products/delete` webhook body.
+ * Shopify includes the full product JSON (including variants) in delete payloads.
+ */
+fun variantLegacyIdsFromProductWebhook(bodyUtf8: String): List<Long> {
+  val root =
+    runCatching { webhookJson.parseToJsonElement(bodyUtf8).jsonObject }.getOrNull() ?: return emptyList()
+  val variants = root["variants"]?.jsonArray ?: return emptyList()
+  return variants.mapNotNull { el ->
+    runCatching { el.jsonObject["id"]?.jsonPrimitive?.longOrNull }.getOrNull()
+  }
 }

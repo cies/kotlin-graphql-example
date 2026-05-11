@@ -28,16 +28,17 @@ suspend fun exchangeAuthorizationCode(
   shop: String,
   code: String,
   config: ShopifyConfig,
-): OAuthAccessTokenResponse {
-  val url = "https://$shop/admin/oauth/access_token"
-  return httpClient.post(url) {
-    contentType(ContentType.Application.Json)
-    setBody(
-      OAuthAccessTokenRequest(
-        clientId = config.apiKey,
-        clientSecret = config.apiSecret,
-        code = code,
-      ),
-    )
-  }.body()
-}
+): Result<OAuthAccessTokenResponse> =
+  runCatching {
+    val url = "https://$shop/admin/oauth/access_token"
+    httpClient.post(url) {
+      contentType(ContentType.Application.Json)
+      setBody(
+        OAuthAccessTokenRequest(
+          clientId = config.apiKey,
+          clientSecret = config.apiSecret,
+          code = code,
+        ),
+      )
+    }.body<OAuthAccessTokenResponse>()
+  }

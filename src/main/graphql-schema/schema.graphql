@@ -12965,14 +12965,19 @@ type DiscountCombinesWith {
   """
   productDiscounts: Boolean!
   """
-  The product discount tags that determine which product discounts can apply together on
-  the same cart line. By default, only one product discount applies per cart line. When
-  each of two product discounts lists a tag in this field that matches a tag on the other
-  discount, both discounts can apply to the same cart line. For example, if Discount A
-  lists "SEASONAL" in this field and Discount B is tagged "SEASONAL", and Discount B
-  lists "LOYALTY" in this field and Discount A is tagged "LOYALTY", both discounts can
-  apply to the same cart line. To use this field, `productDiscounts` must also be set to
-  true. This field is available only on a Shopify Plus plan.
+  Controls which product discounts can apply together on the same cart line. By
+  default, only one product discount applies per line. Available only on a Shopify
+  Plus plan and requires the `productDiscounts` field to be set to `true`.
+  
+  For discounts to apply together, they must match tags in both directions. Each
+  discount has two tag sets: the tags it's tagged with, and the tags it agrees to
+  apply with (this field). Two discounts apply together only if each one allows at
+  least one tag that the other is tagged with. Any number of product discounts can
+  apply to the same line if this two-way match holds for every pair in the group.
+  
+  Example: Discount A is tagged with "LOYALTY" and allows "SEASONAL," and Discount B
+  is tagged with "SEASONAL" and allows "LOYALTY." They apply together. To add a
+  third discount, it must meet the same mutual-match rule with both A and B.
   """
   productDiscountsWithTagsOnSameCartLine: [String!]
   """
@@ -24335,15 +24340,47 @@ type Mutation {
     id: ID!
   ): InventoryTransferMarkAsReadyToShipPayload
   """
-  This mutation allows removing the shippable quantities of line items on a Transfer.
-  It removes all quantities of the item from the transfer that are not associated with shipments.
+  This mutation removes [`InventoryTransferLineItem`s](https://shopify.dev/docs/api/admin-graphql/latest/objects/InventoryTransferLineItem),
+  or portions of them, from a `DRAFT` or `READY_TO_SHIP` Transfer.
+  
+  For each referenced line item, if its entire quantity is still unallocated to a
+  shipment, the line item is removed; otherwise the line item remains on the
+  transfer with its quantity reduced to the allocated portion. Quantity allocated
+  to a shipment (whether the shipment is in draft, in transit, or already
+  received) is preserved.
+  
+  On `READY_TO_SHIP` transfers, removing items also returns the affected reserved
+  quantity to available inventory at the origin location.
+  
+  To change the quantity of a line item without removing it, use
+  [`inventoryTransferSetItems`](https://shopify.dev/docs/api/admin-graphql/latest/mutations/inventoryTransferSetItems).
   """
   inventoryTransferRemoveItems(
     "The input fields for the InventoryTransferRemoveItems mutation."
     input: InventoryTransferRemoveItemsInput!
   ): InventoryTransferRemoveItemsPayload
   """
-  This mutation allows for the setting of line items on a Transfer. Will replace the items already set, if any.
+  This mutation sets the quantity for one or more line items on a Transfer.
+  
+  Only the items you include in the `lineItems` field are updated. Items already on
+  the transfer but not referenced in your update will stay unchanged. Each inventory
+  item may appear at most once in `lineItems`; duplicate `inventoryItemId` entries
+  are rejected.
+  
+  For each entry in `lineItems`:
+  - If the inventory item isn't yet on the transfer, a new line item is added with
+    the provided quantity.
+  - If the inventory item is already on the transfer, the provided quantity
+    replaces the line item's [`processableQuantity`](https://shopify.dev/docs/api/admin-graphql/latest/objects/InventoryTransferLineItem#field-InventoryTransferLineItem.fields.processableQuantity).
+    Any quantity outside the processable portion (for example, already shipped or
+    picked for shipment) is preserved, so the resulting total quantity equals the
+    preserved portion plus the provided quantity.
+  
+  Passing a quantity of `0` is only allowed for transfers in `DRAFT` status; on
+  `READY_TO_SHIP` or `IN_PROGRESS` transfers it returns an `INVALID_QUANTITY` error.
+  On `DRAFT` transfers, `quantity: 0` leaves a zero-quantity line item on the
+  transfer; it does not remove the item. To remove a line item from a transfer, use
+  [`inventoryTransferRemoveItems`](https://shopify.dev/docs/api/admin-graphql/latest/mutations/inventoryTransferRemoveItems).
   
   > Caution:
   > As of 2026-01, this mutation supports an optional idempotency key using the `@idempotent` directive.
@@ -25066,7 +25103,7 @@ type Mutation {
     id: ID!,
     """
     The ID of the [location](https://shopify.dev/api/admin-graphql/latest/objects/location)
-    to check for inventory availability. A default location ID is chosen automatically if none is provided.
+    to check for inventory availability. Used for tax calculations. A default location ID is chosen automatically if none is provided.
     """
     locationId: ID,
     "The quantity of the item to add to the order. Must be a positive value."
@@ -25235,7 +25272,7 @@ type Mutation {
     "The input for the mutation."
     input: OrderOpenInput!
   ): OrderOpenPayload
-  "Create a risk assessment for an order."
+  "Creates a fraud risk assessment for a specific order, evaluating the likelihood that the order is fraudulent based on various risk signals. Use this to trigger risk analysis on orders that need manual review or to integrate custom risk scoring into order processing workflows."
   orderRiskAssessmentCreate(
     "The input fields required to create a risk assessment."
     orderRiskAssessmentInput: OrderRiskAssessmentCreateInput!
@@ -25307,24 +25344,24 @@ type Mutation {
     "The properties of the page to be updated."
     page: PageUpdateInput!
   ): PageUpdatePayload
-  "Activates and deactivates payment customizations."
+  "Activates or deactivates payment customizations for the shop. Payment customizations allow apps to hide, reorder, or rename payment methods at checkout based on cart contents, customer attributes, or other conditions. Use this to toggle customizations on or off without deleting them."
   paymentCustomizationActivation(
     "The enabled status of the payment customizations."
     enabled: Boolean!,
     "The global IDs of the payment customizations."
     ids: [ID!]!
   ): PaymentCustomizationActivationPayload
-  "Creates a payment customization."
+  "Creates a new payment customization for the shop. Payment customizations let apps modify the payment methods shown at checkout — hiding, reordering, or renaming options based on cart contents, customer attributes, or other business logic."
   paymentCustomizationCreate(
     "The input data used to create the payment customization."
     paymentCustomization: PaymentCustomizationInput!
   ): PaymentCustomizationCreatePayload
-  "Deletes a payment customization."
+  "Permanently deletes a payment customization. Once deleted, the customization will no longer affect which payment methods appear at checkout."
   paymentCustomizationDelete(
     "The global ID of the payment customization."
     id: ID!
   ): PaymentCustomizationDeletePayload
-  "Updates a payment customization."
+  "Updates an existing payment customization, modifying its configuration for how payment methods are displayed at checkout. Use this to change the customization's title or enabled state. The customization's function can't be changed once set; create a new payment customization to use a different function."
   paymentCustomizationUpdate(
     "The global ID of the payment customization."
     id: ID!,
@@ -26469,9 +26506,6 @@ type Mutation {
   - Creates a [reverse fulfillment order](https://shopify.dev/docs/apps/build/orders-fulfillment/returns-apps/manage-reverse-fulfillment-orders),
   and enables you to create a [reverse delivery](https://shopify.dev/docs/apps/build/orders-fulfillment/returns-apps/manage-reverse-deliveries)
   for the reverse fulfillment order
-  - Creates a sales agreement with a `RETURN` reason, which links to all sales created for the return or exchange
-  - Generates sales records that reverse the sales records for the items being returned
-  - Generates sales records for any exchange line items
   
   After you've created a return, use the
   [`return`](https://shopify.dev/docs/api/admin-graphql/latest/queries/return) query to retrieve the
@@ -36787,7 +36821,7 @@ type QueryRoot {
     | product_ids | string | Filter by a comma-separated list of product [IDs](https://shopify.dev/api/admin-graphql/latest/objects/Product#field-id). | | | - `product_ids:8474977763649,8474977796417` |
     | product_publication_status | string | Filter by channel approval process status of the resource on a channel, such as the online store. The value is a composite of the [channel `app` ID](https://shopify.dev/api/admin-graphql/latest/objects/Channel#field-Channel.fields.app) (`Channel.app.id`) and one of the valid values. For simple visibility checks, use [published_status](https://shopify.dev/api/admin-graphql/latest/queries/products#argument-query-filter-publishable_status) instead. | - `* {channel_app_id}-approved`<br/> - `* {channel_app_id}-rejected`<br/> - `* {channel_app_id}-needs_action`<br/> - `* {channel_app_id}-awaiting_review`<br/> - `* {channel_app_id}-published`<br/> - `* {channel_app_id}-demoted`<br/> - `* {channel_app_id}-scheduled`<br/> - `* {channel_app_id}-provisionally_published` | | - `product_publication_status:189769876-approved` |
     | product_status | string | Filter by a comma-separated list of product [statuses](https://shopify.dev/api/admin-graphql/latest/objects/Product#field-status). | | | - `product_status:ACTIVE,DRAFT` |
-    | product_type | string | Filter by the product type that's associated with the product variants. | | | - `product_type:snowboard` |
+    | product_type | string | Filter by the product type that's associated with the product variants. | | | - `product_type:snowboard`<br/> - `product_type:snowboard,skis`<br/> - `product_type:snowboard OR product_type:skis` |
     | publishable_status | string | **Deprecated:** This parameter is deprecated as of 2025-12 and will be removed in a future API version. Use [published_status](https://shopify.dev/api/admin-graphql/latest/queries/products#argument-query-filter-publishable_status) for visibility checks. Filter by the publishable status of the resource on a channel. The value is a composite of the [channel `app` ID](https://shopify.dev/api/admin-graphql/latest/objects/Channel#app-price) (`Channel.app.id`) and one of the valid status values. | - `* {channel_app_id}-unset`<br/> - `* {channel_app_id}-pending`<br/> - `* {channel_app_id}-approved`<br/> - `* {channel_app_id}-not_approved` | | - `publishable_status:580111-unset`<br/> - `publishable_status:580111-pending` |
     | published_status | string | Filter resources by their visibility and publication state on a channel. Online store channel filtering: - `online_store_channel`: Returns all resources in the online store channel, regardless of publication status. - `published`/`visible`: Returns resources that are published to the online store. - `unpublished`: Returns resources that are not published to the online store. Channel-specific filtering using a channel ID, channel handle, [channel `app` ID](https://shopify.dev/api/admin-graphql/latest/objects/Channel#app-price) (`Channel.app.id`), or app handle with suffixes: - `{id_or_handle}-published`: Returns resources published to the specified channel. - `{id_or_handle}-visible`: Same as `{id_or_handle}-published` (kept for backwards compatibility). - `{id_or_handle}-intended`: Returns resources added to the channel but not yet published. - `{id_or_handle}-hidden`: Returns resources not added to the channel or not published. Other: - `unavailable`: Returns resources not published to any channel. | - `online_store_channel`<br/> - `published`<br/> - `visible`<br/> - `unpublished`<br/> - `* {channel_id_or_handle}-published`<br/> - `* {channel_id_or_handle}-visible`<br/> - `* {channel_id_or_handle}-intended`<br/> - `* {channel_id_or_handle}-hidden`<br/> - `* {channel_app_id_or_handle}-published`<br/> - `* {channel_app_id_or_handle}-visible`<br/> - `* {channel_app_id_or_handle}-intended`<br/> - `* {channel_app_id_or_handle}-hidden`<br/> - `unavailable` | | - `published_status:online_store_channel`<br/> - `published_status:published`<br/> - `published_status:580111-published`<br/> - `published_status:580111-hidden`<br/> - `published_status:my-channel-handle-published`<br/> - `published_status:unavailable` |
     | requires_components | boolean | Filter by whether the product variant can only be purchased with components. [Learn more](https://shopify.dev/apps/build/product-merchandising/bundles#store-eligibility). | | | - `requires_components:true` |
@@ -37351,12 +37385,12 @@ type QueryRoot {
     "Return only published locales."
     published: Boolean = false
   ): [ShopLocale!]!
-  "Returns a Shop Pay payment request receipt."
+  "Returns a single Shop Pay payment request receipt by its ID. Payment request receipts document completed Shop Pay transactions, including the amount, customer details, and payment status. Use this to look up a specific Shop Pay transaction for order reconciliation or customer support."
   shopPayPaymentRequestReceipt(
     "Unique identifier of the payment request receipt."
     token: String!
   ): ShopPayPaymentRequestReceipt
-  "Returns a list of Shop Pay payment request receipts."
+  "Returns a paginated list of Shop Pay payment request receipts for the shop. Each receipt documents a completed Shop Pay transaction. Use this to review Shop Pay transaction history, generate reports, or audit Shop Pay payment activity."
   shopPayPaymentRequestReceipts(
     "The elements that come after the specified [cursor](https://shopify.dev/api/usage/pagination-graphql)."
     after: String,
@@ -40895,7 +40929,7 @@ type Shop implements HasMetafieldDefinitions & HasMetafields & HasPublishedTrans
     | product_ids | string | Filter by a comma-separated list of product [IDs](https://shopify.dev/api/admin-graphql/latest/objects/Product#field-id). | | | - `product_ids:8474977763649,8474977796417` |
     | product_publication_status | string | Filter by channel approval process status of the resource on a channel, such as the online store. The value is a composite of the [channel `app` ID](https://shopify.dev/api/admin-graphql/latest/objects/Channel#field-Channel.fields.app) (`Channel.app.id`) and one of the valid values. For simple visibility checks, use [published_status](https://shopify.dev/api/admin-graphql/latest/queries/products#argument-query-filter-publishable_status) instead. | - `* {channel_app_id}-approved`<br/> - `* {channel_app_id}-rejected`<br/> - `* {channel_app_id}-needs_action`<br/> - `* {channel_app_id}-awaiting_review`<br/> - `* {channel_app_id}-published`<br/> - `* {channel_app_id}-demoted`<br/> - `* {channel_app_id}-scheduled`<br/> - `* {channel_app_id}-provisionally_published` | | - `product_publication_status:189769876-approved` |
     | product_status | string | Filter by a comma-separated list of product [statuses](https://shopify.dev/api/admin-graphql/latest/objects/Product#field-status). | | | - `product_status:ACTIVE,DRAFT` |
-    | product_type | string | Filter by the product type that's associated with the product variants. | | | - `product_type:snowboard` |
+    | product_type | string | Filter by the product type that's associated with the product variants. | | | - `product_type:snowboard`<br/> - `product_type:snowboard,skis`<br/> - `product_type:snowboard OR product_type:skis` |
     | publishable_status | string | **Deprecated:** This parameter is deprecated as of 2025-12 and will be removed in a future API version. Use [published_status](https://shopify.dev/api/admin-graphql/latest/queries/products#argument-query-filter-publishable_status) for visibility checks. Filter by the publishable status of the resource on a channel. The value is a composite of the [channel `app` ID](https://shopify.dev/api/admin-graphql/latest/objects/Channel#app-price) (`Channel.app.id`) and one of the valid status values. | - `* {channel_app_id}-unset`<br/> - `* {channel_app_id}-pending`<br/> - `* {channel_app_id}-approved`<br/> - `* {channel_app_id}-not_approved` | | - `publishable_status:580111-unset`<br/> - `publishable_status:580111-pending` |
     | published_status | string | Filter resources by their visibility and publication state on a channel. Online store channel filtering: - `online_store_channel`: Returns all resources in the online store channel, regardless of publication status. - `published`/`visible`: Returns resources that are published to the online store. - `unpublished`: Returns resources that are not published to the online store. Channel-specific filtering using a channel ID, channel handle, [channel `app` ID](https://shopify.dev/api/admin-graphql/latest/objects/Channel#app-price) (`Channel.app.id`), or app handle with suffixes: - `{id_or_handle}-published`: Returns resources published to the specified channel. - `{id_or_handle}-visible`: Same as `{id_or_handle}-published` (kept for backwards compatibility). - `{id_or_handle}-intended`: Returns resources added to the channel but not yet published. - `{id_or_handle}-hidden`: Returns resources not added to the channel or not published. Other: - `unavailable`: Returns resources not published to any channel. | - `online_store_channel`<br/> - `published`<br/> - `visible`<br/> - `unpublished`<br/> - `* {channel_id_or_handle}-published`<br/> - `* {channel_id_or_handle}-visible`<br/> - `* {channel_id_or_handle}-intended`<br/> - `* {channel_id_or_handle}-hidden`<br/> - `* {channel_app_id_or_handle}-published`<br/> - `* {channel_app_id_or_handle}-visible`<br/> - `* {channel_app_id_or_handle}-intended`<br/> - `* {channel_app_id_or_handle}-hidden`<br/> - `unavailable` | | - `published_status:online_store_channel`<br/> - `published_status:published`<br/> - `published_status:580111-published`<br/> - `published_status:580111-hidden`<br/> - `published_status:my-channel-handle-published`<br/> - `published_status:unavailable` |
     | requires_components | boolean | Filter by whether the product variant can only be purchased with components. [Learn more](https://shopify.dev/apps/build/product-merchandising/bundles#store-eligibility). | | | - `requires_components:true` |
@@ -51175,15 +51209,15 @@ enum InventoryTransferMarkAsReadyToShipUserErrorCode {
 
 "Possible error codes that can be returned by `InventoryTransferRemoveItemsUserError`."
 enum InventoryTransferRemoveItemsUserErrorCode {
-  "The item cannot have its shippable quantity removed if all of its quantity is fully allocated in one or more shipments."
+  "The item cannot be removed because all of its quantity is fully allocated to one or more shipments (including draft shipments where the item has been picked). The error name refers to the underlying allocation check; it triggers regardless of whether the shipments have actually shipped."
   ALL_QUANTITY_SHIPPED
-  "A ready to ship transfer must have at least one item."
+  "A `READY_TO_SHIP` transfer must have at least one line item; you cannot remove every line item from one. To empty a `READY_TO_SHIP` transfer, cancel it instead."
   CANT_REMOVE_ALL_ITEMS_FROM_READY_TO_SHIP_TRANSFER
   "Current transfer status does not support this operation."
   INVALID_TRANSFER_STATUS
   "The item was not found."
   ITEM_NOT_FOUND
-  "The item cannot be removed because it exists in a draft shipment with zero quantity."
+  "The line item cannot be removed because it appears on a draft shipment with quantity `0`."
   ITEM_PRESENT_ON_DRAFT_SHIPMENT_WITH_ZERO_QUANTITY
   "The location selected can't be found."
   LOCATION_NOT_FOUND
@@ -61481,7 +61515,7 @@ input DiscountAutomaticAppInput {
   enable customers to purchase products
   on a recurring basis.
   """
-  appliesOnSubscription: Boolean = false
+  appliesOnSubscription: Boolean = true
   """
   The
   [discount classes](https://help.shopify.com/manual/discounts/combining-discounts/discount-combinations)
@@ -61731,7 +61765,7 @@ input DiscountCodeAppInput {
   "Whether the discount applies on regular one-time-purchase items."
   appliesOnOneTimePurchase: Boolean = true
   "Whether the discount applies to subscriptions items."
-  appliesOnSubscription: Boolean = false
+  appliesOnSubscription: Boolean = true
   "Whether a customer can only use the discount once."
   appliesOncePerCustomer: Boolean
   "The code that customers use to apply the discount."
@@ -62011,14 +62045,19 @@ input DiscountCombinesWithInput {
   """
   productDiscounts: Boolean = false
   """
-  The product discount tags that determine which product discounts can apply together on
-  the same cart line. By default, only one product discount applies per cart line. When
-  each of two product discounts lists a tag in this field that matches a tag on the other
-  discount, both discounts can apply to the same cart line. For example, if Discount A
-  lists "SEASONAL" in this field and Discount B is tagged "SEASONAL", and Discount B
-  lists "LOYALTY" in this field and Discount A is tagged "LOYALTY", both discounts can
-  apply to the same cart line. To use this field, `productDiscounts` must also be set to
-  true. This field is available only on a Shopify Plus plan.
+  Controls which product discounts can apply together on the same cart line. By
+  default, only one product discount applies per line. Available only on a Shopify
+  Plus plan and requires the `productDiscounts` field to be set to `true`.
+  
+  For discounts to apply together, they must match tags in both directions. Each
+  discount has two tag sets: the tags it's tagged with, and the tags it agrees to
+  apply with (this field). Two discounts apply together only if each one allows at
+  least one tag that the other is tagged with. Any number of product discounts can
+  apply to the same line if this two-way match holds for every pair in the group.
+  
+  Example: Discount A is tagged with "LOYALTY" and allows "SEASONAL," and Discount B
+  is tagged with "SEASONAL" and allows "LOYALTY." They apply together. To add a
+  third discount, it must meet the same mutual-match rule with both A and B.
   """
   productDiscountsWithTagsOnSameCartLine: ProductDiscountsWithTagsOnSameCartLineInput
   """
@@ -63493,7 +63532,11 @@ input InventoryTransferLineItemInput {
 input InventoryTransferRemoveItemsInput {
   "The ID of the inventory transfer where the items will be removed."
   id: ID!
-  "The IDs of the transfer line items to be removed from the transfer."
+  """
+  The IDs of the [`InventoryTransferLineItem`s](https://shopify.dev/docs/api/admin-graphql/latest/objects/InventoryTransferLineItem)
+  to be removed from the transfer. Passing an empty array is a no-op and returns
+  the transfer unchanged.
+  """
   transferLineItemIds: [ID!]
 }
 
@@ -63501,7 +63544,7 @@ input InventoryTransferRemoveItemsInput {
 input InventoryTransferSetItemsInput {
   "The ID of the inventory transfer where the items will be set."
   id: ID!
-  "The line items to be set on the Transfer."
+  "The line items to set on the Transfer. Only the items included in this list are affected; items already on the transfer that aren't referenced here will stay unchanged. Each inventory item may appear at most once in this list; duplicate `inventoryItemId` entries are rejected."
   lineItems: [InventoryTransferLineItemInput!]!
 }
 
@@ -65182,7 +65225,7 @@ input OrderCreateOrderInput {
   poNumber: String
   "The presentment currency that was used to display prices to the customer. This must be specified if any presentment currencies are used in the order."
   presentmentCurrency: CurrencyCode
-  "The date and time ([ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format) when an order was processed. This value is the date that appears on your orders and that's used in the analytic reports. If you're importing orders from an app or another platform, then you can set processed_at to a date and time in the past to match when the original order was created."
+  "The date and time ([ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) format) when an order was processed. This value is the date that appears on your orders and that's used in the analytic reports. If you're importing orders from an app or another platform, then you can set processed_at to a date and time in the past to match when the original order was created. As of API version 2026-07, values in the future are clamped to the current time. In earlier versions, future values return a `PROCESSED_AT_INVALID` error."
   processedAt: DateTime
   "The website where the customer clicked a link to the shop."
   referringSite: URL
@@ -65821,16 +65864,19 @@ input ProductDeleteInput {
 }
 
 """
-The product discount tags that determine which product discounts can apply
-together on the same cart line. By default, only one product discount
-applies per cart line. When each of two product discounts lists a tag in
-this field that matches a tag on the other discount, both discounts can
-apply to the same cart line. For example, if Discount A lists "SEASONAL"
-in this field and Discount B is tagged "SEASONAL", and Discount B lists
-"LOYALTY" in this field and Discount A is tagged "LOYALTY", both discounts
-can apply to the same cart line. To use this field, `productDiscounts`
-must also be set to true. This field is available only on a Shopify Plus
-plan.
+Controls which product discounts can apply together on the same cart line. By
+default, only one product discount applies per line. Available only on a Shopify
+Plus plan.
+
+For discounts to apply together, they must match tags in both directions. Each
+discount has two tag sets: the tags it is tagged with, and the tags it agrees to
+apply with (this field). Two discounts apply together only if each one allows at
+least one tag that the other is tagged with. Any number of product discounts can
+apply to the same line if this two-way match holds for every pair in the group.
+
+Example: Discount A is tagged with "LOYALTY" and allows "SEASONAL," and Discount B
+is tagged with "SEASONAL" and allows "LOYALTY." They apply together. To add a
+third discount, it must meet the same mutual-match rule with both A and B.
 """
 input ProductDiscountsWithTagsOnSameCartLineInput {
   """

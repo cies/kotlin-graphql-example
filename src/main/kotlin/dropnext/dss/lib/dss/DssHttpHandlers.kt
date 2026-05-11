@@ -1,11 +1,11 @@
 package dropnext.dss.lib.dss
 
 import dropnext.dss.config.ShopifyConfig
-import com.example.lib.dss.dto.ErrorResponse
-import com.example.lib.dss.dto.SyncShipmentsWithFulfillmentsPayload
-import com.example.lib.dss.dto.SyncShipmentsWithFulfillmentsResponse
-import com.example.lib.dss.dto.TrackingUpdatePayload
-import com.example.lib.dss.dto.TrackingUpdateResponse
+import dropnext.dss.lib.dss.dto.ErrorResponse
+import dropnext.dss.lib.dss.dto.SyncShipmentsWithFulfillmentsRequest
+import dropnext.dss.lib.dss.dto.SyncShipmentsWithFulfillmentsResponse
+import dropnext.dss.lib.dss.dto.TrackingUpdateRequest
+import dropnext.dss.lib.dss.dto.TrackingUpdateResponse
 import dropnext.dss.shopify.adminGraphqlJsonUrl
 import dropnext.dss.shopify.normalizeShopDomain
 import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
@@ -16,6 +16,7 @@ import io.ktor.server.application.log
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import java.net.URI
+import java.util.concurrent.ConcurrentHashMap
 
 class DssHttpHandlers(
   private val shopifyConfig: ShopifyConfig,
@@ -23,12 +24,19 @@ class DssHttpHandlers(
   private val httpClient: HttpClient,
   private val fulfillmentService: DssFulfillmentService,
 ) {
+  private val gqlClientCache = ConcurrentHashMap<String, GraphQLKtorClient>()
+
+  private fun graphQLClientForShop(shop: String): GraphQLKtorClient =
+    gqlClientCache.getOrPut("$shop/${shopifyConfig.apiVersion}") {
+      GraphQLKtorClient(URI(adminGraphqlJsonUrl(shop, shopifyConfig.apiVersion)).toURL(), httpClient)
+    }
+
   suspend fun handleSyncShipments(
     call: ApplicationCall,
     logLabel: String,
   ) {
     if (!call.requireDssInternalSecret(dssConfig.dssInternalSecret)) return
-    val body = call.receive<SyncShipmentsWithFulfillmentsPayload>()
+    val body = call.receive<SyncShipmentsWithFulfillmentsRequest>()
     val shop =
       normalizeShopDomain(body.shopifySubdomain)
         ?: return call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = "invalid shopify_subdomain"))
@@ -49,22 +57,15 @@ class DssHttpHandlers(
           )
         is ShopifyAdminToken.Resolved -> t.token
       }
-    val gqlUrl = URI(adminGraphqlJsonUrl(shop, shopifyConfig.apiVersion)).toURL()
-    val graphQLClient = GraphQLKtorClient(gqlUrl, httpClient)
-    val result =
-      try {
-        fulfillmentService.syncShipmentsWithFulfillments(graphQLClient, token, body)
-      } catch (e: Throwable) {
-        call.application.log.warn("$logLabel threw", e)
-        return call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = clientErrorMessage(e)))
+    val graphQLClient = graphQLClientForShop(shop)
+    when (val result = fulfillmentService.syncShipmentsWithFulfillments(graphQLClient, token, body)) {
+      is FulfillmentResult.Ok -> call.respond(result.value)
+      is FulfillmentResult.Err -> {
+        val msg = result.toMessage()
+        call.application.log.warn("$logLabel failed: $msg")
+        call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = msg))
       }
-    result.fold(
-      onSuccess = { call.respond(it) },
-      onFailure = { e ->
-        call.application.log.warn("$logLabel failed", e)
-        call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = clientErrorMessage(e)))
-      },
-    )
+    }
   }
 
   suspend fun handleTrackingUpdate(
@@ -72,7 +73,7 @@ class DssHttpHandlers(
     logLabel: String,
   ) {
     if (!call.requireDssInternalSecret(dssConfig.dssInternalSecret)) return
-    val body = call.receive<TrackingUpdatePayload>()
+    val body = call.receive<TrackingUpdateRequest>()
     val shop =
       normalizeShopDomain(body.shopifySubdomain)
         ?: return call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = "invalid shopify_subdomain"))
@@ -93,21 +94,14 @@ class DssHttpHandlers(
           )
         is ShopifyAdminToken.Resolved -> t.token
       }
-    val gqlUrl = URI(adminGraphqlJsonUrl(shop, shopifyConfig.apiVersion)).toURL()
-    val graphQLClient = GraphQLKtorClient(gqlUrl, httpClient)
-    val result =
-      try {
-        fulfillmentService.createTrackingEvent(graphQLClient, token, body)
-      } catch (e: Throwable) {
-        call.application.log.warn("$logLabel threw", e)
-        return call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = clientErrorMessage(e)))
+    val graphQLClient = graphQLClientForShop(shop)
+    when (val result = fulfillmentService.createTrackingEvent(graphQLClient, token, body)) {
+      is FulfillmentResult.Ok -> call.respond(result.value)
+      is FulfillmentResult.Err -> {
+        val msg = result.toMessage()
+        call.application.log.warn("$logLabel failed: $msg")
+        call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = msg))
       }
-    result.fold(
-      onSuccess = { call.respond(it) },
-      onFailure = { e ->
-        call.application.log.warn("$logLabel failed", e)
-        call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = clientErrorMessage(e)))
-      },
-    )
+    }
   }
 }

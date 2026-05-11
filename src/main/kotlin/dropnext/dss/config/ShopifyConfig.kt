@@ -14,8 +14,8 @@ data class ShopifyConfig(
 
   companion object {
     fun fromEnv(): ShopifyConfig? {
-      val key = env("SHOPIFY_API_KEY")
-      val secret = env("SHOPIFY_API_SECRET")
+      val key = env("SHOPIFY_APP_CLIENT_ID") ?: env("SHOPIFY_API_KEY")
+      val secret = env("SHOPIFY_APP_CLIENT_SECRET") ?: env("SHOPIFY_API_SECRET")
       val scopes = env("SHOPIFY_SCOPES")
       val base = env("PUBLIC_BASE_URL")
       if (key == null || secret == null || scopes == null || base == null) return null

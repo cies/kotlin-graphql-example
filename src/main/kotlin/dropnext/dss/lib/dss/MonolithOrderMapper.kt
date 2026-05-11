@@ -1,8 +1,8 @@
 package dropnext.dss.lib.dss
 
-import com.example.lib.dss.dto.CreateShopifyOrderRequest
-import com.example.lib.dss.dto.OrderLineItem
-import com.example.lib.dss.dto.ShippingAddress
+import dropnext.dss.lib.dss.dto.CreateShopifyOrderRequest
+import dropnext.dss.lib.dss.dto.OrderLineItem
+import dropnext.dss.lib.dss.dto.ShippingAddress
 import com.example.graphql.generated.enums.OrderDisplayFinancialStatus
 import com.example.graphql.generated.enums.OrderDisplayFulfillmentStatus
 import com.example.graphql.generated.getorderfordss.MailingAddress
@@ -27,7 +27,7 @@ fun orderToCreateShopifyOrderRequest(
       val lineId = legacyIdFromGid(li.id.toString()) ?: return@mapNotNull null
       val minor = priceToMinorUnits(li.originalUnitPriceSet.shopMoney.amount.toString())
       OrderLineItem(
-        orderLineItemId = lineId,
+        shopifyLineItemId = lineId,
         productVariantId = variantLegacy,
         quantity = li.quantity,
         fulfillmentOrderId = foId,
@@ -39,6 +39,7 @@ fun orderToCreateShopifyOrderRequest(
   val totalMinor =
     order.totalPriceSet?.shopMoney?.amount?.toString()?.let { priceToMinorUnits(it) }
       ?: lineItems.sumOf { it.snapshotOfPriceInMinorUnits * it.quantity.toLong() }.coerceAtLeast(0L)
+  val currency = order.totalPriceSet?.shopMoney?.currencyCode?.name ?: "USD"
   return CreateShopifyOrderRequest(
     shopifySubdomain = shopifySubdomain,
     shopifyOrderId = orderLegacy,
@@ -49,6 +50,7 @@ fun orderToCreateShopifyOrderRequest(
     shippingAddress = shipping,
     lineItems = lineItems,
     totalInMinorUnits = totalMinor,
+    currency = currency,
   )
 }
 

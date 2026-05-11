@@ -15,8 +15,9 @@ data class DssAppConfig(
   /**
    * Normalized `shop.myshopify.com` → Admin API access token. No server-side database; callers pass
    * `X-Shopify-Access-Token` or configure this map via env (see [shopAccessTokensFromEnv]).
+   * Declared as [MutableMap] so [TokenFileStore] can hot-add tokens after OAuth without a restart.
    */
-  val shopAccessTokens: Map<String, String>,
+  val shopAccessTokens: MutableMap<String, String>,
   val enableDemoRoutes: Boolean,
   /** When true, serve the HTML test harness at `GET /dev/test-harness` (see `ENABLE_TEST_HARNESS`). */
   val enableTestHarness: Boolean,
@@ -62,7 +63,7 @@ data class DssAppConfig(
         monolithApiKey = key,
         monolithCreateOrderPath = path,
         dssInternalSecret = secret,
-        shopAccessTokens = shopAccessTokensFromEnv(enableTestHarness = testHarness),
+        shopAccessTokens = shopAccessTokensFromEnv(enableTestHarness = testHarness).toMutableMap(),
         enableDemoRoutes = demos,
         enableTestHarness = testHarness,
         sandboxFakeShopify = fakeShopify,
