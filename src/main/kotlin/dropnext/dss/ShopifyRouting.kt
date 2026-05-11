@@ -68,7 +68,6 @@ fun Application.configureRouting(
   httpMonolithClient: MonolithService?,
   dssHandlers: DssHttpHandlers,
   gqlClientCache: GraphQLClientCache,
-  tokenFileStore: TokenFileStore,
 ) {
   val config: ShopifyConfig = dssConfig.shopify
   val runtimeConfigIssues = runtimeConfigIssues(dssConfig)
@@ -243,11 +242,8 @@ fun Application.configureRouting(
         shopNode?.id?.let { legacyIdFromGid(it.toString()) } ?: 0L
       val domain =
         shopNode?.myshopifyDomain?.let { normalizeShopDomain(it) } ?: shop
-      val tokenForEnv = "$domain|${oauthResponse.accessToken}"
-
-      tokenFileStore.saveToken(domain, oauthResponse.accessToken)
       dssConfig.shopAccessTokens[domain] = oauthResponse.accessToken
-      log.info("OAuth token saved for shop=$domain (token file + in-memory map updated)")
+      log.info("OAuth token cached in memory for shop=$domain")
 
       httpMonolithClient?.let { monolith ->
         val apiKeyReq = UpdateStoreApiKeyRequest(
@@ -279,14 +275,8 @@ fun Application.configureRouting(
         <body>
         <h1>App installed</h1>
         <p>Shop: $shop (id $shopId)</p>
-        <p style="color:green"><strong>Token auto-saved</strong> to the token file and loaded into memory &mdash;
-        webhooks and demo routes are active immediately without a restart.</p>
-        <p>The token pair below has been written to the token file (<code>TOKEN_FILE_PATH</code>) and will be
-        reloaded automatically on the next server startup. You may also add it manually to
-        <code>DSS_SHOP_ACCESS_TOKENS</code> if you prefer env-only configuration.</p>
-        <p><strong>Keep this token secret — do not share this page or bookmark it.</strong></p>
-        <p>Token entry (also in token file):</p>
-        <pre style="background:#f4f4f5;padding:0.75rem;overflow:auto">$tokenForEnv</pre>
+        <p style="color:green"><strong>Token saved to monolith</strong> and cached in memory &mdash;
+        webhooks and all routes are active immediately.</p>
         <p>SyncProductsPage (first 3) product edges: $edgeCount</p>
         <p>Webhook callback URL: <code>${htmlEscape(callbackUrl)}</code></p>
         <p>Active <code>products/*</code> and <code>orders/*</code> webhook subscriptions:</p>
@@ -552,9 +542,8 @@ fun Application.configureRouting(
         normalizeShopDomain(body.shopifySubdomain)
           ?: return@put call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = "invalid shopify_subdomain"))
 
-      tokenFileStore.saveToken(shop, body.apiKey)
       dssConfig.shopAccessTokens[shop] = body.apiKey
-      log.info("PUT /stores/api-key: token saved for shop=$shop")
+      log.info("PUT /stores/api-key: token cached in memory for shop=$shop")
 
       httpMonolithClient?.let { monolith ->
         val apiKeyReq =

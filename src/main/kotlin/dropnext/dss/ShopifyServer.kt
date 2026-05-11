@@ -22,15 +22,6 @@ fun main() {
       )
   val config = dssConfig.shopify
 
-  val tokenFilePath =
-    System.getenv("TOKEN_FILE_PATH")?.trim()?.takeIf { it.isNotBlank() } ?: "./shop-tokens.txt"
-  val tokenFileStore = TokenFileStore(tokenFilePath)
-  val fileTokens = tokenFileStore.loadTokens()
-  if (fileTokens.isNotEmpty()) {
-    fileTokens.forEach { (shop, token) -> dssConfig.shopAccessTokens[shop] = token }
-    println("[token-store] Loaded ${fileTokens.size} token(s) from $tokenFilePath")
-  }
-
   if (dssConfig.enableTestHarness) {
     println(
       "[test-harness] /demo/* routes are enabled (same as ENABLE_DEMO_ROUTES=true for this process)",
@@ -79,7 +70,6 @@ fun main() {
       httpMonolithClient = httpMonolithClient,
       dssHandlers = dssHandlers,
       gqlClientCache = gqlClientCache,
-      tokenFileStore = tokenFileStore,
     )
   }.start(wait = true)
 }

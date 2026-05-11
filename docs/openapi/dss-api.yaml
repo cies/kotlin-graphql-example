@@ -113,10 +113,8 @@ paths:
         Use this when you already have a token (e.g. from a previous OAuth flow or a manual setup)
         and want to register it with the running service.
 
-        - Saves the token to the token file (`TOKEN_FILE_PATH`) and the in-memory map immediately —
-          no restart needed.
-        - If the monolith is configured (`MONOLITH_BASE_URL`) and `shopify_shop_id` is provided,
-          the token is also forwarded to the monolith via `PUT /stores/api-key`.
+        - Saves the token to the monolith via `PUT /stores/api-key` (requires `MONOLITH_BASE_URL`).
+        - Caches the token in the in-memory map immediately — no restart needed.
         - Requires `X-DSS-Internal-Secret` header if `DSS_INTERNAL_SECRET` is set.
       parameters:
         - $ref: "#/components/parameters/DssInternalSecret"
