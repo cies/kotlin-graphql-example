@@ -1,9 +1,0 @@
-query GetWebhookSubscriptions($topics: [WebhookSubscriptionTopic!], $uri: String) {
-  webhookSubscriptions(first: 100, topics: $topics, uri: $uri) {
-    nodes {
-      id
-      topic
-      uri
-    }
-  }
-}

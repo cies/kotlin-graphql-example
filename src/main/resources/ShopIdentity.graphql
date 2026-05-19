@@ -1,6 +1,0 @@
-query ShopIdentity {
-  shop {
-    id
-    myshopifyDomain
-  }
-}
