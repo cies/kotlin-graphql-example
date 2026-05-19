@@ -7,7 +7,10 @@ import dropnext.dss.lib.dss.dto.UpsertProductVariantsRequest
 
 /** Outbound calls to the main backend (monolith). */
 interface MonolithService {
-  /** POST /orders — called on Shopify orders/create webhook. */
+  /**
+   * POST /orders — only from Shopify order webhooks. Body is exactly [CreateShopifyOrderRequest]
+   * (those top-level JSON keys — no extras). Expects idempotent handling (e.g. 409 duplicate order).
+   */
   suspend fun postCreateOrder(request: CreateShopifyOrderRequest): CreateOrderResult
 
   /** PUT /stores/api-key — persist the Shopify access token after OAuth install. */
@@ -26,6 +29,12 @@ interface MonolithService {
   suspend fun deleteProductVariants(request: DeleteProductVariantsRequest): DeleteVariantsResult
 }
 
+sealed interface MonolithCallError {
+  val status: Int
+  val errorMessage: String
+  val parsed: MonolithErrorBody?
+}
+
 // --- POST /orders ---
 
 sealed interface CreateOrderResult {
@@ -35,16 +44,24 @@ sealed interface CreateOrderResult {
   ) : CreateOrderResult
 
   data class Error(
-    val status: Int,
-    val errorMessage: String,
-  ) : CreateOrderResult
+    override val status: Int,
+    override val errorMessage: String,
+    override val parsed: MonolithErrorBody? = null,
+  ) : CreateOrderResult,
+    MonolithCallError
 }
 
 // --- PUT /stores/api-key ---
 
 sealed interface StoreApiKeyResult {
   data class Ok(val storeId: Long) : StoreApiKeyResult
-  data class Error(val status: Int, val errorMessage: String) : StoreApiKeyResult
+
+  data class Error(
+    override val status: Int,
+    override val errorMessage: String,
+    override val parsed: MonolithErrorBody? = null,
+  ) : StoreApiKeyResult,
+    MonolithCallError
 }
 
 // --- GET /stores ---
@@ -52,14 +69,24 @@ sealed interface StoreApiKeyResult {
 sealed interface GetStoreResult {
   data class Ok(val storeId: Long, val shopifyShopId: Long, val apiKey: String?) : GetStoreResult
   data class NotFound(val shopifySubdomain: String) : GetStoreResult
-  data class Error(val status: Int, val errorMessage: String) : GetStoreResult
+  data class Error(
+    override val status: Int,
+    override val errorMessage: String,
+    override val parsed: MonolithErrorBody? = null,
+  ) : GetStoreResult,
+    MonolithCallError
 }
 
 // --- POST /product-variants ---
 
 sealed interface UpsertVariantsResult {
   data class Ok(val upserted: Int) : UpsertVariantsResult
-  data class Error(val status: Int, val errorMessage: String) : UpsertVariantsResult
+  data class Error(
+    override val status: Int,
+    override val errorMessage: String,
+    override val parsed: MonolithErrorBody? = null,
+  ) : UpsertVariantsResult,
+    MonolithCallError
 }
 
 // --- GET /product-variants ---
@@ -67,12 +94,22 @@ sealed interface UpsertVariantsResult {
 sealed interface GetVariantIdsResult {
   data class Ok(val productVariantIds: List<Long>) : GetVariantIdsResult
   data class NotFound(val shopifySubdomain: String) : GetVariantIdsResult
-  data class Error(val status: Int, val errorMessage: String) : GetVariantIdsResult
+  data class Error(
+    override val status: Int,
+    override val errorMessage: String,
+    override val parsed: MonolithErrorBody? = null,
+  ) : GetVariantIdsResult,
+    MonolithCallError
 }
 
 // --- DELETE /product-variants ---
 
 sealed interface DeleteVariantsResult {
   data class Ok(val deleted: Int) : DeleteVariantsResult
-  data class Error(val status: Int, val errorMessage: String) : DeleteVariantsResult
+  data class Error(
+    override val status: Int,
+    override val errorMessage: String,
+    override val parsed: MonolithErrorBody? = null,
+  ) : DeleteVariantsResult,
+    MonolithCallError
 }

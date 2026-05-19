@@ -1,3 +1,6 @@
+import java.io.File
+import org.gradle.api.GradleException
+import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import com.expediagroup.graphql.plugin.gradle.config.GraphQLSerializer
 import com.expediagroup.graphql.plugin.gradle.graphql
 
@@ -36,7 +39,6 @@ dependencies {
   implementation(libs.ktorServerContentNegotiation)
   testImplementation(kotlin("test"))
   testImplementation("org.junit.jupiter:junit-jupiter:5.11.0")
-  testImplementation(libs.konsist)
   testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
@@ -75,13 +77,30 @@ tasks.graphqlIntrospectSchema {
   outputFile = file("src/main/graphql-schema/schema.graphql")
 }
 
+@OptIn(ExperimentalKotlinGradlePluginApi::class)
 powerAssert {
-  functions = listOf("kotlin.assert", "kotlin.test.assertTrue", "kotlin.test.assertEquals", "kotlin.test.assertNull")
+  functions = listOf("kotlin.assert", "kotlin.test.assertTrue", "kotlin.test.assertNull")
 }
+
+private val openApiSpecFile: File =
+  sequenceOf(
+    layout.projectDirectory.file("src/main/resources/openapi.json").asFile,
+    layout.projectDirectory.file("openapi.json").asFile,
+  ).firstOrNull { it.isFile && it.canRead() && it.length() > 0L }
+    ?: throw GradleException(
+      """
+      OpenAPI spec not found. Expected one of (non-empty):
+        ${layout.projectDirectory.asFile.absolutePath}${File.separator}src${File.separator}main${File.separator}resources${File.separator}openapi.json
+        ${layout.projectDirectory.asFile.absolutePath}${File.separator}openapi.json
+      Docker: COPY openapi.json alongside Gradle configs and/or COPY src before running Gradle.
+      """.trimIndent(),
+    )
 
 openApiGenerate {
   generatorName.set("kotlin")
-  inputSpec.set("$rootDir/docs/openapi/dss-api.yaml")
+  // file: URI — required on Windows when validateSpec is enabled (absolute paths break $ref resolution).
+  inputSpec.set(openApiSpecFile.toURI().toString())
+  skipValidateSpec.set(false)
   outputDir.set("${layout.buildDirectory.get()}/generated/openapi")
   modelPackage.set("dropnext.dss.lib.dss.dto")
   generateApiTests.set(false)

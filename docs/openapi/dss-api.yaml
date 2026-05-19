@@ -9,10 +9,13 @@ info:
     header **`X-Shopify-Access-Token`** (Admin API token for that shop) or configure env **`DSS_SHOP_ACCESS_TOKENS`**
     (`shop.myshopify.com|shpat_…` pairs, comma-separated). Optional **`DSS_INTERNAL_SECRET`** still gates these routes.
 
-    **Normal URLs:** `/sync-shipments-with-fulfillments` and `/tracking-updates` (or `/tracking-update`).
+    **Canonical machine-readable specification:** **`openapi.json`** at the repository root (`x-webhooks` map tells the monolith
+    where to POST). Gradle **`openApiGenerate`** uses that JSON to generate Kotlin DTOs (`build.gradle.kts`).
 
-    **`/dummy1` and `/dummy2`:** Workaround for some OpenAPI tooling (http4k#1516). `/dummy1` = tracking,
-    `/dummy2` = shipment sync.
+    **Inbound paths vs payloads (openapi `x-webhooks` naming):**
+    - **`POST /sync-shipments-with-fulfillments`** — body **`TrackingUpdateRequest`** — push tracking status → Shopify FulfillmentEvent.
+    - **`POST /tracking-update`** — body **`SyncShipmentsWithFulfillmentsRequest`** — sync shipments ↔ Shopify fulfillments.
+    - **`POST /tracking-updates`** — same body **`TrackingUpdateRequest`** as `/sync-shipments-with-fulfillments` (compatibility alias).
 
 servers:
   - url: /
@@ -25,29 +28,30 @@ paths:
   /sync-shipments-with-fulfillments:
     post:
       tags: [fulfillments]
-      summary: Tell Shopify about new shipments (and cancel old fulfillments if needed)
+      summary: Tracking status → Shopify (FulfillmentEvent)
+      description: Matches **`openapi.json`** webhook `tracking-update` target URL. Body **`TrackingUpdateRequest`**.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/SyncShipmentsWithFulfillmentsRequest"
+              $ref: "#/components/schemas/TrackingUpdateRequest"
       responses:
         "200":
-          description: Shipments were synced and new fulfillment IDs were returned.
+          description: FulfillmentEvent created in Shopify.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SyncShipmentsWithFulfillmentsResponse"
+                $ref: "#/components/schemas/TrackingUpdateResponse"
         "400":
-          description: Shopify said no, or we couldn't match variants / fulfillment orders - check the error text
+          description: Shopify rejected the event or we couldn't build it - see error message
         "401":
-          description: Wrong or missing `X-DSS-Internal-Secret`, missing Admin token header / env map, or invalid token
+          description: Wrong or missing secret header (if configured)
 
   /tracking-updates:
     post:
       tags: [fulfillments]
-      summary: Post a tracking update (like "in transit" or "delivered")
+      summary: Compatibility alias — same payload as **`POST /sync-shipments-with-fulfillments`**
       requestBody:
         required: true
         content:
@@ -69,41 +73,25 @@ paths:
   /tracking-update:
     post:
       tags: [fulfillments]
-      summary: Same as `/tracking-updates` (shorter name some specs use)
+      summary: Sync DropNext shipments ↔ Shopify fulfillments (body SyncShipmentsWithFulfillmentsRequest)
+      description: Matches **`openapi.json`** webhook **`sync-shipments-with-fulfillments`** target URL.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/TrackingUpdateRequest"
+              $ref: "#/components/schemas/SyncShipmentsWithFulfillmentsRequest"
       responses:
         "200":
-          description: Tracking update was accepted and a fulfillment event was created.
+          description: Shipments were synced and new fulfillment IDs were returned.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/TrackingUpdateResponse"
-
-  /dummy1:
-    post:
-      tags: [fulfillments]
-      summary: Workaround route - same as "post tracking update"
-      description: |
-        **Same as `/tracking-updates`.** Only exists because some code generators mishandle certain OpenAPI layouts.
-        Use `/tracking-updates` in new code; use this only if your client was generated with `dummy1` in the spec.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TrackingUpdateRequest"
-      responses:
-        "200":
-          description: Tracking update was accepted and a fulfillment event was created.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/TrackingUpdateResponse"
+                $ref: "#/components/schemas/SyncShipmentsWithFulfillmentsResponse"
+        "400":
+          description: Shopify said no, or we couldn't match variants / fulfillment orders - check the error text
+        "401":
+          description: Wrong or missing `X-DSS-Internal-Secret`, missing Admin token header / env map, or invalid token
 
   /stores/api-key:
     put:
@@ -136,27 +124,7 @@ paths:
         "401":
           description: Wrong or missing `X-DSS-Internal-Secret`.
 
-  /dummy2:
-    post:
-      tags: [fulfillments]
-      summary: Workaround route - same as "sync shipments with fulfillments"
-      description: |
-        **Same as `/sync-shipments-with-fulfillments`.** See `/dummy1` - tooling workaround only.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SyncShipmentsWithFulfillmentsRequest"
-      responses:
-        "200":
-          description: Shipments were synced and new fulfillment IDs were returned.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SyncShipmentsWithFulfillmentsResponse"
-
-components:
+  components:
   schemas:
     # --- Shared ---
     ErrorResponse:

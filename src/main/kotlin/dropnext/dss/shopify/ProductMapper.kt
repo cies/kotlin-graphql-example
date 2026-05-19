@@ -3,6 +3,8 @@ package dropnext.dss.shopify
 import dropnext.dss.lib.dss.dto.ProductStatus
 import dropnext.dss.lib.dss.dto.ProductVariantItem
 import dropnext.dss.lib.dss.dto.SelectedOption
+import com.example.graphql.generated.getproductbyid.Media
+import com.example.graphql.generated.getproductbyid.MediaImage
 import com.example.graphql.generated.getproductbyid.Product
 import kotlin.math.roundToLong
 
@@ -15,7 +17,7 @@ import kotlin.math.roundToLong
  */
 fun Product.toProductVariantItems(currencyCode: String): List<ProductVariantItem> {
   val productLegacyId = legacyResourceId.toString().toLongOrNull() ?: return emptyList()
-  val productImageUrls = images.edges.map { it.node.url.toString() }
+  val productImageUrls = catalogImageUrls()
   val mappedStatus = status.toProductStatus()
   return variants.edges.mapNotNull { variantEdge ->
     val v = variantEdge.node
@@ -42,10 +44,22 @@ fun Product.toProductVariantItems(currencyCode: String): List<ProductVariantItem
       priceInMinorUnits = priceMinor,
       priceCurrency = currencyCode,
       selectedOptions = v.selectedOptions.map { opt -> SelectedOption(name = opt.name, value = opt.value) },
-      imageUrl = v.image?.url?.toString(),
+      imageUrl = v.variantImageUrlOrNull(),
     )
   }
 }
+
+private fun Product.catalogImageUrls(): List<String> =
+  media.edges.mapNotNull { edge -> edge.node.imageUrlOrNull() }
+
+private fun com.example.graphql.generated.getproductbyid.ProductVariant.variantImageUrlOrNull(): String? =
+  media.edges.firstOrNull()?.node?.imageUrlOrNull()
+
+private fun Media.imageUrlOrNull(): String? =
+  when (this) {
+    is MediaImage -> image?.url?.toString()
+    else -> null
+  }
 
 private fun com.example.graphql.generated.enums.ProductStatus.toProductStatus(): ProductStatus =
   when (this) {

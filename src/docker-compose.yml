@@ -1,0 +1,112 @@
+# Full stack: Postgres + Redis + Next.js (`app`) + BullMQ workers (`workers`).
+#
+# Host: Postgres 5434, Redis 6381, app http://localhost:3005 (→ container :3000)
+# In-network DB/Redis for containers: `postgres:5432`, `redis:6379` (see `.env.docker.example`).
+#
+# Auth: `AUTH_SECRET`, `AUTH_URL`, etc. must reach the **app** container. Compose only substitutes
+# `${VAR}` in this file from (1) your shell, (2) a project `.env`, or (3) `docker compose --env-file`.
+# Service `env_file` does NOT substitute `${VAR}` here - so use `npm run docker:up` (preloads
+# `.env.docker`), export vars before `docker compose`, or put the same keys in project `.env`.
+# Dokploy: inject those keys into the compose process env or merge equivalent entries here.
+#
+# Platform `/admin`: set `PLATFORM_ADMIN_EMAILS` in the compose process env or PaaS UI and pass it
+# into **`app.environment`** below (comma-separated operator emails).
+#
+# Local: cp .env.docker.example .env.docker  →  npm run docker:up
+#
+# Optional seed after app starts:
+#   docker compose exec app npx tsx prisma/seed.ts
+#
+# Convenience: `npm run docker:up` / `npm run docker:down`
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: crm_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: crm
+      POSTGRES_PASSWORD: crm_secret
+      POSTGRES_DB: crm_db
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crm -d crm_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: crm_redis
+    restart: unless-stopped
+    ports:
+      - "6381:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: crm_app
+    restart: unless-stopped
+    ports:
+      - "3005:3000"
+    environment:
+      NODE_ENV: production
+      APP_ROLE: web
+      DATABASE_URL: ${DATABASE_URL:-postgresql://crm:crm_secret@postgres:5432/crm_db}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      AUTH_SECRET: ${AUTH_SECRET}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      AUTH_URL: ${AUTH_URL}
+      NEXTAUTH_URL: ${NEXTAUTH_URL}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+      APP_URL: ${APP_URL:-}
+      PLATFORM_ADMIN_EMAILS: ${PLATFORM_ADMIN_EMAILS:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+
+  workers:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: crm_workers
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      APP_ROLE: workers
+      DATABASE_URL: ${DATABASE_URL:-postgresql://crm:crm_secret@postgres:5432/crm_db}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      AUTH_SECRET: ${AUTH_SECRET}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      AUTH_URL: ${AUTH_URL}
+      NEXTAUTH_URL: ${NEXTAUTH_URL}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+      APP_URL: ${APP_URL:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:

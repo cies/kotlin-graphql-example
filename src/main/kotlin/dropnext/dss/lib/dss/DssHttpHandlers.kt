@@ -50,7 +50,10 @@ class DssHttpHandlers(
     }
     val token =
       call.request.headers["X-Shopify-Access-Token"]?.trim()?.takeIf { it.isNotEmpty() }
-        ?: when (val t = shopifyAdminTokenWithMonolithFallback(shop, dssConfig, monolithService)) {
+        ?: when (
+          val t =
+            shopifyAdminTokenWithMonolithFallback(shop, dssConfig, monolithService, call.application.log)
+        ) {
           ShopifyAdminToken.Missing ->
             return call.respond(
               HttpStatusCode.Unauthorized,
@@ -88,7 +91,10 @@ class DssHttpHandlers(
     }
     val token =
       call.request.headers["X-Shopify-Access-Token"]?.trim()?.takeIf { it.isNotEmpty() }
-        ?: when (val t = shopifyAdminTokenWithMonolithFallback(shop, dssConfig, monolithService)) {
+        ?: when (
+          val t =
+            shopifyAdminTokenWithMonolithFallback(shop, dssConfig, monolithService, call.application.log)
+        ) {
           ShopifyAdminToken.Missing ->
             return call.respond(
               HttpStatusCode.Unauthorized,

@@ -2,6 +2,8 @@ package dropnext.dss.lib.dss
 
 import dropnext.dss.lib.monolith.GetStoreResult
 import dropnext.dss.lib.monolith.MonolithService
+import dropnext.dss.lib.monolith.logMonolithFailure
+import org.slf4j.Logger
 import dropnext.dss.shopify.normalizeShopDomain
 import dropnext.dss.shopify.shopifySubdomainShort
 import io.ktor.server.application.ApplicationCall
@@ -51,6 +53,7 @@ suspend fun shopifyAdminTokenWithMonolithFallback(
   shopMyshopifyHost: String,
   dssConfig: DssAppConfig,
   monolith: MonolithService?,
+  log: Logger? = null,
 ): ShopifyAdminToken {
   val fast = shopifyAdminTokenForNormalizedShop(shopMyshopifyHost, dssConfig)
   if (fast is ShopifyAdminToken.Resolved) return fast
@@ -63,7 +66,12 @@ suspend fun shopifyAdminTokenWithMonolithFallback(
       ShopifyAdminToken.Resolved(token)
     }
     is GetStoreResult.NotFound -> ShopifyAdminToken.Missing
-    is GetStoreResult.Error -> ShopifyAdminToken.Missing
+    is GetStoreResult.Error -> {
+      log?.let {
+        logMonolithFailure(it, "getStore", result.status, result.parsed, "subdomain=$subdomain")
+      }
+      ShopifyAdminToken.Missing
+    }
   }
 }
 

@@ -14,12 +14,12 @@ import dropnext.dss.lib.dss.dto.UpdateStoreApiKeyRequest
 import dropnext.dss.lib.dss.installDssRoutes
 import dropnext.dss.lib.dss.requireDssInternalSecret
 import dropnext.dss.lib.dss.legacyIdFromGid
-import dropnext.dss.lib.dss.orderToCreateShopifyOrderRequest
-import dropnext.dss.lib.monolith.CreateOrderResult
+import dropnext.dss.lib.dss.syncShopifyOrderToMonolith
 import dropnext.dss.lib.monolith.DeleteVariantsResult
 import dropnext.dss.lib.monolith.MonolithService
 import dropnext.dss.lib.monolith.StoreApiKeyResult
 import dropnext.dss.lib.monolith.UpsertVariantsResult
+import dropnext.dss.lib.monolith.logMonolithFailure
 import dropnext.dss.shopify.FulfillmentCreateDemoBody
 import dropnext.dss.shopify.FulfillmentTrackingUpdateDemoBody
 import dropnext.dss.shopify.ShopifySignatures
@@ -31,6 +31,7 @@ import dropnext.dss.shopify.graphqlResourceIdFromShopifyWebhook
 import dropnext.dss.shopify.isValidSignedOAuthState
 import dropnext.dss.shopify.normalizeShopDomain
 import dropnext.dss.shopify.registerStandardWebhooks
+import dropnext.dss.shopify.shopMyshopifyHostFromWebhook
 import dropnext.dss.shopify.shopifySubdomainShort
 import dropnext.dss.shopify.signedOAuthState
 import dropnext.dss.shopify.toProductVariantItems
@@ -39,11 +40,11 @@ import dropnext.dss.config.ShopifyConfig
 import com.example.graphql.generated.FulfillmentCreateWithTracking
 import com.example.graphql.generated.FulfillmentTrackingInfoUpdateMutation
 import com.example.graphql.generated.GetOrderById
-import com.example.graphql.generated.GetOrderForDss
 import com.example.graphql.generated.GetProductById
 import com.example.graphql.generated.ShopIdentity
 import com.example.graphql.generated.SyncProductsPage
 import com.example.graphql.generated.inputs.FulfillmentTrackingInput
+import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
 import io.ktor.client.HttpClient
 import io.ktor.client.request.header
 import io.ktor.http.ContentType
@@ -94,12 +95,10 @@ fun Application.configureRouting(
           POST /webhooks/shopify        Shopify webhook receiver (products/*, orders/*)
 
         --- DSS Internal API (X-DSS-Internal-Secret header required if configured) ---
-          PUT  /stores/api-key                     Set Shopify Admin API token for a store (no OAuth needed)
-          POST /sync-shipments-with-fulfillments   Sync shipments with Shopify fulfillments
-          POST /tracking-updates                   Create a fulfillment tracking update
-          POST /tracking-update                    Same as /tracking-updates (alternate name)
-          POST /dummy1                             Alias for /tracking-updates (OpenAPI workaround)
-          POST /dummy2                             Alias for /sync-shipments-with-fulfillments (OpenAPI workaround)
+          PUT  /stores/api-key                     Set Shopify Admin token (see repo openapi.json)
+          POST /tracking-update                     Monolith webhook: SyncShipmentsWithFulfillmentsRequest → sync Shopify fulfillments
+          POST /sync-shipments-with-fulfillments   Monolith webhook: TrackingUpdateRequest → Shopify FulfillmentEvent
+          POST /tracking-updates                   Same TrackingUpdate body as .../sync-shipments-with-fulfillments (compat)
 
         --- Demo routes$demoNote ---
           GET  /demo/products?shop=               List products via Shopify GraphQL
@@ -245,17 +244,40 @@ fun Application.configureRouting(
       dssConfig.shopAccessTokens[domain] = oauthResponse.accessToken
       log.info("OAuth token cached in memory for shop=$domain")
 
-      httpMonolithClient?.let { monolith ->
-        val apiKeyReq = UpdateStoreApiKeyRequest(
-          shopifySubdomain = shopifySubdomainShort(domain),
-          shopifyShopId = shopId,
-          apiKey = oauthResponse.accessToken,
-        )
-        when (val r = monolith.putStoreApiKey(apiKeyReq)) {
-          is StoreApiKeyResult.Ok -> log.info("Monolith store api-key updated storeId=${r.storeId} shop=$domain")
-          is StoreApiKeyResult.Error -> log.warn("Monolith store api-key update failed: status=${r.status} ${r.errorMessage}")
+      val monolithPersistHtml =
+        when (val monolith = httpMonolithClient) {
+          null ->
+            """<p style="color:#b45309"><strong>Monolith not configured:</strong> <code>MONOLITH_BASE_URL</code>
+            is unset, so we did not <code>PUT …/stores/api-key</code>. The Shopify Admin token is cached in this
+            server&rsquo;s memory only.</p><p>Set <code>MONOLITH_BASE_URL</code> (and normally <code>MONOLITH_API_KEY</code>
+            for Bearer auth to the monolith) in prod and dev if installs should persist the token DropNext-wide.</p>"""
+              .trimIndent()
+              .replace("\n", " ")
+          else -> {
+            val apiKeyReq =
+              UpdateStoreApiKeyRequest(
+                shopifySubdomain = shopifySubdomainShort(domain),
+                shopifyShopId = shopId,
+                apiKey = oauthResponse.accessToken,
+              )
+            when (val r = monolith.putStoreApiKey(apiKeyReq)) {
+              is StoreApiKeyResult.Ok -> {
+                log.info("Monolith store api-key updated storeId=${r.storeId} shop=$domain")
+                "<p style=\"color:green\"><strong>Shopify token saved via monolith</strong> (<code>PUT …/stores/api-key</code>, " +
+                  "store_id=${r.storeId}) and cached in memory &mdash; webhooks and routes can use this process immediately.</p>"
+              }
+              is StoreApiKeyResult.Error -> {
+                logMonolithFailure(log, "putStoreApiKey", r.status, r.parsed, "shop=$domain")
+                val detailEsc = htmlEscape((r.parsed?.message ?: "update failed").take(400))
+                """<p style="color:#b91c1c"><strong>Monolith <code>PUT …/stores/api-key</code> failed</strong>
+                (HTTP status ${r.status}). Token is cached in this server&rsquo;s memory only. Details:
+                <code>$detailEsc</code></p>"""
+                  .trimIndent()
+                  .replace("\n", " ")
+              }
+            }
+          }
         }
-      }
 
       val syncResult =
         graphQLClient.execute(SyncProductsPage(SyncProductsPage.Variables(first = 3))) {
@@ -275,8 +297,7 @@ fun Application.configureRouting(
         <body>
         <h1>App installed</h1>
         <p>Shop: $shop (id $shopId)</p>
-        <p style="color:green"><strong>Token saved to monolith</strong> and cached in memory &mdash;
-        webhooks and all routes are active immediately.</p>
+        $monolithPersistHtml
         <p>SyncProductsPage (first 3) product edges: $edgeCount</p>
         <p>Webhook callback URL: <code>${htmlEscape(callbackUrl)}</code></p>
         <p>Active <code>products/*</code> and <code>orders/*</code> webhook subscriptions:</p>
@@ -296,18 +317,24 @@ fun Application.configureRouting(
       get("/demo/products") {
         val rawShop =
           call.request.queryParameters["shop"]
-            ?: return@get
-              call.respondText(
+            ?: run {
+              call.application.log.warn("[demo] GET /demo/products — missing shop query parameter")
+              return@get call.respondText(
                 "Pass ?shop=your-store.myshopify.com",
                 status = HttpStatusCode.BadRequest,
               )
+            }
 
         val shop =
           normalizeShopDomain(rawShop)
-            ?: return@get call.respondText("Invalid shop", status = HttpStatusCode.BadRequest)
+            ?: run {
+              call.application.log.warn("[demo] GET /demo/products — invalid shop rawShop=$rawShop")
+              return@get call.respondText("Invalid shop", status = HttpStatusCode.BadRequest)
+            }
         val token =
           when (val t = shopifyAdminTokenWithMonolithFallback(shop, dssConfig, httpMonolithClient)) {
             ShopifyAdminToken.Missing -> {
+              call.application.log.warn("[demo] GET /demo/products — no_admin_token shop=$shop")
               call.respondText(
                 "No Admin token for this shop. Set DSS_SHOP_ACCESS_TOKENS or SANDBOX_ACCESS_TOKEN (+ SANDBOX_SHOP), or complete OAuth and configure env from the success page.",
                 status = HttpStatusCode.Unauthorized,
@@ -334,6 +361,12 @@ fun Application.configureRouting(
             graphQLClient.execute(SyncProductsPage(SyncProductsPage.Variables(first = first, after = after))) {
               header("X-Shopify-Access-Token", token)
             }
+          val gqlErrors = result.errors
+          if (!gqlErrors.isNullOrEmpty()) {
+            call.application.log.warn("[demo] GET /demo/products — graphql_errors shop=$shop errors=$gqlErrors")
+            call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = gqlErrors.joinToString { it.message ?: "?" }.take(1_200)))
+            return@get
+          }
           val conn = result.data?.products
           val lines =
             conn?.edges.orEmpty().map { edge ->
@@ -353,24 +386,35 @@ fun Application.configureRouting(
             },
           )
         } catch (e: Throwable) {
-          call.application.log.warn("GET /demo/products failed", e)
-          call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = clientErrorMessage(e)))
+          val msg = clientErrorMessage(e)
+          call.application.log.error("[demo] GET /demo/products failed shop=$shop: $msg", e)
+          call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = msg))
         }
       }
 
       get("/demo/order") {
         val rawShop =
           call.request.queryParameters["shop"]
-            ?: return@get call.respondText("Pass ?shop=", status = HttpStatusCode.BadRequest)
+            ?: run {
+              call.application.log.warn("[demo] GET /demo/order — missing shop query parameter")
+              return@get call.respondText("Pass ?shop=", status = HttpStatusCode.BadRequest)
+            }
         val idParam =
           call.request.queryParameters["id"]
-            ?: return@get call.respondText("Pass ?id=gid://shopify/Order/... or numeric id", status = HttpStatusCode.BadRequest)
+            ?: run {
+              call.application.log.warn("[demo] GET /demo/order shop=$rawShop — missing id query parameter")
+              return@get call.respondText("Pass ?id=gid://shopify/Order/... or numeric id", status = HttpStatusCode.BadRequest)
+            }
         val shop =
           normalizeShopDomain(rawShop)
-            ?: return@get call.respondText("Invalid shop", status = HttpStatusCode.BadRequest)
+            ?: run {
+              call.application.log.warn("[demo] GET /demo/order — invalid_shop rawShop=$rawShop")
+              return@get call.respondText("Invalid shop", status = HttpStatusCode.BadRequest)
+            }
         val token =
           when (val t = shopifyAdminTokenWithMonolithFallback(shop, dssConfig, httpMonolithClient)) {
             ShopifyAdminToken.Missing -> {
+              call.application.log.warn("[demo] GET /demo/order — no_admin_token shop=$shop")
               call.respondText(
                 "No Admin token for this shop. Configure DSS_SHOP_ACCESS_TOKENS or SANDBOX_ACCESS_TOKEN.",
                 status = HttpStatusCode.Unauthorized,
@@ -392,7 +436,12 @@ fun Application.configureRouting(
           if (idParam.startsWith("gid://")) {
             idParam
           } else {
-            val n = idParam.toLongOrNull() ?: return@get call.respondText("Invalid id", status = HttpStatusCode.BadRequest)
+            val n =
+              idParam.toLongOrNull()
+                ?: run {
+                  call.application.log.warn("[demo] GET /demo/order — invalid_id shop=$shop id=$idParam")
+                  return@get call.respondText("Invalid id", status = HttpStatusCode.BadRequest)
+                }
             "gid://shopify/Order/$n"
           }
         try {
@@ -403,6 +452,7 @@ fun Application.configureRouting(
             }
           val o = result.data?.order
           if (o == null) {
+            call.application.log.warn("[demo] GET /demo/order — order_null shop=$shop orderGid=$orderGid errors=${result.errors}")
             call.respondText("Order not found or error: ${result.errors}", status = HttpStatusCode.NotFound)
             return@get
           }
@@ -416,8 +466,9 @@ fun Application.configureRouting(
               "Line items: ${o.lineItems.edges.size}",
           )
         } catch (e: Throwable) {
-          call.application.log.warn("GET /demo/order failed", e)
-          call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = clientErrorMessage(e)))
+          val msg = clientErrorMessage(e)
+          call.application.log.error("[demo] GET /demo/order failed shop=$shop: $msg", e)
+          call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = msg))
         }
       }
 
@@ -425,10 +476,14 @@ fun Application.configureRouting(
         val body = call.receive<FulfillmentCreateDemoBody>()
         val shop =
           normalizeShopDomain(body.shop)
-            ?: return@post call.respondText("Invalid shop", status = HttpStatusCode.BadRequest)
+            ?: run {
+              call.application.log.warn("[demo] POST /demo/fulfillment/create — invalid_shop body.shop=${body.shop}")
+              return@post call.respondText("Invalid shop", status = HttpStatusCode.BadRequest)
+            }
         val token =
           when (val t = shopifyAdminTokenWithMonolithFallback(shop, dssConfig, httpMonolithClient)) {
             ShopifyAdminToken.Missing -> {
+              call.application.log.warn("[demo] POST /demo/fulfillment/create — no_admin_token shop=$shop")
               call.respondText(
                 "No Admin token for this shop",
                 status = HttpStatusCode.Unauthorized,
@@ -468,13 +523,17 @@ fun Application.configureRouting(
           val err =
             r.data?.fulfillmentCreate?.userErrors.orEmpty().joinToString { "${it.field}:${it.message}" }
           if (err.isNotEmpty() || !r.errors.isNullOrEmpty()) {
+            call.application.log.warn(
+              "[demo] POST /demo/fulfillment/create — user_or_graphql_errors shop=$shop userErrors=$err graphql=${r.errors}",
+            )
             call.respondText("Errors: $err graphql=${r.errors}", status = HttpStatusCode.BadRequest)
           } else {
             call.respondText("Fulfillment created id=${r.data?.fulfillmentCreate?.fulfillment?.id}")
           }
         } catch (e: Throwable) {
-          call.application.log.warn("POST /demo/fulfillment/create failed", e)
-          call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = clientErrorMessage(e)))
+          val msg = clientErrorMessage(e)
+          call.application.log.error("[demo] POST /demo/fulfillment/create failed shop=$shop: $msg", e)
+          call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = msg))
         }
       }
 
@@ -482,10 +541,14 @@ fun Application.configureRouting(
         val body = call.receive<FulfillmentTrackingUpdateDemoBody>()
         val shop =
           normalizeShopDomain(body.shop)
-            ?: return@post call.respondText("Invalid shop", status = HttpStatusCode.BadRequest)
+            ?: run {
+              call.application.log.warn("[demo] POST /demo/fulfillment/tracking — invalid_shop body.shop=${body.shop}")
+              return@post call.respondText("Invalid shop", status = HttpStatusCode.BadRequest)
+            }
         val token =
           when (val t = shopifyAdminTokenWithMonolithFallback(shop, dssConfig, httpMonolithClient)) {
             ShopifyAdminToken.Missing -> {
+              call.application.log.warn("[demo] POST /demo/fulfillment/tracking — no_admin_token shop=$shop")
               call.respondText("No Admin token for this shop", status = HttpStatusCode.Unauthorized)
               return@post
             }
@@ -524,13 +587,17 @@ fun Application.configureRouting(
               "${it.field}:${it.message}"
             }
           if (err.isNotEmpty() || !r.errors.isNullOrEmpty()) {
+            call.application.log.warn(
+              "[demo] POST /demo/fulfillment/tracking — user_or_graphql_errors shop=$shop userErrors=$err graphql=${r.errors}",
+            )
             call.respondText("Errors: $err graphql=${r.errors}", status = HttpStatusCode.BadRequest)
           } else {
             call.respondText("Tracking updated id=${r.data?.fulfillmentTrackingInfoUpdate?.fulfillment?.id}")
           }
         } catch (e: Throwable) {
-          call.application.log.warn("POST /demo/fulfillment/tracking failed", e)
-          call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = clientErrorMessage(e)))
+          val msg = clientErrorMessage(e)
+          call.application.log.error("[demo] POST /demo/fulfillment/tracking failed shop=$shop: $msg", e)
+          call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = msg))
         }
       }
     }
@@ -554,7 +621,8 @@ fun Application.configureRouting(
           )
         when (val r = monolith.putStoreApiKey(apiKeyReq)) {
           is StoreApiKeyResult.Ok -> log.info("Monolith store api-key updated storeId=${r.storeId} shop=$shop")
-          is StoreApiKeyResult.Error -> log.warn("Monolith store api-key update failed: status=${r.status} ${r.errorMessage}")
+          is StoreApiKeyResult.Error ->
+            logMonolithFailure(log, "putStoreApiKey", r.status, r.parsed, "shop=$shop")
         }
       }
 
@@ -564,7 +632,7 @@ fun Application.configureRouting(
     post("/webhooks/shopify") {
       val hmacHeader = call.request.headers["X-Shopify-Hmac-Sha256"]
       val topic = call.request.headers["X-Shopify-Topic"] ?: "unknown"
-      val shopDomain = call.request.headers["X-Shopify-Shop-Domain"] ?: "unknown"
+      val shopDomainHeader = call.request.headers["X-Shopify-Shop-Domain"]
       val body = call.receive<ByteArray>()
       if (!ShopifySignatures.verifyWebhook(hmacHeader, config.apiSecret, body)) {
         call.respond(HttpStatusCode.Unauthorized)
@@ -572,12 +640,20 @@ fun Application.configureRouting(
       }
       val bodyStr = body.decodeToString()
       call.application.log.info(
-        "Webhook verified topic=$topic shopDomain=$shopDomain bodyBytes=${body.size}",
+        "Webhook verified topic=$topic shopDomainHeader=$shopDomainHeader bodyBytes=${body.size}",
       )
-      val shopNorm = normalizeShopDomain(shopDomain)
+      val shopNorm = shopMyshopifyHostFromWebhook(shopDomainHeader)
       val token =
         if (shopNorm != null) {
-          when (val t = shopifyAdminTokenWithMonolithFallback(shopNorm, dssConfig, httpMonolithClient)) {
+          when (
+            val t =
+              shopifyAdminTokenWithMonolithFallback(
+                shopNorm,
+                dssConfig,
+                httpMonolithClient,
+                call.application.log,
+              )
+          ) {
             ShopifyAdminToken.Missing -> null
             is ShopifyAdminToken.Resolved -> t.token
           }
@@ -586,7 +662,7 @@ fun Application.configureRouting(
         }
       if (shopNorm == null || token == null) {
         call.application.log.warn(
-          "Webhook: no Admin token for shopDomain=$shopDomain (configure DSS_SHOP_ACCESS_TOKENS or OAuth env entry)",
+          "Webhook: no Admin token for shopDomainHeader=$shopDomainHeader (configure DSS_SHOP_ACCESS_TOKENS or OAuth env entry)",
         )
         call.respond(HttpStatusCode.OK)
         return@post
@@ -643,53 +719,42 @@ fun Application.configureRouting(
                 is DeleteVariantsResult.Ok ->
                   call.application.log.info("Monolith delete variants ok: ${result.deleted} deleted shop=$shopNorm")
                 is DeleteVariantsResult.Error ->
-                  call.application.log.warn("Monolith delete variants failed: status=${result.status} ${result.errorMessage}")
+                  logMonolithFailure(
+                    call.application.log,
+                    "deleteProductVariants",
+                    result.status,
+                    result.parsed,
+                    "shop=$shopNorm",
+                  )
               }
             }
           }
         }
         "orders/create" -> {
-          val id = graphqlResourceIdFromShopifyWebhook(topic, bodyStr)
-          if (id != null && httpMonolithClient != null) {
-            val r =
-              graphQLClient.execute(GetOrderForDss(GetOrderForDss.Variables(id))) {
-                header("X-Shopify-Access-Token", token)
-              }
-            val order = r.data?.order
-            if (order != null) {
-              val req = orderToCreateShopifyOrderRequest(shopifySubdomainShort(shopNorm), order)
-              when (val result = httpMonolithClient.postCreateOrder(req)) {
-                is CreateOrderResult.HttpResponseSummary ->
-                  call.application.log.info("Monolith create order ok: httpStatus=${result.status}")
-                is CreateOrderResult.Error ->
-                  call.application.log.warn("Monolith create order failed: status=${result.status} ${result.errorMessage}")
-              }
-            } else {
-              call.application.log.warn("Webhook orders/create: order null errors=${r.errors}")
-            }
-          } else if (id != null) {
-            val r =
-              graphQLClient.execute(GetOrderById(GetOrderById.Variables(id))) {
-                header("X-Shopify-Access-Token", token)
-              }
-            val name = r.data?.order?.name
-            call.application.log.info("Webhook order loaded id=$id name=$name errors=${r.errors}")
-          } else {
-            call.application.log.warn("Webhook order: could not parse GraphQL id from body")
-          }
+          handleOrderWebhook(
+            call.application.log,
+            dssConfig,
+            graphQLClient,
+            token,
+            shopNorm,
+            httpMonolithClient,
+            bodyStr,
+            topic,
+            syncToMonolith = true,
+          )
         }
         "orders/updated" -> {
-          val id = graphqlResourceIdFromShopifyWebhook(topic, bodyStr)
-          if (id != null) {
-            val r =
-              graphQLClient.execute(GetOrderById(GetOrderById.Variables(id))) {
-                header("X-Shopify-Access-Token", token)
-              }
-            val name = r.data?.order?.name
-            call.application.log.info("Webhook order loaded id=$id name=$name errors=${r.errors}")
-          } else {
-            call.application.log.warn("Webhook order: could not parse GraphQL id from body")
-          }
+          handleOrderWebhook(
+            call.application.log,
+            dssConfig,
+            graphQLClient,
+            token,
+            shopNorm,
+            httpMonolithClient,
+            bodyStr,
+            topic,
+            syncToMonolith = dssConfig.syncOrderOnUpdated,
+          )
         }
         else -> call.application.log.info("Webhook topic not handled: $topic")
       }
@@ -697,6 +762,37 @@ fun Application.configureRouting(
     }
   }
   installDssRoutes(dssHandlers)
+}
+
+private suspend fun handleOrderWebhook(
+  log: org.slf4j.Logger,
+  dssConfig: DssAppConfig,
+  graphQLClient: GraphQLKtorClient,
+  token: String,
+  shopNorm: String,
+  httpMonolithClient: MonolithService?,
+  bodyStr: String,
+  topic: String,
+  syncToMonolith: Boolean,
+) {
+  val id = graphqlResourceIdFromShopifyWebhook(topic, bodyStr)
+  if (id == null) {
+    log.warn("Webhook order: could not parse GraphQL id from body")
+    return
+  }
+  if (syncToMonolith && httpMonolithClient != null) {
+    syncShopifyOrderToMonolith(log, graphQLClient, token, shopNorm, httpMonolithClient, id, topic)
+    return
+  }
+  if (!syncToMonolith && httpMonolithClient != null) {
+    log.info("Webhook $topic: monolith order sync skipped (set DSS_SYNC_ORDER_ON_UPDATED=true to enable)")
+  }
+  val r =
+    graphQLClient.execute(GetOrderById(GetOrderById.Variables(id))) {
+      header("X-Shopify-Access-Token", token)
+    }
+  val name = r.data?.order?.name
+  log.info("Webhook order loaded id=$id name=$name errors=${r.errors}")
 }
 
 private fun runtimeConfigIssues(dssConfig: DssAppConfig): List<String> {

@@ -4,9 +4,14 @@ WORKDIR /app
 COPY gradle gradle
 COPY gradlew gradlew
 COPY gradlew.bat gradlew.bat
-COPY build.gradle.kts settings.gradle.kts gradle.properties ./
+COPY build.gradle.kts settings.gradle.kts gradle.properties openapi.json ./
 COPY docs docs
 COPY src src
+
+# Fail fast before Gradle download/bootstrap (runtime evidence-friendly).
+RUN test -s /app/openapi.json \
+  && test -f /app/src/main/kotlin/dropnext/dss/lib/dss/DssAppConfig.kt \
+  || { echo >&2 '[dss-docker] openapi.json missing or Kotlin sources truncated (restore src/main/kotlin and commit).'; exit 1; }
 
 RUN chmod +x gradlew && ./gradlew --no-daemon installDist -x test
 RUN set -eux; \

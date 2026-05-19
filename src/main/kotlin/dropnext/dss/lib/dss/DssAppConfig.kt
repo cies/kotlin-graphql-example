@@ -1,12 +1,18 @@
 package dropnext.dss.lib.dss
 
+import dropnext.dss.config.EnvVars
 import dropnext.dss.config.ShopifyConfig
 import java.util.concurrent.ConcurrentHashMap
 
 data class DssAppConfig(
   val shopify: ShopifyConfig,
-  /** Base URL for monolith (e.g. `https://monolith.internal`). If null, order webhook does not POST. */
+  /** HTTPS base URL for monolith outbound calls; DSS appends `/orders`, `/stores`, etc. May include API path segments, e.g. `https://host/api/shopify-service/v1` with no trailing slash. */
   val monolithBaseUrl: String?,
+  /**
+   * Optional path inserted after [monolithBaseUrl]: `{base}/{prefix}/stores/api-key`.
+   * Set via `MONOLITH_API_PREFIX` (e.g. `api/v1`); omit slashes at both ends or they are trimmed.
+   */
+  val monolithApiPrefix: String?,
   /** Sent as `Authorization: Bearer …` when non-blank. */
   val monolithApiKey: String?,
   /** Path appended to monolith base for create order (default `/orders`). */
@@ -30,20 +36,24 @@ data class DssAppConfig(
   val sandboxFakeShopify: Boolean,
   /** When false (default), `MONOLITH_BASE_URL` must be `https://` (except unset). */
   val allowInsecureMonolithUrl: Boolean,
+  /** When true, POST /orders on `orders/updated` as well as `orders/create` (default false). */
+  val syncOrderOnUpdated: Boolean,
 ) {
   companion object {
     fun fromEnv(): DssAppConfig? {
       val shopify = ShopifyConfig.fromEnv() ?: return null
-      val base = System.getenv("MONOLITH_BASE_URL")?.trim()?.takeIf { it.isNotEmpty() }
-      val key = System.getenv("MONOLITH_API_KEY")?.trim()?.takeIf { it.isNotEmpty() }
-      val rawPath =
-        System.getenv("MONOLITH_CREATE_ORDER_PATH")?.trim()?.takeIf { it.isNotEmpty() } ?: "/orders"
+      val base = EnvVars.optionalNormalized("MONOLITH_BASE_URL")
+      val key = EnvVars.optionalNormalized("MONOLITH_API_KEY")
+      val prefixRaw = EnvVars.optionalNormalized("MONOLITH_API_PREFIX")
+      val prefix =
+        prefixRaw?.trim()?.trim { it == '/' }?.takeIf { it.isNotEmpty() }
+      val rawPath = EnvVars.optionalNormalized("MONOLITH_CREATE_ORDER_PATH") ?: "/orders"
       val path =
         when {
           rawPath.startsWith('/') -> rawPath
           else -> "/$rawPath"
         }
-      val secret = System.getenv("DSS_INTERNAL_SECRET")?.trim()?.takeIf { it.isNotEmpty() }
+      val secret = EnvVars.optionalNormalized("DSS_INTERNAL_SECRET")
       val testHarness =
         System.getenv("ENABLE_TEST_HARNESS")?.trim()?.equals("true", ignoreCase = true) == true
       val demosExplicit =
@@ -54,6 +64,8 @@ data class DssAppConfig(
       val fakeShopify =
         testHarness &&
           System.getenv("DSS_SANDBOX_FAKE_SHOPIFY")?.trim()?.equals("true", ignoreCase = true) == true
+      val syncOnUpdated =
+        System.getenv("DSS_SYNC_ORDER_ON_UPDATED")?.trim()?.equals("true", ignoreCase = true) == true
       if (base != null && base.startsWith("http:", ignoreCase = true) && !allowInsecure) {
         error(
           "MONOLITH_BASE_URL must use https. For local http only, set DSS_ALLOW_INSECURE_MONOLITH=true",
@@ -62,6 +74,7 @@ data class DssAppConfig(
       return DssAppConfig(
         shopify = shopify,
         monolithBaseUrl = base,
+        monolithApiPrefix = prefix,
         monolithApiKey = key,
         monolithCreateOrderPath = path,
         dssInternalSecret = secret,
@@ -70,6 +83,7 @@ data class DssAppConfig(
         enableTestHarness = testHarness,
         sandboxFakeShopify = fakeShopify,
         allowInsecureMonolithUrl = allowInsecure,
+        syncOrderOnUpdated = syncOnUpdated,
       )
     }
   }

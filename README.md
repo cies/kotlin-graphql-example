@@ -29,6 +29,22 @@ so the Gradle GraphQL plugin is configured to put it in `src/main/graphql-schema
 Using `src/main/graphql.config.yml` we configure the IDE plugin to look for the schema there.
 
 
+## OpenAPI / monolith DTOs
+
+Monolith request/response bodies are **generated** from [`openapi.json`](openapi.json) (OpenAPI **3.0.0**, spec validation enabled in Gradle). Inbound DSS webhook contracts live under **`x-webhooks`** in the spec (3.0 has no root `webhooks` key):
+
+```powershell
+.\gradlew.bat openApiGenerate
+```
+
+| Setting | Value |
+| ------- | ----- |
+| Generator | `kotlin` + `jvm-ktor` |
+| Output | `build/generated/openapi/.../dropnext/dss/lib/dss/dto/` |
+| Policy | **Models only** (`apis=false`) — HTTP stays in hand-written `HttpMonolithService` |
+
+Do not add hand-written copies of `CreateShopifyOrderRequest` or other spec DTOs. If codegen fails, fix the schema in `openapi.json`, then re-run `openApiGenerate` (or any compile task).
+
 ## Building locally
 
 This project uses Gradle and you can build locally using
@@ -107,7 +123,7 @@ Architecture notes:
 
 * The app is intentionally **stateless**. It does not keep in-memory stores for OAuth/token/order state.
 * Routing stays lightweight; request handling lives in dedicated handlers/services.
-* Tests prefer **fakes** over mocks/stubs for integration confidence at HTTP boundaries.
+* Tests prefer **fakes** over mocks/stubs; see [docs/TESTING.md](docs/TESTING.md).
 * Production code avoids `lateinit`, and favors immutable `val` modeling.
 
 ### API version
@@ -146,11 +162,13 @@ For local development, expose the server with **HTTPS** (e.g. [ngrok](https://ng
 | `SHOPIFY_API_VERSION` | no | Default `2026-04` (keep in sync with `build.gradle.kts` / `graphql.config.yml`) |
 | `PORT` | no | Default `8080` |
 | `DSS_SHOP_ACCESS_TOKENS` | no | Comma-separated `shop.myshopify.com\|shpat_…` pairs for stateless token lookup (see `ShopAccessTokensEnv.kt`) |
-| `MONOLITH_BASE_URL` | no | If set, `orders/create` webhook POSTs `CreateShopifyOrderRequest` JSON to `{BASE}{MONOLITH_CREATE_ORDER_PATH}` |
-| `MONOLITH_API_KEY` | no | Optional Bearer token for monolith requests |
-| `MONOLITH_CREATE_ORDER_PATH` | no | Default `/orders` |
+| `MONOLITH_BASE_URL` | no | **REST root URL** DSS appends segments to (`/orders`, `/stores`, `/stores/api-key`, `/product-variants`). May include a path prefix, e.g. `https://staging.dropnext.com/api/shopify-service/v1` (no trailing slash). Leave `MONOLITH_API_PREFIX` empty when the full prefix is already in this value. |
+| `MONOLITH_API_PREFIX` | no | Inserted **after** base: `{BASE}/{PREFIX}/stores/api-key`. Example env `MONOLITH_API_PREFIX=api/v1`. Omit slashes at edges; empty (default) uses paths directly under base. |
+| `MONOLITH_API_KEY` | no | Optional Bearer token for monolith requests (`Authorization`). |
+| `MONOLITH_CREATE_ORDER_PATH` | no | Default `/orders` (relative URL segment after `{BASE}` and prefix) |
 | `DSS_INTERNAL_SECRET` | no | If set, DSS REST routes require `X-DSS-Internal-Secret` |
 | `DSS_ALLOW_INSECURE_MONOLITH` | no | Set `true` only for local dev so `MONOLITH_BASE_URL` may use `http://`. Production should use `https://` (default: insecure URLs are rejected at startup). |
+| `DSS_SYNC_ORDER_ON_UPDATED` | no | Default `false`. When `true`, `orders/updated` webhooks also POST to the monolith (in addition to `orders/create`). |
 | `ENABLE_DEMO_ROUTES` | no | Set `true` to expose `/demo/*` without the HTML harness. **If `ENABLE_TEST_HARNESS=true`, demo routes are always turned on** for local testing. |
 | `ENABLE_TEST_HARNESS` | no | Set `true` for `/dev/test-harness` and **/demo/* routes**. With harness on, a default fake token is merged for `SANDBOX_SHOP` unless `SANDBOX_ACCESS_TOKEN` is set. |
 | `SANDBOX_SHOP` | no | Short handle merged into the token map when the harness is on (default `harness-sandbox`). |
@@ -185,11 +203,13 @@ Subscriptions use the same HTTPS callback: `{PUBLIC_BASE_URL}/webhooks/shopify`.
 * `PRODUCTS_CREATE`, `PRODUCTS_UPDATE`, `PRODUCTS_DELETE`
 * `ORDERS_CREATE`, `ORDERS_UPDATED`
 
-On `products/create` and `products/update`, the app parses the webhook body for the resource id and runs `GetProductById`. On `orders/create`, if `MONOLITH_BASE_URL` is set, it runs `GetOrderForDss` and POSTs to the monolith; otherwise it loads with `GetOrderById` and logs. On `orders/updated`, it runs `GetOrderById` and logs.
+On `products/create` and `products/update`, the app parses the webhook body for the resource id and runs `GetProductById`. On `orders/create`, if `MONOLITH_BASE_URL` is set, it runs `GetOrderForDss` and POSTs to the monolith. On `orders/updated`, monolith sync runs only when `DSS_SYNC_ORDER_ON_UPDATED=true` (default off to avoid duplicate POSTs).
+
+**Shop domain:** webhooks use `X-Shopify-Shop-Domain` (forward this header through your reverse proxy). DSS logs include a per-request **`trace_id`** (Logback MDC) and may return **`X-Trace-Id`** on responses. Monolith error JSON may include a separate `monolith_trace_id` in WARN logs.
 
 ### DSS internal REST
 
-OpenAPI: `docs/openapi/dss-api.yaml`. Implementation summary: `docs/DSS_IMPLEMENTATION_LOG.md`. Endpoints are **fulfillment-only** (stateless): `/sync-shipments-with-fulfillments`, `/tracking-updates`, `/tracking-update`, and dummy routes **`POST /dummy1`** = tracking payload, **`POST /dummy2`** = sync payload (per monolith OpenAPI / http4k#1516). Pass **`X-Shopify-Access-Token`** or configure **`DSS_SHOP_ACCESS_TOKENS`**.
+OpenAPI (human-readable mirror): [`docs/openapi/dss-api.yaml`](docs/openapi/dss-api.yaml). **Canonical:** [`openapi.json`](openapi.json) at repo root (Gradle `openApiGenerate` uses it). **`POST /sync-shipments-with-fulfillments`** accepts **`TrackingUpdateRequest`** (tracking → Shopify); **`POST /tracking-update`** accepts **`SyncShipmentsWithFulfillmentsRequest`** sync payload; **`POST /tracking-updates`** is an alias matching the tracking payload. Pass **`X-Shopify-Access-Token`** or configure **`DSS_SHOP_ACCESS_TOKENS`**. Dummy routes **`/dummy1`/`/dummy2`** are not served anymore.
 
 ### Run
 
@@ -222,4 +242,7 @@ Demo routes are off by default; they are not authenticated beyond knowing an ins
 * OAuth callback mismatch in Shopify: ensure `{PUBLIC_BASE_URL}{OAUTH_REDIRECT_PATH}` exactly matches Partner Dashboard redirect URL.
 * DSS auth failures (`401`): provide `X-Shopify-Access-Token` or configure `DSS_SHOP_ACCESS_TOKENS`; include `X-DSS-Internal-Secret` when `DSS_INTERNAL_SECRET` is set.
 * `DSS_SHOP_ACCESS_TOKENS` parse issues: use comma-separated `shop.myshopify.com|shpat_...` pairs.
+* Log says `[monolith] MONOLITH_BASE_URL is unset` but you configured it in `.env` or Dokploy UI: duplicate `MONOLITH_BASE_URL` / `MONOLITH_API_KEY` lines (often an empty trailing block pasted from templates) cause **last value wins**. Remove the trailing empty duplicates so only one assignment remains; redeploy/restart (see [.env.example](.env.example) comment above the monolith vars).
+* **`Monolith store api-key … status=404` with HTML `<h1>Not Found`**: DSS hit `{MONOLITH_BASE_URL}/stores/api-key` (before optional prefix). Use the **REST API domain** DropNext exposes (often `api.…`), or set **`MONOLITH_API_PREFIX`** if routes live under a path (`api/v1`, etc.). Confirm with **`curl -i -X PUT https://your-api…/stores/api-key`** (+ Bearer header) outside DSS.
+* **502 Bad Gateway on `PUBLIC_BASE_URL`**: the reverse proxy forwards to **the wrong container port**. The JVM binds **`PORT`** (see `[http] Listening …` startup line). Dockerfile sets **`ENV PORT=9999`**, but dashboards that add an **empty `PORT=`** override that with blank and the app formerly fell back to **8080**. Either set **`PORT=9999`** explicitly in Dokploy or **remove** the `PORT` key so the image default wins; Traefik/nginx must target the **same** port.
 * Insecure monolith URL rejected: set `DSS_ALLOW_INSECURE_MONOLITH=true` only for local development; production should remain HTTPS.

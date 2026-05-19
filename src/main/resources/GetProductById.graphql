@@ -16,10 +16,24 @@ query GetProductById($id: ID!) {
     publishedAt
     createdAt
     updatedAt
-    images(first: 20) {
+    media(first: 20) {
       edges {
         node {
-          url
+          __typename
+          ... on MediaImage {
+            image {
+              url
+            }
+          }
+          ... on Video {
+            id
+          }
+          ... on ExternalVideo {
+            id
+          }
+          ... on Model3d {
+            id
+          }
         }
       }
     }
@@ -37,8 +51,26 @@ query GetProductById($id: ID!) {
             name
             value
           }
-          image {
-            url
+          media(first: 1) {
+            edges {
+              node {
+                __typename
+                ... on MediaImage {
+                  image {
+                    url
+                  }
+                }
+                ... on Video {
+                  id
+                }
+                ... on ExternalVideo {
+                  id
+                }
+                ... on Model3d {
+                  id
+                }
+              }
+            }
           }
         }
       }

@@ -32,3 +32,14 @@ fun adminGraphqlJsonUrl(shop: String, apiVersion: String): String =
 
 /** Short handle (e.g. `store` from `store.myshopify.com`) for monolith / DSS payloads. */
 fun shopifySubdomainShort(shop: String): String = shop.removeSuffix(".myshopify.com")
+
+/**
+ * Resolves `*.myshopify.com` host for webhooks: prefers [shopDomainHeader] (`X-Shopify-Shop-Domain`),
+ * then optional JSON `domain` from the webhook body.
+ */
+fun shopMyshopifyHostFromWebhook(shopDomainHeader: String?, webhookBodyDomain: String? = null): String? {
+  val raw =
+    shopDomainHeader?.trim()?.takeIf { it.isNotEmpty() }
+      ?: webhookBodyDomain?.trim()?.takeIf { it.isNotEmpty() }
+  return raw?.let { normalizeShopDomain(it) }
+}

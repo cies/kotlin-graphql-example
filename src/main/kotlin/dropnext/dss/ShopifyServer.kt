@@ -22,6 +22,11 @@ fun main() {
       )
   val config = dssConfig.shopify
 
+  println(
+    "[http] Listening on 0.0.0.0:${config.serverPort}; PUBLIC_BASE_URL=${config.publicBaseUrl} — " +
+      "reverse-proxy target port must equal ${config.serverPort} (unset PORT locally → 8080; empty PORT in Docker → 9999).",
+  )
+
   if (dssConfig.enableTestHarness) {
     println(
       "[test-harness] /demo/* routes are enabled (same as ENABLE_DEMO_ROUTES=true for this process)",
@@ -30,12 +35,25 @@ fun main() {
       "[test-harness] Stateless tokens: set DSS_SHOP_ACCESS_TOKENS or X-Shopify-Access-Token on DSS calls; SANDBOX_* merged when harness is on.",
     )
   }
+  if (dssConfig.monolithBaseUrl.isNullOrBlank()) {
+    println(
+      "[monolith] MONOLITH_BASE_URL is unset — OAuth will not PUT the Shopify Admin token to the DropNext backend. " +
+        "Configure MONOLITH_BASE_URL in prod and dev if installs should persist to the monolith.",
+    )
+  } else {
+    val bearerConfigured = !dssConfig.monolithApiKey.isNullOrBlank()
+    println(
+      "[monolith] Outbound enabled: MONOLITH_BASE_URL=${dssConfig.monolithBaseUrl}${dssConfig.monolithApiPrefix?.let { " MONOLITH_API_PREFIX=$it" }.orEmpty()} " +
+        "(MONOLITH_API_KEY Bearer configured: $bearerConfigured).",
+    )
+  }
   val httpClient = createSharedHttpClient()
   val httpMonolithClient: MonolithService? =
     dssConfig.monolithBaseUrl?.let { base ->
       HttpMonolithService(
         httpClient = httpClient,
         baseUrl = base,
+        apiPathPrefix = dssConfig.monolithApiPrefix,
         apiKey = dssConfig.monolithApiKey,
         createOrderPath = dssConfig.monolithCreateOrderPath,
       )
@@ -51,6 +69,7 @@ fun main() {
   val gqlClientCache = GraphQLClientCache(httpClient)
 
   embeddedServer(CIO, port = config.serverPort, host = "0.0.0.0") {
+    installDssTraceId()
     install(StatusPages) {
       exception<Throwable> { call, cause ->
         System.err.println("Unhandled error: ${cause.message}")

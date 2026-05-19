@@ -9,9 +9,9 @@ This document records what was implemented for the **DropNext Shopify Service (D
 
 ## REST API
 
-- Canonical OpenAPI: `docs/openapi/dss-api.yaml` (fulfillment routes only; no store persistence).
-- Routing vs handling: `com.example.lib.dss.DssRouting` (`installDssRoutes`) wires paths; `com.example.lib.dss.DssHttpHandlers` implements sync/tracking.
-- Paths: `POST` `/sync-shipments-with-fulfillments`, `/tracking-updates`, `/tracking-update`, **`POST /dummy1`** = **TrackingUpdatePayload**, **`POST /dummy2`** = **SyncShipmentsWithFulfillmentsPayload**.
+- **Canonical OpenAPI:** `openapi.json` (repo root, **3.0.0**): monolith **`paths`** DTO codegen + **`x-webhooks`** for DSS inbound URL contracts. `openApiGenerate` runs with **`skipValidateSpec=false`**; on Windows the spec path is passed as a **`file:` URI** so `$ref` resolution works.
+- Readable mirror / docs: **`docs/openapi/dss-api.yaml`** (paths + payloads aligned with `openapi.json`).
+- Routing vs handling: `dropnext.dss.lib.dss.DssRouting` (`installDssRoutes`); **`POST /tracking-update`** = sync shipments body (**`SyncShipmentsWithFulfillmentsRequest`**); **`POST /sync-shipments-with-fulfillments`** (and **`/tracking-updates`**) = **`TrackingUpdateRequest`**. **`/dummy1`/`/dummy2`** removed from routing.
 - When `DSS_INTERNAL_SECRET` is set, DSS routes require header `X-DSS-Internal-Secret` (see `DssInternalAuth`).
 
 ## Monolith client
