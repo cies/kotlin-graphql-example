@@ -1,0 +1,10 @@
+query TestQuery {
+  products(first: 3) {
+    edges {
+      node {
+        id
+        title
+      }
+    }
+  }
+}

@@ -1,0 +1,52 @@
+query SyncProductsPage($first: Int!, $after: String) {
+  products(first: $first, after: $after, sortKey: UPDATED_AT) {
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+    edges {
+      node {
+        id
+        legacyResourceId
+        title
+        description
+        descriptionHtml
+        vendor
+        productType
+        tags
+        handle
+        status
+        publishedAt
+        createdAt
+        updatedAt
+        images(first: 20) {
+          edges {
+            node {
+              url
+            }
+          }
+        }
+        variants(first: 100) {
+          edges {
+            node {
+              id
+              legacyResourceId
+              title
+              sku
+              barcode
+              price
+              updatedAt
+              selectedOptions {
+                name
+                value
+              }
+              image {
+                url
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

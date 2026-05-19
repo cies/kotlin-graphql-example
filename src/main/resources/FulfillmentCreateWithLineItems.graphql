@@ -1,0 +1,22 @@
+mutation FulfillmentCreateWithLineItems(
+  $lineItemsByFulfillmentOrder: [FulfillmentOrderLineItemsInput!]!
+  $tracking: FulfillmentTrackingInput!
+  $notifyCustomer: Boolean
+) {
+  fulfillmentCreate(
+    fulfillment: {
+      lineItemsByFulfillmentOrder: $lineItemsByFulfillmentOrder
+      trackingInfo: $tracking
+      notifyCustomer: $notifyCustomer
+    }
+  ) {
+    fulfillment {
+      id
+      legacyResourceId
+    }
+    userErrors {
+      field
+      message
+    }
+  }
+}

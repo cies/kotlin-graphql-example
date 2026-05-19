@@ -1,0 +1,76 @@
+query GetOrderForDss($id: ID!) {
+  order(id: $id) {
+    id
+    name
+    email
+    legacyResourceId
+    createdAt
+    totalPriceSet {
+      shopMoney {
+        amount
+        currencyCode
+      }
+    }
+    displayFinancialStatus
+    displayFulfillmentStatus
+    shippingAddress {
+      firstName
+      lastName
+      address1
+      address2
+      city
+      province
+      provinceCode
+      countryCodeV2
+      zip
+      phone
+    }
+    lineItems(first: 100) {
+      edges {
+        node {
+          id
+          quantity
+          name
+          title
+          originalUnitPriceSet {
+            shopMoney {
+              amount
+            }
+          }
+          variant {
+            id
+            legacyResourceId
+          }
+        }
+      }
+    }
+    fulfillmentOrders(first: 50) {
+      edges {
+        node {
+          id
+          status
+          lineItems(first: 100) {
+            edges {
+              node {
+                id
+                remainingQuantity
+                totalQuantity
+                variant {
+                  id
+                  legacyResourceId
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    fulfillments(first: 50) {
+      id
+      legacyResourceId
+      trackingInfo {
+        number
+      }
+    }
+  }
+}

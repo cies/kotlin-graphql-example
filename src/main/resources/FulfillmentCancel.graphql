@@ -1,0 +1,12 @@
+mutation FulfillmentCancelMutation($id: ID!) {
+  fulfillmentCancel(id: $id) {
+    fulfillment {
+      id
+      status
+    }
+    userErrors {
+      field
+      message
+    }
+  }
+}
