@@ -31,19 +31,20 @@ import dropnext.dss.shopify.graphqlResourceIdFromShopifyWebhook
 import dropnext.dss.shopify.isValidSignedOAuthState
 import dropnext.dss.shopify.normalizeShopDomain
 import dropnext.dss.shopify.registerStandardWebhooks
+import dropnext.dss.shopify.shopDomainFromWebhookBody
 import dropnext.dss.shopify.shopMyshopifyHostFromWebhook
 import dropnext.dss.shopify.shopifySubdomainShort
 import dropnext.dss.shopify.signedOAuthState
 import dropnext.dss.shopify.toProductVariantItems
 import dropnext.dss.shopify.variantLegacyIdsFromProductWebhook
 import dropnext.dss.config.ShopifyConfig
-import com.example.graphql.generated.FulfillmentCreateWithTracking
-import com.example.graphql.generated.FulfillmentTrackingInfoUpdateMutation
-import com.example.graphql.generated.GetOrderById
-import com.example.graphql.generated.GetProductById
-import com.example.graphql.generated.ShopIdentity
-import com.example.graphql.generated.SyncProductsPage
-import com.example.graphql.generated.inputs.FulfillmentTrackingInput
+import dropnext.graphql.generated.FulfillmentCreateWithTracking
+import dropnext.graphql.generated.FulfillmentTrackingInfoUpdateMutation
+import dropnext.graphql.generated.GetOrderById
+import dropnext.graphql.generated.GetProductById
+import dropnext.graphql.generated.ShopIdentity
+import dropnext.graphql.generated.SyncProductsPage
+import dropnext.graphql.generated.inputs.FulfillmentTrackingInput
 import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
 import io.ktor.client.HttpClient
 import io.ktor.client.request.header
@@ -642,7 +643,7 @@ fun Application.configureRouting(
       call.application.log.info(
         "Webhook verified topic=$topic shopDomainHeader=$shopDomainHeader bodyBytes=${body.size}",
       )
-      val shopNorm = shopMyshopifyHostFromWebhook(shopDomainHeader)
+      val shopNorm = shopMyshopifyHostFromWebhook(shopDomainHeader, shopDomainFromWebhookBody(bodyStr))
       val token =
         if (shopNorm != null) {
           when (
@@ -661,8 +662,9 @@ fun Application.configureRouting(
           null
         }
       if (shopNorm == null || token == null) {
-        call.application.log.warn(
-          "Webhook: no Admin token for shopDomainHeader=$shopDomainHeader (configure DSS_SHOP_ACCESS_TOKENS or OAuth env entry)",
+        call.application.log.error(
+          "Webhook: no Admin token topic=$topic shopDomainHeader=$shopDomainHeader shopNorm=$shopNorm " +
+            "(configure DSS_SHOP_ACCESS_TOKENS or OAuth env entry)",
         )
         call.respond(HttpStatusCode.OK)
         return@post
@@ -694,8 +696,10 @@ fun Application.configureRouting(
                 when (val result = httpMonolithClient.upsertProductVariants(req)) {
                   is UpsertVariantsResult.Ok ->
                     call.application.log.info("Monolith upsert variants ok: ${result.upserted} upserted shop=$shopNorm")
-                  is UpsertVariantsResult.Error ->
-                    call.application.log.warn("Monolith upsert variants failed: status=${result.status} ${result.errorMessage}")
+                  is UpsertVariantsResult.Error -> {
+                    val msg = "Monolith upsert variants failed: status=${result.status} ${result.errorMessage}"
+                    if (result.status >= 500) call.application.log.error(msg) else call.application.log.warn(msg)
+                  }
                 }
               }
             }
@@ -834,7 +838,7 @@ private fun renderWebhookList(subscriptions: List<WebhookSubscriptionStatus>): S
     }
   }
 
-private fun renderFailedWebhooks(failures: List<Pair<com.example.graphql.generated.enums.WebhookSubscriptionTopic, String>>): String {
+private fun renderFailedWebhooks(failures: List<Pair<dropnext.graphql.generated.enums.WebhookSubscriptionTopic, String>>): String {
   if (failures.isEmpty()) return ""
   val items = failures.joinToString(prefix = "<ul>", postfix = "</ul>") { (topic, error) ->
     "<li style=\"color:red\"><code>${htmlEscape(topic.name)}</code> &mdash; ${htmlEscape(error)}</li>"

@@ -5,7 +5,7 @@ import dropnext.dss.lib.monolith.CreateOrderResult
 import dropnext.dss.lib.monolith.MonolithService
 import dropnext.dss.lib.monolith.logMonolithFailure
 import dropnext.dss.shopify.shopifySubdomainShort
-import com.example.graphql.generated.GetOrderForDss
+import dropnext.graphql.generated.GetOrderForDss
 import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
 import io.ktor.client.request.header
 import org.slf4j.Logger
@@ -29,15 +29,22 @@ suspend fun syncShopifyOrderToMonolith(
     }
   val order = r.data?.order
   if (order == null) {
-    log.warn("Webhook $webhookTopic: order null errors=${r.errors}")
+    log.error("Webhook $webhookTopic: order null orderGid=$orderGid errors=${r.errors}")
     return null
   }
   log.info("Webhook order loaded id=${order.id} name=${order.name} errors=${r.errors}")
+  val variantBackedCount = order.lineItems.edges.count { it.node.variant != null }
   val req = orderToCreateShopifyOrderRequest(shopifySubdomainShort(shopMyshopifyHost), order)
+  if (variantBackedCount > req.lineItems.size) {
+    log.warn(
+      "Webhook $webhookTopic: omitted ${variantBackedCount - req.lineItems.size} line item(s) " +
+        "without resolvable fulfillment_order_id shopifyOrderId=${req.shopifyOrderId}",
+    )
+  }
   if (req.lineItems.isEmpty()) {
     log.warn(
       "Webhook $webhookTopic: skip monolith order sync — mapped line_items empty " +
-        "(no variant-backed lines — e.g. tips/custom-only order)",
+        "(no variant-backed lines or no fulfillment_order_id — e.g. tips/custom-only order)",
     )
     return null
   }
@@ -64,16 +71,22 @@ suspend fun postMappedOrderToMonolith(
           "shopifyOrderId=${req.shopifyOrderId} lines=${req.lineItems.size}",
       )
     }
-    is CreateOrderResult.Error ->
-      logMonolithFailure(
-        log,
-        operation = "postCreateOrder",
-        status = result.status,
-        parsed = result.parsed,
-        extra =
-          "topic=$webhookTopic shopifyOrderId=${req.shopifyOrderId} lines=${req.lineItems.size} " +
-            "fulfillmentStatus=${req.fulfillmentStatus}",
-      )
+    is CreateOrderResult.Error -> {
+      if (result.status >= 500) org.slf4j.MDC.put("dss.webhook.outcome", "failed")
+      try {
+        logMonolithFailure(
+          log,
+          operation = "postCreateOrder",
+          status = result.status,
+          parsed = result.parsed,
+          extra =
+            "topic=$webhookTopic shopifyOrderId=${req.shopifyOrderId} lines=${req.lineItems.size} " +
+              "fulfillmentStatus=${req.fulfillmentStatus}",
+        )
+      } finally {
+        org.slf4j.MDC.remove("dss.webhook.outcome")
+      }
+    }
   }
   return result
 }

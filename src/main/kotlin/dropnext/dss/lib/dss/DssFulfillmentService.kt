@@ -5,20 +5,18 @@ import dropnext.dss.lib.dss.dto.SyncShipmentsWithFulfillmentsRequest
 import dropnext.dss.lib.dss.dto.SyncShipmentsWithFulfillmentsResponse
 import dropnext.dss.lib.dss.dto.TrackingUpdateRequest
 import dropnext.dss.lib.dss.dto.TrackingUpdateResponse
-import com.example.graphql.generated.FulfillmentCancelMutation
-import com.example.graphql.generated.FulfillmentCreateWithLineItems
-import com.example.graphql.generated.FulfillmentEventCreateMutation
-import com.example.graphql.generated.GetOrderForDss
-import com.example.graphql.generated.getorderfordss.FulfillmentOrder
-import com.example.graphql.generated.getorderfordss.Order
-import com.example.graphql.generated.inputs.FulfillmentEventInput
-import com.example.graphql.generated.inputs.FulfillmentOrderLineItemInput
-import com.example.graphql.generated.inputs.FulfillmentOrderLineItemsInput
-import com.example.graphql.generated.inputs.FulfillmentTrackingInput
+import dropnext.graphql.generated.FulfillmentCancelMutation
+import dropnext.graphql.generated.FulfillmentCreateWithLineItems
+import dropnext.graphql.generated.FulfillmentEventCreateMutation
+import dropnext.graphql.generated.GetOrderForDss
+import dropnext.graphql.generated.getorderfordss.FulfillmentOrder
+import dropnext.graphql.generated.getorderfordss.Order
+import dropnext.graphql.generated.inputs.FulfillmentEventInput
+import dropnext.graphql.generated.inputs.FulfillmentOrderLineItemInput
+import dropnext.graphql.generated.inputs.FulfillmentOrderLineItemsInput
+import dropnext.graphql.generated.inputs.FulfillmentTrackingInput
 import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
 import io.ktor.client.request.header
-import kotlin.math.min
-
 class DssFulfillmentService {
   /**
    * Cancels all existing open Shopify fulfillments for the order, then creates new fulfillments
@@ -154,35 +152,13 @@ class DssFulfillmentService {
     order: Order,
     shipment: Shipment,
   ): FulfillmentResult<List<Long>> {
-    // Group requested line items by fulfillment order
-    val foGroups = mutableMapOf<FulfillmentOrder, MutableList<FulfillmentOrderLineItemInput>>()
-    for (req in shipment.lineItems) {
-      // Find which FO(s) contain this variant
-      for (foe in order.fulfillmentOrders.edges) {
-        val fo = foe.node
-        val match =
-          fo.lineItems.edges
-            .map { it.node }
-            .find { node ->
-              node.variant?.legacyResourceId?.toString()?.toLongOrNull() == req.productVariantId
-            }
-        if (match != null) {
-          val qty = min(req.quantity, match.remainingQuantity)
-          if (qty > 0) {
-            foGroups
-              .getOrPut(fo) { mutableListOf() }
-              .add(FulfillmentOrderLineItemInput(id = match.id, quantity = qty))
-          }
-          break
-        }
+    val matchResult = matchShipmentToFulfillmentOrders(order, shipment)
+    val foGroups =
+      when (matchResult) {
+        is ShipmentMatchResult.Ok -> matchResult.groups
+        is ShipmentMatchResult.NotFound -> return FulfillmentResult.Err.NotFound(matchResult.detail)
+        is ShipmentMatchResult.UserError -> return FulfillmentResult.Err.UserError(matchResult.messages)
       }
-    }
-
-    if (foGroups.isEmpty()) {
-      return FulfillmentResult.Err.NotFound(
-        "no matching open fulfillment order line items for shipment tracking=${shipment.trackingNumber}",
-      )
-    }
 
     val lineItemsByFo =
       foGroups.entries.map { (fo, inputs) ->

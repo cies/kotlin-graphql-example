@@ -1,18 +1,24 @@
 package dropnext.dss.lib.dss
 
-import com.example.graphql.generated.enums.CurrencyCode
-import com.example.graphql.generated.enums.OrderDisplayFinancialStatus
-import com.example.graphql.generated.enums.OrderDisplayFulfillmentStatus
-import com.example.graphql.generated.getorderfordss.FulfillmentOrderConnection
-import com.example.graphql.generated.getorderfordss.LineItem
-import com.example.graphql.generated.getorderfordss.LineItemConnection
-import com.example.graphql.generated.getorderfordss.LineItemEdge
-import com.example.graphql.generated.getorderfordss.MoneyBag
-import com.example.graphql.generated.getorderfordss.MoneyBag2
-import com.example.graphql.generated.getorderfordss.MoneyV2
-import com.example.graphql.generated.getorderfordss.MoneyV22
-import com.example.graphql.generated.getorderfordss.Order
-import com.example.graphql.generated.getorderfordss.ProductVariant
+import dropnext.graphql.generated.enums.CurrencyCode
+import dropnext.graphql.generated.enums.FulfillmentOrderStatus
+import dropnext.graphql.generated.enums.OrderDisplayFinancialStatus
+import dropnext.graphql.generated.enums.OrderDisplayFulfillmentStatus
+import dropnext.graphql.generated.getorderfordss.FulfillmentOrder
+import dropnext.graphql.generated.getorderfordss.FulfillmentOrderConnection
+import dropnext.graphql.generated.getorderfordss.FulfillmentOrderEdge
+import dropnext.graphql.generated.getorderfordss.FulfillmentOrderLineItem
+import dropnext.graphql.generated.getorderfordss.FulfillmentOrderLineItemConnection
+import dropnext.graphql.generated.getorderfordss.FulfillmentOrderLineItemEdge
+import dropnext.graphql.generated.getorderfordss.LineItem
+import dropnext.graphql.generated.getorderfordss.LineItemConnection
+import dropnext.graphql.generated.getorderfordss.LineItemEdge
+import dropnext.graphql.generated.getorderfordss.MoneyBag
+import dropnext.graphql.generated.getorderfordss.MoneyBag2
+import dropnext.graphql.generated.getorderfordss.MoneyV2
+import dropnext.graphql.generated.getorderfordss.MoneyV22
+import dropnext.graphql.generated.getorderfordss.Order
+import dropnext.graphql.generated.getorderfordss.ProductVariant
 
 internal fun minimalOrder(
   fulfillment: OrderDisplayFulfillmentStatus = OrderDisplayFulfillmentStatus.UNFULFILLED,
@@ -45,7 +51,34 @@ internal fun minimalOrder(
     displayFulfillmentStatus = fulfillment,
     shippingAddress = null,
     lineItems = LineItemConnection(edges = listOf(LineItemEdge(node = lineItem))),
-    fulfillmentOrders = FulfillmentOrderConnection(edges = emptyList()),
+    fulfillmentOrders =
+      FulfillmentOrderConnection(
+        edges =
+          listOf(
+            FulfillmentOrderEdge(
+              node =
+                FulfillmentOrder(
+                  id = "gid://shopify/FulfillmentOrder/301",
+                  status = FulfillmentOrderStatus.OPEN,
+                  lineItems =
+                    FulfillmentOrderLineItemConnection(
+                      edges =
+                        listOf(
+                          FulfillmentOrderLineItemEdge(
+                            node =
+                              FulfillmentOrderLineItem(
+                                id = "gid://shopify/FulfillmentOrderLineItem/401",
+                                remainingQuantity = 2,
+                                totalQuantity = 2,
+                                variant = variant,
+                              ),
+                          ),
+                        ),
+                    ),
+                ),
+            ),
+          ),
+      ),
     fulfillments = emptyList(),
   )
 }

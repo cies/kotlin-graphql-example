@@ -1,9 +1,9 @@
 package dropnext.dss.shopify
 
-import com.example.graphql.generated.GetWebhookSubscriptions
-import com.example.graphql.generated.RegisterWebhook
-import com.example.graphql.generated.URL
-import com.example.graphql.generated.enums.WebhookSubscriptionTopic
+import dropnext.graphql.generated.GetWebhookSubscriptions
+import dropnext.graphql.generated.RegisterWebhook
+import dropnext.graphql.generated.URL
+import dropnext.graphql.generated.enums.WebhookSubscriptionTopic
 import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
 import io.ktor.client.request.header
 import org.slf4j.Logger

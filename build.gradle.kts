@@ -57,7 +57,7 @@ kotlin {
 
 graphql {
   client {
-    packageName = "com.example.graphql.generated"
+    packageName = "dropnext.graphql.generated"
 
     // endpoint = "https://beta.pokeapi.co/graphql/v1beta"
     endpoint = "https://shopify.dev/admin-graphql-direct-proxy/2026-04"

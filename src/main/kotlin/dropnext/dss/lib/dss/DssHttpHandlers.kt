@@ -39,6 +39,11 @@ class DssHttpHandlers(
   ) {
     if (!call.requireDssInternalSecret(dssConfig.dssInternalSecret)) return
     val body = call.receive<SyncShipmentsWithFulfillmentsRequest>()
+    when (val v = validateSyncShipmentsRequest(body)) {
+      is RequestValidation.Invalid ->
+        return call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = v.message))
+      RequestValidation.Valid -> Unit
+    }
     val shop =
       normalizeShopDomain(body.shopifySubdomain)
         ?: return call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = "invalid shopify_subdomain"))
@@ -69,7 +74,7 @@ class DssHttpHandlers(
       is FulfillmentResult.Err -> {
         val msg = result.toMessage()
         call.application.log.warn("$logLabel failed: $msg")
-        call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = msg))
+        call.respond(result.toHttpStatus(), ErrorResponse(error = msg))
       }
     }
   }
@@ -80,6 +85,11 @@ class DssHttpHandlers(
   ) {
     if (!call.requireDssInternalSecret(dssConfig.dssInternalSecret)) return
     val body = call.receive<TrackingUpdateRequest>()
+    when (val v = validateTrackingUpdateRequest(body)) {
+      is RequestValidation.Invalid ->
+        return call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = v.message))
+      RequestValidation.Valid -> Unit
+    }
     val shop =
       normalizeShopDomain(body.shopifySubdomain)
         ?: return call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = "invalid shopify_subdomain"))
@@ -110,7 +120,7 @@ class DssHttpHandlers(
       is FulfillmentResult.Err -> {
         val msg = result.toMessage()
         call.application.log.warn("$logLabel failed: $msg")
-        call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = msg))
+        call.respond(result.toHttpStatus(), ErrorResponse(error = msg))
       }
     }
   }

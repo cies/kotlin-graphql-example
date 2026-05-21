@@ -32,6 +32,13 @@ fun graphqlResourceIdFromShopifyWebhook(topic: String, bodyUtf8: String): String
  * Parses the legacy (integer) variant IDs from a Shopify `products/delete` webhook body.
  * Shopify includes the full product JSON (including variants) in delete payloads.
  */
+/** Reads `domain` from a Shopify webhook JSON body when [X-Shopify-Shop-Domain] is absent. */
+fun shopDomainFromWebhookBody(bodyUtf8: String): String? {
+  val root =
+    runCatching { webhookJson.parseToJsonElement(bodyUtf8).jsonObject }.getOrNull() ?: return null
+  return root["domain"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+}
+
 fun variantLegacyIdsFromProductWebhook(bodyUtf8: String): List<Long> {
   val root =
     runCatching { webhookJson.parseToJsonElement(bodyUtf8).jsonObject }.getOrNull() ?: return emptyList()

@@ -4,7 +4,7 @@ This document records what was implemented for the **DropNext Shopify Service (D
 
 ## Configuration
 
-- **`DssAppConfig`** (`com.example.lib.dss`): reads `MONOLITH_BASE_URL`, `MONOLITH_API_KEY`, `MONOLITH_CREATE_ORDER_PATH`, `DSS_INTERNAL_SECRET`, `DSS_SHOP_ACCESS_TOKENS`, `SANDBOX_SHOP`, `SANDBOX_ACCESS_TOKEN`, harness flags (see `README.md`).
+- **`DssAppConfig`** (`dropnext.dss.lib.dss`): reads `MONOLITH_BASE_URL`, `MONOLITH_API_KEY`, `MONOLITH_CREATE_ORDER_PATH`, `DSS_INTERNAL_SECRET`, `DSS_SHOP_ACCESS_TOKENS`, `SANDBOX_SHOP`, `SANDBOX_ACCESS_TOKEN`, harness flags (see `README.md`).
 - **Tokens**: Map `shop.myshopify.com` → Admin API token from env (`DSS_SHOP_ACCESS_TOKENS` as comma-separated `shop|token` pairs), merged with `SANDBOX_*` when the test harness is on. Callers may send **`X-Shopify-Access-Token`** on DSS POSTs instead.
 
 ## REST API
@@ -16,7 +16,7 @@ This document records what was implemented for the **DropNext Shopify Service (D
 
 ## Monolith client
 
-- **`MonolithCreateOrderPort`** + **`HttpMonolithClient`** in `com.example.lib.monolith` (Ktor **client** only; no server dependency — see `ArchitectureTest`).
+- **`MonolithCreateOrderPort`** + **`HttpMonolithClient`** in `dropnext.dss.lib.monolith` (Ktor **client** only; no server dependency — see `ArchitectureTest`).
 
 ## Shopify integration
 

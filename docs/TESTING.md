@@ -17,6 +17,8 @@ From the project root:
 .\gradlew.bat test
 ```
 
+End-to-end fulfillment verification (monolith → DSS → Shopify) is documented in [FULFILLMENT_VERIFICATION.md](FULFILLMENT_VERIFICATION.md).
+
 ## Test categories
 
 1. **Pure unit** — mappers, `shopMyshopifyHostFromWebhook`, `MonolithErrorBody.parse` (no fakes, no I/O).

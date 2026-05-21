@@ -3,9 +3,9 @@ package dropnext.dss.shopify
 import dropnext.dss.lib.dss.dto.ProductStatus
 import dropnext.dss.lib.dss.dto.ProductVariantItem
 import dropnext.dss.lib.dss.dto.SelectedOption
-import com.example.graphql.generated.getproductbyid.Media
-import com.example.graphql.generated.getproductbyid.MediaImage
-import com.example.graphql.generated.getproductbyid.Product
+import dropnext.graphql.generated.getproductbyid.Media
+import dropnext.graphql.generated.getproductbyid.MediaImage
+import dropnext.graphql.generated.getproductbyid.Product
 import kotlin.math.roundToLong
 
 /**
@@ -52,7 +52,7 @@ fun Product.toProductVariantItems(currencyCode: String): List<ProductVariantItem
 private fun Product.catalogImageUrls(): List<String> =
   media.edges.mapNotNull { edge -> edge.node.imageUrlOrNull() }
 
-private fun com.example.graphql.generated.getproductbyid.ProductVariant.variantImageUrlOrNull(): String? =
+private fun dropnext.graphql.generated.getproductbyid.ProductVariant.variantImageUrlOrNull(): String? =
   media.edges.firstOrNull()?.node?.imageUrlOrNull()
 
 private fun Media.imageUrlOrNull(): String? =
@@ -61,11 +61,11 @@ private fun Media.imageUrlOrNull(): String? =
     else -> null
   }
 
-private fun com.example.graphql.generated.enums.ProductStatus.toProductStatus(): ProductStatus =
+private fun dropnext.graphql.generated.enums.ProductStatus.toProductStatus(): ProductStatus =
   when (this) {
-    com.example.graphql.generated.enums.ProductStatus.ACTIVE -> ProductStatus.ACTIVE
-    com.example.graphql.generated.enums.ProductStatus.ARCHIVED -> ProductStatus.ARCHIVED
-    com.example.graphql.generated.enums.ProductStatus.DRAFT -> ProductStatus.DRAFT
+    dropnext.graphql.generated.enums.ProductStatus.ACTIVE -> ProductStatus.ACTIVE
+    dropnext.graphql.generated.enums.ProductStatus.ARCHIVED -> ProductStatus.ARCHIVED
+    dropnext.graphql.generated.enums.ProductStatus.DRAFT -> ProductStatus.DRAFT
     else -> ProductStatus.ACTIVE
   }
 

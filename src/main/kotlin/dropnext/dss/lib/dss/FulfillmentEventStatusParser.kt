@@ -1,6 +1,6 @@
 package dropnext.dss.lib.dss
 
-import com.example.graphql.generated.enums.FulfillmentEventStatus
+import dropnext.graphql.generated.enums.FulfillmentEventStatus
 
 /** Maps monolith / AfterShip style strings (e.g. `in_transit`) to [FulfillmentEventStatus]. */
 sealed interface ParsedFulfillmentStatus {

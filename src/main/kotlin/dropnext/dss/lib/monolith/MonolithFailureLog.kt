@@ -11,5 +11,10 @@ fun logMonolithFailure(
 ) {
   val suffix = if (extra.isBlank()) "" else " $extra"
   val detail = parsed?.formatForLog() ?: "monolith_error=unparsed"
-  log.warn("Monolith $operation failed: status=$status $detail$suffix")
+  val line = "Monolith $operation failed: status=$status $detail$suffix"
+  if (status >= 500) {
+    log.error(line)
+  } else {
+    log.warn(line)
+  }
 }

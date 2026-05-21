@@ -1,7 +1,8 @@
 package dropnext.dss.lib.dss
 
-import com.example.graphql.generated.enums.OrderDisplayFinancialStatus
-import com.example.graphql.generated.enums.OrderDisplayFulfillmentStatus
+import dropnext.graphql.generated.enums.OrderDisplayFinancialStatus
+import dropnext.graphql.generated.enums.OrderDisplayFulfillmentStatus
+import dropnext.graphql.generated.getorderfordss.FulfillmentOrderConnection
 import dropnext.dss.MonolithJson
 import dropnext.dss.lib.dss.dto.CreateShopifyOrderRequest
 import kotlin.test.Test
@@ -49,6 +50,14 @@ class MonolithOrderMapperTest {
     assert(decoded.shopifyOrderId == 1001L)
     assert(decoded.lineItems.size == 1)
     assert(decoded.lineItems.single().productVariantId == 101L)
+    assert(decoded.lineItems.single().fulfillmentOrderId == 301L)
     assert(decoded.fulfillmentStatus == null)
+  }
+
+  @Test
+  fun `omits line items without resolvable fulfillment_order_id`() {
+    val order = minimalOrder().copy(fulfillmentOrders = FulfillmentOrderConnection(edges = emptyList()))
+    val req = orderToCreateShopifyOrderRequest("dropnext-staging", order)
+    assert(req.lineItems.isEmpty())
   }
 }

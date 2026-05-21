@@ -3,11 +3,11 @@ package dropnext.dss.lib.dss
 import dropnext.dss.lib.dss.dto.CreateShopifyOrderRequest
 import dropnext.dss.lib.dss.dto.OrderLineItem
 import dropnext.dss.lib.dss.dto.ShippingAddress
-import com.example.graphql.generated.enums.OrderDisplayFinancialStatus
-import com.example.graphql.generated.enums.OrderDisplayFulfillmentStatus
-import com.example.graphql.generated.getorderfordss.MailingAddress
-import com.example.graphql.generated.getorderfordss.Order
-import com.example.graphql.generated.getorderfordss.ProductVariant
+import dropnext.graphql.generated.enums.OrderDisplayFinancialStatus
+import dropnext.graphql.generated.enums.OrderDisplayFulfillmentStatus
+import dropnext.graphql.generated.getorderfordss.MailingAddress
+import dropnext.graphql.generated.getorderfordss.Order
+import dropnext.graphql.generated.getorderfordss.ProductVariant
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
@@ -42,7 +42,7 @@ fun orderToCreateShopifyOrderRequest(
       val li = edge.node
       val variant = li.variant ?: return@mapNotNull null
       val variantLegacy = variant.legacyResourceId.toString().toLongOrNull() ?: return@mapNotNull null
-      val foId = findFulfillmentOrderLegacyIdForVariant(order, variant) ?: 0L
+      val foId = findFulfillmentOrderLegacyIdForVariant(order, variant) ?: return@mapNotNull null
       val lineId = legacyIdFromGid(li.id.toString()) ?: return@mapNotNull null
       val minor = priceToMinorUnits(li.originalUnitPriceSet.shopMoney.amount.toString())
       OrderLineItem(
