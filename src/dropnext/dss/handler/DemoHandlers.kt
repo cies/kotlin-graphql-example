@@ -3,6 +3,7 @@ package dropnext.dss.handler
 import dropnext.dss.GraphQLClientCache
 import dropnext.dss.config.DssAppConfig
 import dropnext.dss.config.DssPaths
+import dropnext.dss.lib.dss.ShopAccessTokenCache
 import dropnext.dss.lib.dss.ShopifyAdminToken
 import dropnext.dss.lib.dss.clientErrorMessage
 import dropnext.dss.lib.dss.dto.ErrorResponse
@@ -37,6 +38,7 @@ class DemoHandlers(
   private val dssConfig: DssAppConfig,
   private val gqlClientCache: GraphQLClientCache,
   private val httpMonolithClient: MonolithService?,
+  private val shopTokens: ShopAccessTokenCache,
 ) {
   private val config = dssConfig.shopify
 
@@ -269,7 +271,7 @@ class DemoHandlers(
 
   /** Returns the resolved token, or null when missing (caller responds with 401). */
   private suspend fun resolveToken(shop: String, logLabel: String): String? =
-    when (val t = shopifyAdminTokenWithMonolithFallback(shop, dssConfig, httpMonolithClient)) {
+    when (val t = shopifyAdminTokenWithMonolithFallback(shop, shopTokens, httpMonolithClient)) {
       ShopifyAdminToken.Missing -> {
         log.warn { "[demo] $logLabel — no_admin_token shop=$shop" }
         null

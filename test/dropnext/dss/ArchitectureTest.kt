@@ -72,18 +72,22 @@ class ArchitectureTest {
 
   @Test
   fun `main sources do not use wildcard imports`() {
-    Konsist.scopeFromDirectory("src")
-      .files
-      .assertFalse { file ->
-        val wildcards = file.imports.filter { it.name.endsWith(".*") }
-        if (wildcards.isNotEmpty()) {
-          println(
-            "ERROR: File ${file.path} uses wildcard imports: ${wildcards.map { it.name }}. " +
-              "Use explicit imports."
-          )
-        }
-        wildcards.isNotEmpty()
+    // Konsist's KoImport.name strips the trailing `.*`, so a Konsist-based check silently passes.
+    // We grep the source files directly — no extra dependency, no false negatives.
+    val wildcardImportLine = Regex("""^\s*import\s+[\w.]+\.\*\s*$""")
+    val violations = java.io.File("src").walkTopDown()
+      .filter { it.isFile && it.extension == "kt" }
+      .flatMap { file ->
+        file.readLines()
+          .withIndex()
+          .filter { (_, line) -> wildcardImportLine.matches(line) }
+          .map { (idx, line) -> "${file.path}:${idx + 1}  ${line.trim()}" }
       }
+      .toList()
+    assert(violations.isEmpty()) {
+      "Wildcard imports are forbidden in production sources — use explicit imports:\n" +
+        violations.joinToString("\n")
+    }
   }
 
   @Test

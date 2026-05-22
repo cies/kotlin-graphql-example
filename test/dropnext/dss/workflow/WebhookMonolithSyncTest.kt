@@ -1,11 +1,21 @@
 package dropnext.dss.workflow
 
+import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
 import dropnext.dss.lib.dss.dto.CreateShopifyOrderRequest
 import dropnext.dss.lib.dss.dto.OrderLineItem
 import dropnext.dss.lib.dss.dto.ShippingAddress
 import dropnext.dss.lib.monolith.CreateOrderResult
 import dropnext.dss.testing.fake.FakeMonolithService
+import dropnext.dss.testing.fake.FakeShopifyGraphqlServer
+import dropnext.graphql.generated.GetOrderForDss
+import dropnext.graphql.generated.getorderfordss.FulfillmentOrderConnection
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.plugins.HttpTimeout
+import java.net.URI
+import java.util.concurrent.TimeUnit
 import kotlin.test.Test
+import kotlinx.coroutines.runBlocking
 
 class WebhookMonolithSyncTest {
 
@@ -20,6 +30,94 @@ class WebhookMonolithSyncTest {
     assert(fake.createOrderCallCount == 1)
     assert(fake.lastCreateOrder?.shopifySubdomain == "dropnext-staging")
     assert(fake.lastCreateOrder?.shopifyOrderId == 1001L)
+  }
+
+  @Test
+  fun `syncShopifyOrderToMonolith loads via GraphQL and forwards to monolith`() {
+    val gql = FakeShopifyGraphqlServer()
+    val port = gql.start()
+    val httpClient = HttpClient(OkHttp) {
+      engine { config { connectTimeout(2, TimeUnit.SECONDS); readTimeout(5, TimeUnit.SECONDS) } }
+      install(HttpTimeout) {
+        requestTimeoutMillis = 5_000
+        connectTimeoutMillis = 2_000
+        socketTimeoutMillis = 5_000
+      }
+    }
+    try {
+      val client = GraphQLKtorClient(URI("http://localhost:$port/admin/api/2026-04/graphql.json").toURL(), httpClient)
+      gql.stubData(
+        "GetOrderForDss",
+        GetOrderForDss.Result(order = minimalOrder()),
+        GetOrderForDss.Result.serializer(),
+      )
+      val monolith = FakeMonolithService()
+      val result = runBlocking {
+        syncShopifyOrderToMonolith(
+          graphQLClient = client,
+          token = "shpat_test",
+          shopMyShopifyHost = "acme.myshopify.com",
+          monolith = monolith,
+          orderGid = "gid://shopify/Order/1001",
+          webhookTopic = "orders/create",
+        )
+      }
+      assert(result is CreateOrderResult.HttpResponseSummary)
+      assert((result as CreateOrderResult.HttpResponseSummary).status == 200)
+      assert(monolith.createOrderCallCount == 1)
+      assert(monolith.lastCreateOrder?.shopifyOrderId == 1001L)
+      assert(monolith.lastCreateOrder?.shopifySubdomain == "acme")
+      assert(gql.calls.single().authorization == "shpat_test")
+    } finally {
+      httpClient.close()
+      gql.stop()
+    }
+  }
+
+  @Test
+  fun `syncShopifyOrderToMonolith returns null when order not found`() {
+    val gql = FakeShopifyGraphqlServer()
+    val port = gql.start()
+    val httpClient = HttpClient(OkHttp) {
+      install(HttpTimeout) { requestTimeoutMillis = 5_000 }
+    }
+    try {
+      val client = GraphQLKtorClient(URI("http://localhost:$port/admin/api/2026-04/graphql.json").toURL(), httpClient)
+      gql.stubData("GetOrderForDss", GetOrderForDss.Result(order = null), GetOrderForDss.Result.serializer())
+      val monolith = FakeMonolithService()
+      val result = runBlocking {
+        syncShopifyOrderToMonolith(client, "tok", "acme.myshopify.com", monolith, "gid://shopify/Order/1001", "orders/create")
+      }
+      assert(result == null)
+      assert(monolith.createOrderCallCount == 0)
+    } finally {
+      httpClient.close()
+      gql.stop()
+    }
+  }
+
+  @Test
+  fun `syncShopifyOrderToMonolith returns null when no mapped line items remain`() {
+    val gql = FakeShopifyGraphqlServer()
+    val port = gql.start()
+    val httpClient = HttpClient(OkHttp) {
+      install(HttpTimeout) { requestTimeoutMillis = 5_000 }
+    }
+    try {
+      val client = GraphQLKtorClient(URI("http://localhost:$port/admin/api/2026-04/graphql.json").toURL(), httpClient)
+      // Order with no fulfillment orders → mapped lineItems is empty → skip sync.
+      val orderWithoutFOs = minimalOrder().copy(fulfillmentOrders = FulfillmentOrderConnection(edges = emptyList()))
+      gql.stubData("GetOrderForDss", GetOrderForDss.Result(order = orderWithoutFOs), GetOrderForDss.Result.serializer())
+      val monolith = FakeMonolithService()
+      val result = runBlocking {
+        syncShopifyOrderToMonolith(client, "tok", "acme.myshopify.com", monolith, "gid://shopify/Order/1001", "orders/create")
+      }
+      assert(result == null)
+      assert(monolith.createOrderCallCount == 0)
+    } finally {
+      httpClient.close()
+      gql.stop()
+    }
   }
 
   @Test

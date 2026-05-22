@@ -10,7 +10,7 @@ COPY src src
 
 # Fail fast before Gradle download/bootstrap (runtime evidence-friendly).
 RUN test -s /app/openapi.json \
-  && test -f /app/src/dropnext/dss/lib/dss/DssAppConfig.kt \
+  && test -f /app/src/dropnext/dss/config/DssAppConfig.kt \
   || { echo >&2 '[dss-docker] openapi.json missing or Kotlin sources truncated (restore src/dropnext and commit).'; exit 1; }
 
 RUN chmod +x gradlew && ./gradlew --no-daemon installDist -x test

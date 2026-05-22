@@ -2,19 +2,25 @@ package dropnext.dss.handler
 
 import dropnext.dss.config.DssAppConfig
 import dropnext.dss.config.DssPaths
+import dropnext.dss.lib.dss.ShopAccessTokenCache
 import dropnext.dss.lib.ktor.respondBadRequestText
 import dropnext.dss.lib.ktor.shopifyAccessTokenFromHeader
 import dropnext.dss.shopify.normalizeShopDomain
-import io.ktor.http.*
-import io.ktor.server.application.*
-import io.ktor.server.response.*
+import io.ktor.http.ContentType
+import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.ApplicationCall
+import io.ktor.server.response.respond
+import io.ktor.server.response.respondText
 import kotlinx.serialization.Serializable
 
 
 /**
  * Handlers for the diagnostic/health endpoints (`/`, `/health`, `/api`, `/api/check`, …).
  */
-class DiagnosticsHandlers(private val dssConfig: DssAppConfig) {
+class DiagnosticsHandlers(
+  private val dssConfig: DssAppConfig,
+  private val shopTokens: ShopAccessTokenCache,
+) {
   private val shopifyConfig = dssConfig.shopify
 
   suspend fun handleIndex(call: ApplicationCall) {
@@ -75,7 +81,7 @@ class DiagnosticsHandlers(private val dssConfig: DssAppConfig) {
 
     val headerToken = call.request.shopifyAccessTokenFromHeader()
     val hasHeaderToken = !headerToken.isNullOrBlank()
-    val hasMappedToken = dssConfig.shopAccessTokens[normalizedShop]?.isNotBlank() == true
+    val hasMappedToken = shopTokens[normalizedShop]?.isNotBlank() == true
     if (!hasHeaderToken && !hasMappedToken) {
       return call.respondBadRequestText("Missing Admin token. Provide X-Shopify-Access-Token header or configure DSS_SHOP_ACCESS_TOKENS.")
     }

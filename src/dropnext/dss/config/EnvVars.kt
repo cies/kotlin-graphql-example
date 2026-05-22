@@ -5,8 +5,11 @@ package dropnext.dss.config
 object EnvVars {
 
   /** Returns null when unset or empty after stripping outer ASCII quotes once or more. */
-  fun optionalNormalized(name: String): String? {
-    val raw = System.getenv(name) ?: return null
+  fun optionalNormalized(name: String): String? = normalizeQuoted(System.getenv(name))
+
+  /** Pure normalization step extracted from [optionalNormalized] for unit testing. */
+  internal fun normalizeQuoted(raw: String?): String? {
+    if (raw == null) return null
     var s = raw.trim()
     while (s.length >= 2) {
       val inner =

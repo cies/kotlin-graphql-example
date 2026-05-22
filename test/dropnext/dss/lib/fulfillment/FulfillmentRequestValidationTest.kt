@@ -61,6 +61,51 @@ class FulfillmentRequestValidationTest {
   }
 
   @Test
+  fun `rejects shipment with empty line_items`() {
+    val result =
+      validateSyncShipmentsRequest(
+        SyncShipmentsWithFulfillmentsRequest(
+          shopifySubdomain = "acme",
+          shopifyOrderId = 1001L,
+          shipments = listOf(validShipment().copy(lineItems = emptyList())),
+        ),
+      )
+    assert(result is RequestValidation.Invalid)
+  }
+
+  @Test
+  fun `accepts valid tracking update request`() {
+    val result =
+      validateTrackingUpdateRequest(
+        TrackingUpdateRequest(
+          shopifySubdomain = "acme",
+          shopifyOrderId = 1001L,
+          trackingNumber = "1Z999",
+          status = "in_transit",
+          happenedAt = "2026-04-02T08:30:00Z",
+          message = null,
+        ),
+      )
+    assert(result is RequestValidation.Valid)
+  }
+
+  @Test
+  fun `rejects non-positive shopify_order_id on tracking update`() {
+    val result =
+      validateTrackingUpdateRequest(
+        TrackingUpdateRequest(
+          shopifySubdomain = "acme",
+          shopifyOrderId = -1L,
+          trackingNumber = "1Z999",
+          status = "in_transit",
+          happenedAt = "2026-04-02T08:30:00Z",
+          message = null,
+        ),
+      )
+    assert(result is RequestValidation.Invalid)
+  }
+
+  @Test
   fun `rejects zero quantity line item`() {
     val shipment =
       validShipment().copy(

@@ -1,11 +1,13 @@
 package dropnext.dss
 
 import dropnext.dss.config.DssAppConfig
+import dropnext.dss.config.shopAccessTokensFromEnv
 import dropnext.dss.handler.DemoHandlers
 import dropnext.dss.handler.DiagnosticsHandlers
 import dropnext.dss.handler.DssHttpHandlers
 import dropnext.dss.handler.OAuthHandlers
 import dropnext.dss.handler.WebhookHandlers
+import dropnext.dss.lib.dss.ShopAccessTokenCache
 import dropnext.dss.lib.fulfillment.DssFulfillmentService
 import dropnext.dss.lib.json.AppJson
 import dropnext.dss.lib.ktor.installDssTraceId
@@ -18,13 +20,13 @@ import dropnext.dss.routing.installDssRoutes
 import dropnext.dss.routing.installOAuthRoutes
 import dropnext.dss.routing.installWebhookRoutes
 import io.github.oshai.kotlinlogging.KotlinLogging
-import io.ktor.serialization.kotlinx.json.*
-import io.ktor.server.application.*
-import io.ktor.server.cio.*
-import io.ktor.server.engine.*
-import io.ktor.server.plugins.contentnegotiation.*
-import io.ktor.server.plugins.statuspages.*
-import io.ktor.server.routing.*
+import io.ktor.serialization.kotlinx.json.json
+import io.ktor.server.application.install
+import io.ktor.server.cio.CIO
+import io.ktor.server.engine.embeddedServer
+import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.plugins.statuspages.StatusPages
+import io.ktor.server.routing.routing
 
 
 private val log = KotlinLogging.logger {}
@@ -59,9 +61,10 @@ fun main() {
     }
   }
   val httpClient = createSharedHttpClient()
+  val monolithHttpClient = createMonolithHttpClient(httpClient)
   val httpMonolithClient: MonolithService? = dssConfig.monolithBaseUrl?.let { base ->
     HttpMonolithService(
-      httpClient = httpClient,
+      httpClient = monolithHttpClient,
       baseUrl = base,
       apiPathPrefix = dssConfig.monolithApiPrefix,
       apiKey = dssConfig.monolithApiKey,
@@ -70,25 +73,27 @@ fun main() {
   }
 
   val gqlClientCache = GraphQLClientCache(httpClient)
+  val shopTokens = ShopAccessTokenCache(shopAccessTokensFromEnv(enableTestHarness = dssConfig.enableTestHarness))
 
-  val diagnosticsHandlers = DiagnosticsHandlers(dssConfig)
-  val oauthHandlers = OAuthHandlers(dssConfig, httpClient, gqlClientCache, httpMonolithClient)
-  val webhookHandlers = WebhookHandlers(dssConfig, gqlClientCache, httpMonolithClient)
-  val demoHandlers = DemoHandlers(dssConfig, gqlClientCache, httpMonolithClient)
+  val diagnosticsHandlers = DiagnosticsHandlers(dssConfig, shopTokens)
+  val oauthHandlers = OAuthHandlers(dssConfig, httpClient, gqlClientCache, httpMonolithClient, shopTokens)
+  val webhookHandlers = WebhookHandlers(dssConfig, gqlClientCache, httpMonolithClient, shopTokens)
+  val demoHandlers = DemoHandlers(dssConfig, gqlClientCache, httpMonolithClient, shopTokens)
   val dssHandlers = DssHttpHandlers(
     shopifyConfig = shopifyConfig,
     dssConfig = dssConfig,
     gqlClientCache = gqlClientCache, // CHECK(cies): Is it okay to use the cache here as well?
     fulfillmentService = DssFulfillmentService(),
     monolithService = httpMonolithClient,
+    shopTokens = shopTokens,
   )
 
-  embeddedServer(CIO, port = shopifyConfig.serverPort, host = "0.0.0.0") {
+  val appLog = log // captured to avoid shadowing by io.ktor.server.application.Application.log inside the module
+  val server = embeddedServer(CIO, port = shopifyConfig.serverPort, host = "0.0.0.0") {
     installDssTraceId()
     install(StatusPages) {
       exception<Throwable> { call, cause ->
-        System.err.println("Unhandled error: ${cause.message}")
-        cause.printStackTrace()
+        appLog.error(cause) { "Unhandled error on ${call.request.local.method.value} ${call.request.local.uri}" }
         call.respondErrorText("internal error")
       }
     }
@@ -105,5 +110,18 @@ fun main() {
       if (dssConfig.enableDemoRoutes) installDemoRoutes(handlers = demoHandlers)
       installDssRoutes(handlers = dssHandlers)
     }
-  }.start(wait = true)
+  }
+
+  Runtime.getRuntime().addShutdownHook(Thread {
+    appLog.info { "[shutdown] SIGTERM received — stopping HTTP server with 3s grace, 10s timeout" }
+    runCatching { server.stop(gracePeriodMillis = 3_000, timeoutMillis = 10_000) }
+      .onFailure { appLog.warn(it) { "[shutdown] server.stop threw" } }
+    runCatching { httpClient.close() }
+      .onFailure { appLog.warn(it) { "[shutdown] httpClient.close threw" } }
+    runCatching { monolithHttpClient.close() }
+      .onFailure { appLog.warn(it) { "[shutdown] monolithHttpClient.close threw" } }
+    appLog.info { "[shutdown] complete" }
+  })
+
+  server.start(wait = true)
 }

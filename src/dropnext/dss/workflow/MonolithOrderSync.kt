@@ -8,7 +8,7 @@ import dropnext.dss.lib.monolith.logMonolithFailure
 import dropnext.dss.shopify.shopifySubdomainShort
 import dropnext.graphql.generated.GetOrderForDss
 import io.github.oshai.kotlinlogging.KotlinLogging
-import io.ktor.client.request.*
+import io.ktor.client.request.header
 import org.slf4j.MDC
 
 

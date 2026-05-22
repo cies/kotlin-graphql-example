@@ -22,8 +22,16 @@ class FakeMonolithService : MonolithService {
   var createOrderCallCount: Int = 0
     private set
 
+  var lastPutStoreApiKey: UpdateStoreApiKeyRequest? = null
+    private set
+  var putStoreApiKeyCallCount: Int = 0
+    private set
+
   var createOrderStatus: Int = 200
   var createOrderErrorBody: String? = null
+
+  var putStoreApiKeyStatus: Int = 200
+  var putStoreApiKeyStoreId: Long = 1L
 
   override suspend fun postCreateOrder(request: CreateShopifyOrderRequest): CreateOrderResult {
     createOrderCallCount++
@@ -39,8 +47,18 @@ class FakeMonolithService : MonolithService {
     }
   }
 
-  override suspend fun putStoreApiKey(request: UpdateStoreApiKeyRequest): StoreApiKeyResult =
-    StoreApiKeyResult.Ok(storeId = 1L)
+  override suspend fun putStoreApiKey(request: UpdateStoreApiKeyRequest): StoreApiKeyResult {
+    putStoreApiKeyCallCount++
+    lastPutStoreApiKey = request
+    return when (putStoreApiKeyStatus) {
+      200 -> StoreApiKeyResult.Ok(storeId = putStoreApiKeyStoreId)
+      else -> {
+        val raw = """{"error":{"code":"StoreError","message":"forced fail","trace_id":"fake-trace"}}"""
+        val (msg, parsed) = monolithError(putStoreApiKeyStatus, raw)
+        StoreApiKeyResult.Error(putStoreApiKeyStatus, msg, parsed)
+      }
+    }
+  }
 
   override suspend fun getStore(shopifySubdomain: String): GetStoreResult =
     GetStoreResult.Ok(storeId = 1L, shopifyShopId = 99L, apiKey = "shpat_fake")
@@ -59,5 +77,9 @@ class FakeMonolithService : MonolithService {
     createOrderCallCount = 0
     createOrderStatus = 200
     createOrderErrorBody = null
+    lastPutStoreApiKey = null
+    putStoreApiKeyCallCount = 0
+    putStoreApiKeyStatus = 200
+    putStoreApiKeyStoreId = 1L
   }
 }

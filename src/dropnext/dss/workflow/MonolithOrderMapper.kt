@@ -12,7 +12,7 @@ import dropnext.graphql.generated.getorderfordss.ProductVariant
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
-import java.util.*
+import java.util.Locale
 import kotlin.math.roundToLong
 
 /**

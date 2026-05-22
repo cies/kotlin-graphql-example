@@ -3,6 +3,7 @@ package dropnext.dss.handler
 import dropnext.dss.GraphQLClientCache
 import dropnext.dss.config.DssAppConfig
 import dropnext.dss.config.DssPaths
+import dropnext.dss.lib.dss.ShopAccessTokenCache
 import dropnext.dss.lib.dss.ShopifyAdminToken
 import dropnext.dss.lib.dss.dto.DeleteProductVariantsRequest
 import dropnext.dss.lib.dss.dto.UpsertProductVariantsRequest
@@ -12,6 +13,7 @@ import dropnext.dss.lib.monolith.MonolithService
 import dropnext.dss.lib.monolith.UpsertVariantsResult
 import dropnext.dss.lib.monolith.logMonolithFailure
 import dropnext.dss.shopify.ShopifySignatures
+import dropnext.dss.shopify.ShopifyWebhookTopic
 import dropnext.dss.shopify.graphqlResourceIdFromShopifyWebhook
 import dropnext.dss.shopify.shopDomainFromWebhookBody
 import dropnext.dss.shopify.shopMyshopifyHostFromWebhook
@@ -20,7 +22,6 @@ import dropnext.dss.shopify.toProductVariantItems
 import dropnext.dss.shopify.variantLegacyIdsFromProductWebhook
 import dropnext.dss.workflow.syncShopifyOrderToMonolith
 import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
-import dropnext.graphql.generated.GetOrderById
 import dropnext.graphql.generated.GetProductById
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.client.request.header
@@ -37,12 +38,13 @@ class WebhookHandlers(
   private val dssConfig: DssAppConfig,
   private val gqlClientCache: GraphQLClientCache,
   private val httpMonolithClient: MonolithService?,
+  private val shopTokens: ShopAccessTokenCache,
 ) {
   private val config = dssConfig.shopify
 
   suspend fun handleShopifyWebhook(call: ApplicationCall) {
     val hmacHeader = call.request.headers["X-Shopify-Hmac-Sha256"]
-    val topic = call.request.headers["X-Shopify-Topic"] ?: "unknown"
+    val topic = ShopifyWebhookTopic.parse(call.request.headers["X-Shopify-Topic"])
     val shopDomainHeader = call.request.headers["X-Shopify-Shop-Domain"]
     val body = call.receive<ByteArray>()
     if (!ShopifySignatures.verifyWebhook(hmacHeader, config.appClientSecret, body)) {
@@ -50,11 +52,11 @@ class WebhookHandlers(
       return
     }
     val bodyStr = body.decodeToString()
-    log.info { "Webhook verified topic=$topic shopDomainHeader=$shopDomainHeader bodyBytes=${body.size}" }
+    log.info { "Webhook verified topic=${topic.raw} shopDomainHeader=$shopDomainHeader bodyBytes=${body.size}" }
 
     val shopNorm = shopMyshopifyHostFromWebhook(shopDomainHeader, shopDomainFromWebhookBody(bodyStr))
     val token = if (shopNorm != null) {
-      when (val t = shopifyAdminTokenWithMonolithFallback(shopNorm, dssConfig, httpMonolithClient)) {
+      when (val t = shopifyAdminTokenWithMonolithFallback(shopNorm, shopTokens, httpMonolithClient)) {
         ShopifyAdminToken.Missing -> null
         is ShopifyAdminToken.Resolved -> t.token
       }
@@ -63,7 +65,7 @@ class WebhookHandlers(
     }
     if (shopNorm == null || token == null) {
       log.error {
-        "Webhook: no Admin token topic=$topic shopDomainHeader=$shopDomainHeader shopNorm=$shopNorm " +
+        "Webhook: no Admin token topic=${topic.raw} shopDomainHeader=$shopDomainHeader shopNorm=$shopNorm " +
           "(configure DSS_SHOP_ACCESS_TOKENS or OAuth env entry)"
       }
       call.respond(HttpStatusCode.OK)
@@ -72,11 +74,14 @@ class WebhookHandlers(
 
     val graphQLClient = gqlClientCache.forShop(shopNorm, config.apiVersion)
     when (topic) {
-      "products/create", "products/update" -> handleProductUpsert(graphQLClient, token, shopNorm, bodyStr, topic)
-      "products/delete" -> handleProductDelete(shopNorm, bodyStr)
-      "orders/create" -> handleOrderWebhook(graphQLClient, token, shopNorm, bodyStr, topic, syncToMonolith = true)
-      "orders/updated" -> handleOrderWebhook(graphQLClient, token, shopNorm, bodyStr, topic, syncToMonolith = dssConfig.syncOrderOnUpdated)
-      else -> log.info { "Webhook topic not handled: $topic" }
+      ShopifyWebhookTopic.ProductsCreate, ShopifyWebhookTopic.ProductsUpdate ->
+        handleProductUpsert(graphQLClient, token, shopNorm, bodyStr, topic.raw)
+      ShopifyWebhookTopic.ProductsDelete -> handleProductDelete(shopNorm, bodyStr)
+      ShopifyWebhookTopic.OrdersCreate ->
+        handleOrderWebhook(graphQLClient, token, shopNorm, bodyStr, topic.raw, syncToMonolith = true)
+      ShopifyWebhookTopic.OrdersUpdated ->
+        handleOrderWebhook(graphQLClient, token, shopNorm, bodyStr, topic.raw, syncToMonolith = dssConfig.syncOrderOnUpdated)
+      is ShopifyWebhookTopic.Other -> log.info { "Webhook topic not handled: ${topic.raw}" }
     }
     call.respond(HttpStatusCode.OK)
   }
@@ -159,13 +164,6 @@ class WebhookHandlers(
       syncShopifyOrderToMonolith(graphQLClient, token, shopNorm, httpMonolithClient, id, topic)
       return
     }
-    if (!syncToMonolith && httpMonolithClient != null) {
-      log.info { "Webhook $topic: monolith order sync skipped (set DSS_SYNC_ORDER_ON_UPDATED=true to enable)" }
-    }
-    val r = graphQLClient.execute(GetOrderById(GetOrderById.Variables(id))) {
-      header("X-Shopify-Access-Token", token)
-    }
-    val name = r.data?.order?.name
-    log.info { "Webhook order loaded id=$id name=$name errors=${r.errors}" }
+    log.info { "Webhook $topic acknowledged id=$id (monolith sync disabled)" }
   }
 }

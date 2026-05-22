@@ -4,6 +4,7 @@ import dropnext.dss.GraphQLClientCache
 import dropnext.dss.config.DssAppConfig
 import dropnext.dss.config.DssPaths
 import dropnext.dss.config.ShopifyConfig
+import dropnext.dss.lib.dss.ShopAccessTokenCache
 import dropnext.dss.lib.dss.ShopifyAdminToken
 import dropnext.dss.lib.dss.dto.ErrorResponse
 import dropnext.dss.lib.dss.dto.PutShopAccessTokenRequest
@@ -43,6 +44,7 @@ class DssHttpHandlers(
   private val gqlClientCache: GraphQLClientCache,
   private val fulfillmentService: DssFulfillmentService,
   private val monolithService: MonolithService? = null,
+  private val shopTokens: ShopAccessTokenCache,
 ) {
   suspend fun handleSyncShipments(call: ApplicationCall) {
     if (!call.requireDssInternalSecret(dssConfig.dssInternalSecret)) return
@@ -62,7 +64,7 @@ class DssHttpHandlers(
     }
     val token = call.request.shopifyAccessTokenFromHeader()
         ?: when (
-          val t = shopifyAdminTokenWithMonolithFallback(shop, dssConfig, monolithService)
+          val t = shopifyAdminTokenWithMonolithFallback(shop, shopTokens, monolithService)
         ) {
           ShopifyAdminToken.Missing ->
             return call.respond(
@@ -103,7 +105,7 @@ class DssHttpHandlers(
     }
     val token = call.request.shopifyAccessTokenFromHeader()
         ?: when (
-          val t = shopifyAdminTokenWithMonolithFallback(shop, dssConfig, monolithService)
+          val t = shopifyAdminTokenWithMonolithFallback(shop, shopTokens, monolithService)
         ) {
           ShopifyAdminToken.Missing ->
             return call.respond(
@@ -132,7 +134,7 @@ class DssHttpHandlers(
     val shop = normalizeShopDomain(body.shopifySubdomain)
       ?: return call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = "invalid shopify_subdomain"))
 
-    dssConfig.shopAccessTokens[shop] = body.apiKey
+    shopTokens[shop] = body.apiKey
     log.info { "PUT ${DssPaths.STORES_API_KEY}: token cached in memory for shop=$shop" }
 
     monolithService?.let { monolith ->

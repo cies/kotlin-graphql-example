@@ -4,6 +4,7 @@ import dropnext.dss.GraphQLClientCache
 import dropnext.dss.config.DssAppConfig
 import dropnext.dss.config.DssPaths
 import dropnext.dss.config.MonolithPaths
+import dropnext.dss.lib.dss.ShopAccessTokenCache
 import dropnext.dss.lib.dss.dto.UpdateStoreApiKeyRequest
 import dropnext.dss.lib.dss.legacyIdFromGid
 import dropnext.dss.lib.ktor.respondBadGatewayText
@@ -25,11 +26,15 @@ import dropnext.graphql.generated.ShopIdentity
 import dropnext.graphql.generated.SyncProductsPage
 import dropnext.graphql.generated.enums.WebhookSubscriptionTopic
 import io.github.oshai.kotlinlogging.KotlinLogging
-import io.ktor.client.*
-import io.ktor.client.request.*
-import io.ktor.http.*
-import io.ktor.server.application.*
-import io.ktor.server.response.*
+import io.ktor.client.HttpClient
+import io.ktor.client.request.header
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.ApplicationCall
+import io.ktor.server.response.header
+import io.ktor.server.response.respondRedirect
+import io.ktor.server.response.respondText
 
 
 private val log = KotlinLogging.logger {}
@@ -40,6 +45,7 @@ class OAuthHandlers(
   private val httpClient: HttpClient,
   private val gqlClientCache: GraphQLClientCache,
   private val httpMonolithClient: MonolithService?,
+  private val shopTokens: ShopAccessTokenCache,
 ) {
   private val shopifyConfig = dssConfig.shopify
 
@@ -85,7 +91,7 @@ class OAuthHandlers(
     val shopNode = identityResult.data?.shop
     val shopId = shopNode?.id?.let { legacyIdFromGid(it) } ?: 0L
     val domain = shopNode?.myshopifyDomain?.let { normalizeShopDomain(it) } ?: shop
-    dssConfig.shopAccessTokens[domain] = oauthResponse.accessToken
+    shopTokens[domain] = oauthResponse.accessToken
     log.info { "OAuth token cached in memory for shop=$domain" }
 
     val monolithPersistHtml =

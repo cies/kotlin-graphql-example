@@ -1,10 +1,10 @@
 package dropnext.dss.workflow
 
+import dropnext.graphql.generated.enums.CountryCode
 import dropnext.graphql.generated.enums.OrderDisplayFinancialStatus
 import dropnext.graphql.generated.enums.OrderDisplayFulfillmentStatus
 import dropnext.graphql.generated.getorderfordss.FulfillmentOrderConnection
-import dropnext.dss.lib.json.MonolithJson
-import dropnext.dss.lib.dss.dto.CreateShopifyOrderRequest
+import dropnext.graphql.generated.getorderfordss.MailingAddress
 import kotlin.test.Test
 
 class MonolithOrderMapperTest {
@@ -42,22 +42,190 @@ class MonolithOrderMapperTest {
   }
 
   @Test
-  fun `round-trips CreateShopifyOrderRequest through MonolithJson`() {
-    val req = orderToCreateShopifyOrderRequest("dropnext-staging", minimalOrder())
-    val json = MonolithJson.encodeToString(CreateShopifyOrderRequest.serializer(), req)
-    val decoded = MonolithJson.decodeFromString(CreateShopifyOrderRequest.serializer(), json)
-    assert(decoded.shopifySubdomain == "dropnext-staging")
-    assert(decoded.shopifyOrderId == 1001L)
-    assert(decoded.lineItems.size == 1)
-    assert(decoded.lineItems.single().productVariantId == 101L)
-    assert(decoded.lineItems.single().fulfillmentOrderId == 301L)
-    assert(decoded.fulfillmentStatus == null)
-  }
-
-  @Test
   fun `omits line items without resolvable fulfillment_order_id`() {
     val order = minimalOrder().copy(fulfillmentOrders = FulfillmentOrderConnection(edges = emptyList()))
     val req = orderToCreateShopifyOrderRequest("dropnext-staging", order)
     assert(req.lineItems.isEmpty())
+  }
+
+  @Test
+  fun `maps PARTIALLY_FULFILLED to partial`() {
+    val req =
+      orderToCreateShopifyOrderRequest(
+        "dropnext-staging",
+        minimalOrder(fulfillment = OrderDisplayFulfillmentStatus.PARTIALLY_FULFILLED),
+      )
+    assert(req.fulfillmentStatus == "partial")
+  }
+
+  @Test
+  fun `maps IN_PROGRESS to partial`() {
+    val req =
+      orderToCreateShopifyOrderRequest(
+        "dropnext-staging",
+        minimalOrder(fulfillment = OrderDisplayFulfillmentStatus.IN_PROGRESS),
+      )
+    assert(req.fulfillmentStatus == "partial")
+  }
+
+  @Test
+  fun `maps RESTOCKED to restocked`() {
+    val req =
+      orderToCreateShopifyOrderRequest(
+        "dropnext-staging",
+        minimalOrder(fulfillment = OrderDisplayFulfillmentStatus.RESTOCKED),
+      )
+    assert(req.fulfillmentStatus == "restocked")
+  }
+
+  @Test
+  fun `maps ON_HOLD to null`() {
+    val req =
+      orderToCreateShopifyOrderRequest(
+        "dropnext-staging",
+        minimalOrder(fulfillment = OrderDisplayFulfillmentStatus.ON_HOLD),
+      )
+    assert(req.fulfillmentStatus == null)
+  }
+
+  @Test
+  fun `maps unknown fulfillment status to null`() {
+    val req =
+      orderToCreateShopifyOrderRequest(
+        "dropnext-staging",
+        minimalOrder(fulfillment = OrderDisplayFulfillmentStatus.__UNKNOWN_VALUE),
+      )
+    assert(req.fulfillmentStatus == null)
+  }
+
+  @Test
+  fun `maps unknown financial status to unknown string`() {
+    val req =
+      orderToCreateShopifyOrderRequest(
+        "dropnext-staging",
+        minimalOrder(financial = OrderDisplayFinancialStatus.__UNKNOWN_VALUE),
+      )
+    assert(req.financialStatus == "unknown")
+  }
+
+  @Test
+  fun `maps REFUNDED financial status to refunded`() {
+    val req =
+      orderToCreateShopifyOrderRequest(
+        "dropnext-staging",
+        minimalOrder(financial = OrderDisplayFinancialStatus.REFUNDED),
+      )
+    assert(req.financialStatus == "refunded")
+  }
+
+  @Test
+  fun `maps PARTIALLY_PAID financial status to partially_paid`() {
+    val req =
+      orderToCreateShopifyOrderRequest(
+        "dropnext-staging",
+        minimalOrder(financial = OrderDisplayFinancialStatus.PARTIALLY_PAID),
+      )
+    assert(req.financialStatus == "partially_paid")
+  }
+
+  @Test
+  fun `omits line items whose variant is null`() {
+    val base = minimalOrder()
+    val withNullVariant = base.copy(
+      lineItems = dropnext.graphql.generated.getorderfordss.LineItemConnection(
+        edges = listOf(
+          dropnext.graphql.generated.getorderfordss.LineItemEdge(
+            node = base.lineItems.edges.single().node.copy(variant = null),
+          ),
+        ),
+      ),
+    )
+    val req = orderToCreateShopifyOrderRequest("dropnext-staging", withNullVariant)
+    assert(req.lineItems.isEmpty())
+  }
+
+  @Test
+  fun `maps shippingAddress when present`() {
+    val mailing = MailingAddress(
+      firstName = "Ada",
+      lastName = "Lovelace",
+      address1 = "10 Downing St",
+      address2 = "Apt 2",
+      city = "London",
+      province = "England",
+      provinceCode = "ENG",
+      countryCodeV2 = CountryCode.GB,
+      zip = "SW1A 2AA",
+      phone = "+44 20 7946 0958",
+    )
+    val req = orderToCreateShopifyOrderRequest("dropnext-staging", minimalOrder().copy(shippingAddress = mailing))
+    val s = req.shippingAddress
+    assert(s.firstName == "Ada")
+    assert(s.lastName == "Lovelace")
+    assert(s.address1 == "10 Downing St")
+    assert(s.address2 == "Apt 2")
+    assert(s.city == "London")
+    assert(s.province == "England")
+    assert(s.provinceCode == "ENG")
+    assert(s.countryCode == "GB")
+    assert(s.zip == "SW1A 2AA")
+    assert(s.phone == "+44 20 7946 0958")
+  }
+
+  @Test
+  fun `shippingAddress null mailing fields are coerced to empty strings on non-null DTO fields`() {
+    val mailing = MailingAddress(
+      address1 = null,
+      city = null,
+      countryCodeV2 = null,
+    )
+    val req = orderToCreateShopifyOrderRequest("dropnext-staging", minimalOrder().copy(shippingAddress = mailing))
+    assert(req.shippingAddress.address1 == "")
+    assert(req.shippingAddress.city == "")
+    assert(req.shippingAddress.countryCode == "")
+  }
+
+  @Test
+  fun `default shipping address is used when order has none`() {
+    val req = orderToCreateShopifyOrderRequest("dropnext-staging", minimalOrder().copy(shippingAddress = null))
+    assert(req.shippingAddress.address1 == "")
+    assert(req.shippingAddress.firstName == null)
+  }
+
+  @Test
+  fun `falls back to lineItems sum when totalPriceSet is non-positive`() {
+    val order = minimalOrder().copy(
+      totalPriceSet = dropnext.graphql.generated.getorderfordss.MoneyBag(
+        shopMoney = dropnext.graphql.generated.getorderfordss.MoneyV2(
+          amount = "0.00",
+          currencyCode = dropnext.graphql.generated.enums.CurrencyCode.USD,
+        ),
+      ),
+    )
+    val req = orderToCreateShopifyOrderRequest("dropnext-staging", order)
+    val lineSum = req.lineItems.sumOf { it.snapshotOfPriceInMinorUnits * it.quantity.toLong() }
+    assert(req.totalInMinorUnits == lineSum)
+  }
+
+  @Test
+  fun `falls back to lineItems sum when totalPriceSet is unparseable`() {
+    val order = minimalOrder().copy(
+      totalPriceSet = dropnext.graphql.generated.getorderfordss.MoneyBag(
+        shopMoney = dropnext.graphql.generated.getorderfordss.MoneyV2(
+          amount = "n/a",
+          currencyCode = dropnext.graphql.generated.enums.CurrencyCode.USD,
+        ),
+      ),
+    )
+    val req = orderToCreateShopifyOrderRequest("dropnext-staging", order)
+    val lineSum = req.lineItems.sumOf { it.snapshotOfPriceInMinorUnits * it.quantity.toLong() }
+    assert(req.totalInMinorUnits == lineSum)
+  }
+
+  @Test
+  fun `falls back to raw createdAt when parsing fails`() {
+    val order = minimalOrder().copy(createdAt = "not-a-date")
+    val req = orderToCreateShopifyOrderRequest("dropnext-staging", order)
+    assert(req.createdAt == "not-a-date")
   }
 }

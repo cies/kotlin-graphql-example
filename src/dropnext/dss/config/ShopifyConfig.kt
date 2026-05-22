@@ -39,16 +39,20 @@ data class ShopifyConfig(
      * Empty → use prod image default 9999;
      * unset PORT → **8080** for local `./gradlew run` without env.
      */
-    private fun resolveServerPort(): Int {
-      val raw = System.getenv("PORT")
-      val parsed = EnvVars.optionalNormalized("PORT")?.toIntOrNull()?.takeIf { it in 1..65535 }
-      return when {
+    private fun resolveServerPort(): Int =
+      resolveServerPort(
+        System.getenv("PORT"),
+        EnvVars.optionalNormalized("PORT")?.toIntOrNull()?.takeIf { it in 1..65535 },
+      )
+
+    /** Pure decision extracted for unit testing; see [resolveServerPort] for the env-bound caller. */
+    internal fun resolveServerPort(raw: String?, parsed: Int?): Int =
+      when {
         parsed != null -> parsed
         raw == null -> 8080
         raw.isBlank() -> 9999
         else -> 8080
       }
-    }
 
     private fun env(name: String): String? = EnvVars.optionalNormalized(name)
   }

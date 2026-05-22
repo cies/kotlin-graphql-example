@@ -1,7 +1,5 @@
 package dropnext.dss.config
 
-import java.util.concurrent.ConcurrentHashMap
-
 
 data class DssAppConfig(
 
@@ -24,14 +22,6 @@ data class DssAppConfig(
 
   /** When set, DSS REST routes require header `X-DSS-Internal-Secret` (except health/install/oauth/webhooks). */
   val dssInternalSecret: String?,
-
-  /**
-   * Normalized `shop.myshopify.com` → Admin API access token. No server-side database; callers pass
-   * `X-Shopify-Access-Token` or configure this map via env (see [shopAccessTokensFromEnv]).
-   * Backed by a [ConcurrentHashMap] so OAuth callbacks, webhook handlers, and the monolith-fallback
-   * token resolver can all write concurrently without data races.
-   */
-  val shopAccessTokens: MutableMap<String, String>,
 
   val enableDemoRoutes: Boolean,
 
@@ -88,7 +78,6 @@ data class DssAppConfig(
         monolithApiKey = key,
         monolithCreateOrderPath = path,
         dssInternalSecret = secret,
-        shopAccessTokens = ConcurrentHashMap(shopAccessTokensFromEnv(enableTestHarness = testHarness)),
         enableDemoRoutes = demos,
         enableTestHarness = testHarness,
         sandboxFakeShopify = fakeShopify,
@@ -108,7 +97,7 @@ data class DssAppConfig(
 
 
 
-private fun computeRuntimeConfigIssues(dssConfig: DssAppConfig): List<String> {
+internal fun computeRuntimeConfigIssues(dssConfig: DssAppConfig): List<String> {
   val config = dssConfig.shopify
   val issues = mutableListOf<String>()
 
