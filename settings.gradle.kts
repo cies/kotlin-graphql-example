@@ -1,4 +1,3 @@
-plugins {
-    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
-}
-rootProject.name = "kotlin-graphql-example"
+// Without this, the resulting binary gets the name of the parent directory
+// (breaks Docker image / Gradle distribution naming).
+rootProject.name = "dropnext-shopify-service"

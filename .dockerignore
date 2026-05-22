@@ -1,13 +1,33 @@
-.git
-.idea
-.vscode
-.gradle
-.kotlin
-build
-notes
-data
-**/*.iml
-*.log
+# Build outputs — regenerated inside the image.
+build/
+.gradle/
+
+# Local environment / secrets — never bake into images.
 .env
 .env.*
 !.env.example
+
+# IDE / editor noise.
+.idea/
+.vscode/
+*.iml
+.DS_Store
+
+# VCS metadata is not needed at build time. If you ever want `git rev-parse` inside
+# the build, remove this line and pass VERSION_TAG via --build-arg from the host instead.
+.git/
+.gitignore
+.gitattributes
+
+# Docs and Claude-only files — not needed in the runtime image.
+docs/
+README.md
+CLAUDE.md
+.claude/
+
+# Tests. Runtime image does not need them; CI runs `./gradlew test` separately.
+test/
+
+# Misc.
+*.log
+*.swp

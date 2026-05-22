@@ -1,6 +1,6 @@
 # Testing with `FakeMonolithService`
 
-Use the in-memory [`FakeMonolithService`](../src/test/kotlin/dropnext/dss/testing/fake/FakeMonolithService.kt) when code depends on [`MonolithService`](../src/main/kotlin/dropnext/dss/lib/monolith/MonolithService.kt) and you want to assert outbound monolith behavior **without HTTP**.
+Use the in-memory [`FakeMonolithService`](../test/dropnext/dss/testing/fake/FakeMonolithService.kt) when code depends on [`MonolithService`](../src/dropnext/dss/lib/monolith/MonolithService.kt) and you want to assert outbound monolith behavior **without HTTP**.
 
 Do **not** use it for mapper tests, JSON contract tests, or shop-domain helpers — those are pure unit tests.
 
@@ -12,7 +12,7 @@ Do **not** use it for mapper tests, JSON contract tests, or shop-domain helpers 
 
 ## Example
 
-[`WebhookMonolithSyncTest`](../src/test/kotlin/dropnext/dss/lib/dss/WebhookMonolithSyncTest.kt) calls [`postMappedOrderToMonolith`](../src/main/kotlin/dropnext/dss/lib/dss/MonolithOrderSync.kt) with a fake and asserts the recorded `CreateShopifyOrderRequest`.
+[`WebhookMonolithSyncTest`](../test/dropnext/dss/workflow/WebhookMonolithSyncTest.kt) calls [`postMappedOrderToMonolith`](../src/dropnext/dss/workflow/MonolithOrderSync.kt) with a fake and asserts the recorded `CreateShopifyOrderRequest`.
 
 Configure the fake:
 
@@ -29,4 +29,4 @@ Configure the fake:
 | `MONOLITH_CREATE_ORDER_PATH` | Default `/orders` |
 | `DSS_ALLOW_INSECURE_MONOLITH` | `true` for local `http://` stubs |
 
-See [`DssAppConfig`](../src/main/kotlin/dropnext/dss/lib/dss/DssAppConfig.kt) and [`README.md`](../README.md).
+See [`DssAppConfig`](../src/dropnext/dss/config/DssAppConfig.kt) and [`README.md`](../README.md).

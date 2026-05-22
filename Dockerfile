@@ -1,4 +1,4 @@
-FROM eclipse-temurin:24-jdk AS build
+FROM eclipse-temurin:25-jdk AS build
 WORKDIR /app
 
 COPY gradle gradle
@@ -10,8 +10,8 @@ COPY src src
 
 # Fail fast before Gradle download/bootstrap (runtime evidence-friendly).
 RUN test -s /app/openapi.json \
-  && test -f /app/src/main/kotlin/dropnext/dss/lib/dss/DssAppConfig.kt \
-  || { echo >&2 '[dss-docker] openapi.json missing or Kotlin sources truncated (restore src/main/kotlin and commit).'; exit 1; }
+  && test -f /app/src/dropnext/dss/lib/dss/DssAppConfig.kt \
+  || { echo >&2 '[dss-docker] openapi.json missing or Kotlin sources truncated (restore src/dropnext and commit).'; exit 1; }
 
 RUN chmod +x gradlew && ./gradlew --no-daemon installDist -x test
 RUN set -eux; \
@@ -20,7 +20,7 @@ RUN set -eux; \
     cp -R "$install_dir" /app/dist; \
     printf '%s' "$app_name" > /app/dist/.app_name
 
-FROM eclipse-temurin:24-jre AS runtime
+FROM eclipse-temurin:25-jre AS runtime
 WORKDIR /app
 
 ENV PORT=9999

@@ -23,6 +23,6 @@ End-to-end fulfillment verification (monolith → DSS → Shopify) is documented
 
 1. **Pure unit** — mappers, `shopMyshopifyHostFromWebhook`, `MonolithErrorBody.parse` (no fakes, no I/O).
 2. **Serialization / contract** — example JSON from `openapi.json` ↔ generated DTOs; `CreateShopifyOrderRequest` round-trip via `MonolithJson`.
-3. **Business logic with fakes** — `FakeMonolithService` only at the [`MonolithService`](../src/main/kotlin/dropnext/dss/lib/monolith/MonolithService.kt) boundary (see [TESTING_WITH_FAKE_SERVICES.md](TESTING_WITH_FAKE_SERVICES.md)).
+3. **Business logic with fakes** — `FakeMonolithService` only at the [`MonolithService`](../src/dropnext/dss/lib/monolith/MonolithService.kt) boundary (see [TESTING_WITH_FAKE_SERVICES.md](TESTING_WITH_FAKE_SERVICES.md)).
 
-`CodeStyleKonsistTest` guards wildcard imports and hand-written `dropnext.dss.lib.dss.dto` under `src/main` (plain Kotlin, no extra test dependencies).
+`ArchitectureTest` (Konsist) guards package-layer dependencies, the no-reflection rule, wildcard imports, and hand-written DTOs under `dropnext.dss.lib.dss.dto` (which must come from `openApiGenerate`).

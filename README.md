@@ -1,154 +1,187 @@
-# Example of using GraphQL from Kotlin
+DropNext Shopify Service
+========================
 
-This project is a simple application that uses the
-[GraphQL Kotlin Gradle plugin](https://expediagroup.github.io/graphql-kotlin/docs/plugins/gradle-plugin)
-to auto-generate GraphQL client data model that's deserialized with `kotlinx.serialization`.
-The [Ktor based client](https://github.com/ExpediaGroup/graphql-kotlin/tree/master/clients/graphql-kotlin-ktor-client)
-is used to communicate with the Shopify Admin GraphQL API.
-
-It demonstrates:
-
-* Compile-time type checking of GraphQL queries against the schema.
-* Proper IDE support for writing queries in IntelliJ IDEA (syntax + error highlighting, and autocomplete).
-* Kotlin project (no TypeScript or JavaScript).
-
-It makes use of Shopify's GraphQL API, which has a huge schema (more about the challenges that it posed below).
+A stateless service that bridges retailer Shopify stores to the DropNext platform (`dropnext-monolith`):
+* OAuth install flow,
+* catalog/order webhooks,
+* typed Admin GraphQL calls, and
+* forwarding of order events to the [`dropnext-monolith`](../dropnext/dropnext-monolith).
 
 
-## The JetBrains [GraphQL IDE plugin](https://plugins.jetbrains.com/plugin/8097-graphql)
+### The stack
 
-With this plugin, you get syntax + error highlighting and autocomplete on GraphQL queries in IntelliJ IDEA.
-It also allows you to run queries against an endpoint directly from the IDE.
+The tech stack is minimalistic, optimized for development velocity and AI-readiness.
+Its application layer runs on the JVM and primarily uses libraries from the Kotlin ecosystem.
 
-It seems, though, that the plugin "introspection" (downloading of the schema) does not work well with the Shopify GraphQL API.
-Strange enough, it did work with the Pokémon GraphQL API.
+* [Kotlin](https://kotlinlang.org)
+* [Ktor](https://ktor.io/) —
+Lightweight HTTP server (CIO engine) and client (with OkHttp engine). Used both as the inbound
+server (OAuth, webhooks, DSS REST) and as the outbound client (Shopify Admin API, monolith forwarding).
+That Kotlin's defacto standard GraphQL stack builds on top of KTor is the main reason this project is not
+part of `dropnext-monolith` (which builds on `http4k`): to avoid dependency hell.
+* [graphql-kotlin](https://github.com/ExpediaGroup/graphql-kotlin) —
+Compile-time-typed GraphQL client. Queries live as `*.graphql` files in `src/resources/` and the
+Gradle plugin generates typed Kotlin classes from them — schema drift fails the build instead of
+the producing error at runtime.
+* [kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization) —
+Powerful and minimalistic (no reflection) lib for JSON. Used for both inbound Shopify payloads
+and outbound monolith DTOs.
+* [openapi-generator](https://github.com/OpenAPITools/openapi-generator) —
+Generates Kotlin DTOs from [`openapi.json`](./openapi.json) (the canonical `DSS <-> monolith` contract).
+Handwritten copies of those DTOs are explicitly forbidden by `ArchitectureTest`.
+* [Konsist](https://docs.konsist.lemonappdev.com/) —
+Kotlin-native architecture tests; enforces package-layer dependencies and the "no reflection" rule.
 
-To mitigate this, we use the Gradle plugin's introspection feature (the `graphqlIntrospectSchema` task) to fetch the schema.
-The default location (in `build/`) was not accessible to the IDE plugin,
-so the Gradle GraphQL plugin is configured to put it in `src/main/graphql-schema`.
-Using `src/main/graphql.config.yml` we configure the IDE plugin to look for the schema there.
+
+### Project goals
+
+* Be a thin, stateless bridge between Shopify and the monolith — no in-memory session/token state.
+* Discoverable and functional architecture (CTRL-click yourself to mastery).
+* Quick developer cycles (fast recompiles, few dependencies, no JVM reflection).
+* 12-factor principles (configuration by env vars).
+* Test with **fakes**, not mocks (see [docs/TESTING.md](docs/TESTING.md)).
+
+Non-goals:
+* Multi-tenant session storage — the platform boundary is responsible for idempotency and dedup.
+* Async/reactive/coroutines beyond what Ktor's CIO engine provides out of the box.
 
 
-## OpenAPI / monolith DTOs
+### Our preferred IDE
 
-Monolith request/response bodies are **generated** from [`openapi.json`](openapi.json) (OpenAPI **3.0.0**, spec validation enabled in Gradle). Inbound DSS webhook contracts live under **`x-webhooks`** in the spec (3.0 has no root `webhooks` key):
+See [docs/setup-intellij-idea.md](./docs/setup-intellij-idea.md) for IntelliJ IDEA setup and troubleshooting.
 
-```powershell
-.\gradlew.bat openApiGenerate
+
+### Running the project for development
+
+1. Copy `.env.example` to `.env` and fill in the required Shopify credentials.
+2. Expose the server with HTTPS (e.g. [ngrok](https://ngrok.com/)) and set `PUBLIC_BASE_URL` to that origin (no trailing slash). Shopify requires HTTPS for OAuth and webhook callbacks.
+3. Run the app:
+
+   ```sh
+   ./gradlew run
+   ```
+
+4. Point your browser to `http://localhost:{PORT}/install?shop=your-dev-store.myshopify.com` to start the OAuth flow.
+5. Optional: set `ENABLE_TEST_HARNESS=true` and open `/dev/test-harness` for an interactive page that hits DSS/Demo routes against a sandbox shop (no real Shopify calls when `DSS_SANDBOX_FAKE_SHOPIFY=true`).
+
+
+### Build deployable containers
+
+```sh
+docker build -t dropnext-shopify-service:local .
+docker run --rm --env-file .env -p 8080:8080 dropnext-shopify-service:local
 ```
 
-| Setting | Value |
-| ------- | ----- |
-| Generator | `kotlin` + `jvm-ktor` |
-| Output | `build/generated/openapi/.../dropnext/dss/lib/dss/dto/` |
-| Policy | **Models only** (`apis=false`) — HTTP stays in hand-written `HttpMonolithService` |
+If you set `PORT` to a different value, publish the same port on both sides (`-p 9090:9090` when `PORT=9090`).
 
-Do not add hand-written copies of `CreateShopifyOrderRequest` or other spec DTOs. If codegen fails, fix the schema in `openapi.json`, then re-run `openApiGenerate` (or any compile task).
+`docker-compose.yml` provides three profiles:
 
-## Building locally
-
-This project uses Gradle and you can build locally using
-
-```shell script
-gradle clean build
+```sh
+docker compose up --build app                            # standard
+docker compose --profile harness up --build app-harness  # ENABLE_TEST_HARNESS=true
+docker compose --profile local-monolith up app-local-monolith  # DSS_ALLOW_INSECURE_MONOLITH=true, dev-only
 ```
 
-Codegen and IDE tooling use the public Shopify Admin schema proxy (`https://shopify.dev/admin-graphql-direct-proxy/2026-04`); no access token is required for `graphqlIntrospectSchema` or `graphqlGenerateClient`.
 
-At runtime, the app calls the **shop-specific** endpoint `https://{shop}/admin/api/{version}/graphql.json` with the access token.
+### Codegen
 
-## Docker workflow
+#### GraphQL (Shopify Admin API)
 
-This repository includes `Dockerfile`, `.dockerignore`, `docker-compose.yml`, and `.env.example`.
-The container runs the same Ktor service and uses the same environment variables as local runs.
-
-### Prepare environment variables
-
-Copy `.env.example` to `.env` and provide at least:
-
-* `SHOPIFY_APP_CLIENT_ID`
-* `SHOPIFY_APP_CLIENT_SECRET`
-* `SHOPIFY_SCOPES`
-* `PUBLIC_BASE_URL`
-
-PowerShell:
-
-```powershell
-Copy-Item .env.example .env
-```
-
-### Build and run with Docker
-
-Build:
-
-```bash
-docker build -t kotlin-shopify-app:local .
-```
-
-Run with env file:
-
-```bash
-docker run --rm --env-file .env -p 8080:8080 kotlin-shopify-app:local
-```
-
-If you set `PORT` to a different value, publish the same port on both sides (for example `-p 9090:9090` when `PORT=9090`).
-
-### Run with Docker Compose profiles
-
-Standard app:
-
-```bash
-docker compose up --build app
-```
-
-Test harness profile (`ENABLE_TEST_HARNESS=true`):
-
-```bash
-docker compose --profile harness up --build app-harness
-```
-
-Local monolith profile (`DSS_ALLOW_INSECURE_MONOLITH=true`, local-only):
-
-```bash
-docker compose --profile local-monolith up --build app-local-monolith
-```
-
-Do not commit real secrets in `.env`; use your platform secret manager in production.
-
-## Shopify Partner app: OAuth, Admin GraphQL, webhooks, orders, fulfillment
-
-The runnable app is a **Ktor server** (`shopify.service.app.ShopifyServerKt`) that implements the [authorization code grant](https://shopify.dev/docs/apps/auth/oauth/getting-started), syncs catalog pages with variants, registers product and order webhooks, loads full **order** data when webhooks fire, optional **DSS** internal REST (fulfillment sync, tracking), optional **monolith** forwarding on `orders/create`, and (when enabled) demo endpoints to create fulfillments and update tracking. Incoming webhooks are verified with `X-Shopify-Hmac-Sha256`.
-
-Architecture notes:
-
-* The app is intentionally **stateless**. It does not keep in-memory stores for OAuth/token/order state.
-* Routing stays lightweight; request handling lives in dedicated handlers/services.
-* Tests prefer **fakes** over mocks/stubs; see [docs/TESTING.md](docs/TESTING.md).
-* Production code avoids `lateinit`, and favors immutable `val` modeling.
-
-### API version
-
-The project targets Admin API **`2026-04`**. Keep these in sync when you change versions:
+The project targets Admin API **`2026-04`**. Keep these in sync when changing versions:
 
 * `graphql.client.endpoint` in `build.gradle.kts`
-* `graphql.config.yml` (IDE plugin URL)
-* Optional env `SHOPIFY_API_VERSION` (defaults to `2026-04` in `ShopifyConfig`)
+* `graphql.config.yml` (IDE plugin URL, if present)
+* `SHOPIFY_API_VERSION` env var (default in `ShopifyConfig.kt`)
 
-After changing the version, run `./gradlew graphqlIntrospectSchema graphqlGenerateClient` and fix any schema drift.
+After bumping the version, run `./gradlew graphqlIntrospectSchema graphqlGenerateClient` and fix any schema drift.
 
-### Partner Dashboard
+The schema is committed at `src/graphql-schema/schema.graphql` (so the IDE plugin can find it).
 
-Create or use a Partner app, set **Allowed redirection URL(s)** to exactly:
+#### OpenAPI (monolith DTOs)
 
-`{PUBLIC_BASE_URL}{OAUTH_REDIRECT_PATH}` (default path `/oauth/callback`).
+Monolith request/response bodies are **generated** from [`openapi.json`](openapi.json)
+(OpenAPI 3.0, spec validation enabled in Gradle).
+Inbound DSS webhook contracts live under `x-webhooks` in the spec (3.0 has no root `webhooks` key).
 
-For local development, expose the server with **HTTPS** (e.g. [ngrok](https://ngrok.com/)) and set `PUBLIC_BASE_URL` to that origin (no trailing slash).
+```sh
+./gradlew openApiGenerate
+```
+
+* Generator: `kotlin` + `jvm-ktor`
+* Output: `build/generated/openapi/.../dropnext/dss/lib/dss/dto/`
+* Policy: **Models only** (`apis=false`) — HTTP stays in handwritten `HttpMonolithService`
+
+Do not add handwritten copies of `CreateShopifyOrderRequest` or other spec DTOs.
+If codegen fails, fix the schema in `openapi.json`, then re-run `openApiGenerate` (or any compile task).
+
+
+### The JetBrains [GraphQL IDE plugin](https://plugins.jetbrains.com/plugin/8097-graphql)
+
+With this plugin, you get syntax + error highlighting and autocomplete on GraphQL queries in IntelliJ IDEA.
+It also lets you run queries against an endpoint directly from the IDE.
+
+The plugin's introspection (downloading of the schema) does not work well with the Shopify GraphQL API.
+To mitigate, we use the Gradle plugin's introspection (the `graphqlIntrospectSchema` task) and
+point the IDE plugin at the committed `src/graphql-schema/schema.graphql`.
+
+
+### Shopify Partner app
+
+* Create or use a Partner app and set **Allowed redirection URL(s)** to exactly `{PUBLIC_BASE_URL}{OAUTH_REDIRECT_PATH}`
+(default path `/oauth/callback`).
+* Suggested scopes (trim to what your app actually needs; mirror in the Partner Dashboard):
+  * `read_products` — catalog sync and product webhooks
+  * `read_inventory`, `read_locations` — optional, if you extend inventory sync
+  * `write_webhooks` — `webhookSubscriptionCreate` on install
+  * `read_orders` — order webhooks and `GetOrderById`
+  * `write_merchant_managed_fulfillment_orders` (and matching `read_*`, per [access scopes](https://shopify.dev/docs/api/usage/access-scopes)) — create fulfillments and tracking from the app
+* Example: `read_products,read_orders,write_webhooks,write_merchant_managed_fulfillment_orders,read_merchant_managed_fulfillment_orders`
+
 
 ### Hosted deployment
 
-* **App URL**: `PUBLIC_BASE_URL` must be the HTTPS origin Shopify uses to reach your app (production domain or tunnel). It is used for OAuth redirects and webhook callback URLs.
-* **Listen address**: The server binds to `0.0.0.0` so it works in containers and typical PaaS hosting.
-* **Access tokens**: The server is **stateless** — it does not persist Admin API tokens. After OAuth, the success page shows how to set **`DSS_SHOP_ACCESS_TOKENS`** (or use **`X-Shopify-Access-Token`** on DSS requests). Webhooks and `/demo/*` resolve the token from that env map for each shop.
+* **App URL**: `PUBLIC_BASE_URL` must be the HTTPS origin Shopify uses to reach this service.
+* **Listen address**: binds `0.0.0.0` so it works in containers and typical PaaS hosting.
+* **Access tokens**: the server is **stateless** — it does not persist Admin API tokens.
+After OAuth, the success page shows how to set `DSS_SHOP_ACCESS_TOKENS` (or use `X-Shopify-Access-Token` on DSS requests).
+Webhooks and `/demo/*` resolve the token from that env map for each shop.
+
+
+### Webhooks registered on install
+
+Subscriptions all use the same HTTPS callback: `{PUBLIC_BASE_URL}/webhooks/shopify`.
+
+* `PRODUCTS_CREATE`, `PRODUCTS_UPDATE`, `PRODUCTS_DELETE`
+* `ORDERS_CREATE`, `ORDERS_UPDATED`
+
+On `products/create` and `products/update`, the app parses the webhook body for the resource id and runs `GetProductById`. On `orders/create`, if `MONOLITH_BASE_URL` is set, it runs `GetOrderForDss` and POSTs to the monolith. On `orders/updated`, monolith sync only runs when `DSS_SYNC_ORDER_ON_UPDATED=true` (default off to avoid duplicate POSTs).
+
+**Shop domain:** webhooks use `X-Shopify-Shop-Domain` (forward this header through your reverse proxy). DSS logs include a per-request `trace_id` (Logback MDC) and may return `X-Trace-Id` on responses. Monolith error JSON may include a separate `monolith_trace_id` in WARN logs.
+
+
+### DSS internal REST
+
+OpenAPI (human-readable mirror): [`docs/openapi/dss-api.yaml`](docs/openapi/dss-api.yaml).
+**Canonical:** [`openapi.json`](openapi.json) at repo root (Gradle `openApiGenerate` uses it).
+
+* `POST /sync-shipments-with-fulfillments` — accepts `TrackingUpdateRequest` (tracking → Shopify).
+* `POST /tracking-update` — accepts `SyncShipmentsWithFulfillmentsRequest` sync payload.
+* `POST /tracking-updates` — alias matching the tracking payload.
+
+Pass `X-Shopify-Access-Token` or configure `DSS_SHOP_ACCESS_TOKENS`.
+
+
+### Security notes (production)
+
+* Use **HTTPS** everywhere between clients, monolith, and this service;
+set `DSS_ALLOW_INSECURE_MONOLITH=true` only on developer machines.
+* Set `DSS_INTERNAL_SECRET` so internal REST is not open on the network;
+the header is compared in **constant time** to reduce timing leaks.
+* **Secrets in env**: `DSS_SHOP_ACCESS_TOKENS` and `SANDBOX_ACCESS_TOKEN` are as sensitive as passwords —
+use a secrets manager in production, not committed `.env` files.
+* The HTTP client does **not** log request bodies (avoids leaking tokens to logs).
+Unhandled server errors return a generic message; details stay in server logs only.
+
 
 ### Environment variables
 
@@ -156,7 +189,7 @@ For local development, expose the server with **HTTPS** (e.g. [ngrok](https://ng
 | -------- | -------- | ----------- |
 | `SHOPIFY_APP_CLIENT_ID` | yes | App Client ID (OAuth client id used for install flow) |
 | `SHOPIFY_APP_CLIENT_SECRET` | yes | App secret (OAuth HMAC, token exchange, webhook HMAC) |
-| `SHOPIFY_SCOPES` | yes | Comma-separated scopes (see below) |
+| `SHOPIFY_SCOPES` | yes | Comma-separated scopes (see above) |
 | `PUBLIC_BASE_URL` | yes | Public https origin of this server (tunnel URL in dev) |
 | `OAUTH_REDIRECT_PATH` | no | Default `/oauth/callback` (must match Partner redirect URL) |
 | `SHOPIFY_API_VERSION` | no | Default `2026-04` (keep in sync with `build.gradle.kts` / `graphql.config.yml`) |
@@ -177,72 +210,16 @@ For local development, expose the server with **HTTPS** (e.g. [ngrok](https://ng
 
 Legacy compatibility: `SHOPIFY_API_KEY` and `SHOPIFY_API_SECRET` are still accepted as fallbacks when the new `SHOPIFY_APP_CLIENT_ID` / `SHOPIFY_APP_CLIENT_SECRET` vars are not set.
 
-### Security notes (production)
-
-* Use **HTTPS** everywhere between clients, monolith, and this service; set `DSS_ALLOW_INSECURE_MONOLITH=true` only on developer machines.
-* Set **`DSS_INTERNAL_SECRET`** so internal REST is not open on the network; the header is compared in **constant time** to reduce timing leaks.
-* **Secrets in env**: `DSS_SHOP_ACCESS_TOKENS` and `SANDBOX_ACCESS_TOKEN` are as sensitive as passwords — use a secrets manager in production, not committed `.env` files.
-* The HTTP client does **not** log request bodies (avoids leaking tokens to logs). Unhandled server errors return a generic message; details stay in server logs only.
-
-**Suggested scopes** (trim to what your app needs; configure the same list in the Partner Dashboard):
-
-* `read_products` - catalog sync and product webhooks
-* `read_inventory`, `read_locations` - optional, if you extend inventory sync
-* `write_webhooks` - `webhookSubscriptionCreate` on install
-* `read_orders` - order webhooks and `GetOrderById`
-* `write_merchant_managed_fulfillment_orders` (and the matching `read_*` scope for fulfillment orders, per [access scopes](https://shopify.dev/docs/api/usage/access-scopes)) - create fulfillments and tracking from the app; exact names may vary by fulfillment setup
-
-Example:
-
-`read_products,read_orders,write_webhooks,write_merchant_managed_fulfillment_orders,read_merchant_managed_fulfillment_orders`
-
-### Webhooks registered on install
-
-Subscriptions use the same HTTPS callback: `{PUBLIC_BASE_URL}/webhooks/shopify`.
-
-* `PRODUCTS_CREATE`, `PRODUCTS_UPDATE`, `PRODUCTS_DELETE`
-* `ORDERS_CREATE`, `ORDERS_UPDATED`
-
-On `products/create` and `products/update`, the app parses the webhook body for the resource id and runs `GetProductById`. On `orders/create`, if `MONOLITH_BASE_URL` is set, it runs `GetOrderForDss` and POSTs to the monolith. On `orders/updated`, monolith sync runs only when `DSS_SYNC_ORDER_ON_UPDATED=true` (default off to avoid duplicate POSTs).
-
-**Shop domain:** webhooks use `X-Shopify-Shop-Domain` (forward this header through your reverse proxy). DSS logs include a per-request **`trace_id`** (Logback MDC) and may return **`X-Trace-Id`** on responses. Monolith error JSON may include a separate `monolith_trace_id` in WARN logs.
-
-### DSS internal REST
-
-OpenAPI (human-readable mirror): [`docs/openapi/dss-api.yaml`](docs/openapi/dss-api.yaml). **Canonical:** [`openapi.json`](openapi.json) at repo root (Gradle `openApiGenerate` uses it). **`POST /sync-shipments-with-fulfillments`** accepts **`TrackingUpdateRequest`** (tracking → Shopify); **`POST /tracking-update`** accepts **`SyncShipmentsWithFulfillmentsRequest`** sync payload; **`POST /tracking-updates`** is an alias matching the tracking payload. Pass **`X-Shopify-Access-Token`** or configure **`DSS_SHOP_ACCESS_TOKENS`**. Dummy routes **`/dummy1`/`/dummy2`** are not served anymore.
-
-### Run
-
-```shell script
-gradle run
-```
-
-With **`ENABLE_TEST_HARNESS=true`**, open `http://localhost:{PORT}/dev/test-harness` for health, DSS fulfillment paths, and **demo** routes (`/demo/*` is included automatically). Use the page’s **Shopify access token** field or env for Admin API calls.
-
-1. Open `http://localhost:{PORT}/install?shop=your-dev-store.myshopify.com` (use the HTTP port Ktor listens on).
-2. Finish Shopify OAuth; the success page shows a sample catalog sync and webhook registration logs per topic.
-3. Change a product or create an order in the dev store; check server logs for verified webhooks and follow-up GraphQL fetches.
-4. **Demo routes** (on when **`ENABLE_DEMO_ROUTES=true`** *or* **`ENABLE_TEST_HARNESS=true`**): `GET /demo/products?shop=...` — paginated products with variants (`first`, optional `after` cursor).
-5. `GET /demo/order?shop=...&id=` — full order by GID or numeric id.
-6. **Fulfillment demos** (JSON body, `Content-Type: application/json`):
-   * `POST /demo/fulfillment/create` — body: `shop`, `fulfillmentOrderId`, `trackingNumber`, optional `company`, `trackingUrl`, `notifyCustomer` (uses Admin `fulfillmentCreate` with tracking).
-   * `POST /demo/fulfillment/tracking` — body: `shop`, `fulfillmentId`, `trackingNumber`, optional `company`, `trackingUrl`, `notifyCustomer` (uses `fulfillmentTrackingInfoUpdate`).
-
-Demo routes are off by default; they are not authenticated beyond knowing an installed shop — keep them disabled in production unless you add your own protection.
-
-### Notes
-
-* If webhook registration returns user errors (e.g. duplicate subscription), check logs; delivery may still work for existing subscriptions.
-* GraphQL `URL` scalar handling uses the GraphQL Kotlin client defaults (Kotlin `String` typealias).
-* Order webhooks can be delivered more than once. Because this app is stateless, deduplication is not kept in-process; multi-instance deployments should use persistent idempotency at the platform boundary.
 
 ### Troubleshooting
 
-* Startup exits quickly: verify required vars `SHOPIFY_APP_CLIENT_ID` and `SHOPIFY_APP_CLIENT_SECRET` (or legacy `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET`), plus `SHOPIFY_SCOPES` and `PUBLIC_BASE_URL`.
-* OAuth callback mismatch in Shopify: ensure `{PUBLIC_BASE_URL}{OAUTH_REDIRECT_PATH}` exactly matches Partner Dashboard redirect URL.
-* DSS auth failures (`401`): provide `X-Shopify-Access-Token` or configure `DSS_SHOP_ACCESS_TOKENS`; include `X-DSS-Internal-Secret` when `DSS_INTERNAL_SECRET` is set.
-* `DSS_SHOP_ACCESS_TOKENS` parse issues: use comma-separated `shop.myshopify.com|shpat_...` pairs.
-* Log says `[monolith] MONOLITH_BASE_URL is unset` but you configured it in `.env` or Dokploy UI: duplicate `MONOLITH_BASE_URL` / `MONOLITH_API_KEY` lines (often an empty trailing block pasted from templates) cause **last value wins**. Remove the trailing empty duplicates so only one assignment remains; redeploy/restart (see [.env.example](.env.example) comment above the monolith vars).
-* **`Monolith store api-key … status=404` with HTML `<h1>Not Found`**: DSS hit `{MONOLITH_BASE_URL}/stores/api-key` (before optional prefix). Use the **REST API domain** DropNext exposes (often `api.…`), or set **`MONOLITH_API_PREFIX`** if routes live under a path (`api/v1`, etc.). Confirm with **`curl -i -X PUT https://your-api…/stores/api-key`** (+ Bearer header) outside DSS.
-* **502 Bad Gateway on `PUBLIC_BASE_URL`**: the reverse proxy forwards to **the wrong container port**. The JVM binds **`PORT`** (see `[http] Listening …` startup line). Dockerfile sets **`ENV PORT=9999`**, but dashboards that add an **empty `PORT=`** override that with blank and the app formerly fell back to **8080**. Either set **`PORT=9999`** explicitly in Dokploy or **remove** the `PORT` key so the image default wins; Traefik/nginx must target the **same** port.
-* Insecure monolith URL rejected: set `DSS_ALLOW_INSECURE_MONOLITH=true` only for local development; production should remain HTTPS.
+* **Startup exits quickly**: verify required vars `SHOPIFY_APP_CLIENT_ID` and `SHOPIFY_APP_CLIENT_SECRET` (or legacy `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET`), plus `SHOPIFY_SCOPES` and `PUBLIC_BASE_URL`.
+* **OAuth callback mismatch in Shopify**: ensure `{PUBLIC_BASE_URL}{OAUTH_REDIRECT_PATH}` exactly matches the Partner Dashboard redirect URL.
+* **DSS auth failures (`401`)**: provide `X-Shopify-Access-Token` or configure `DSS_SHOP_ACCESS_TOKENS`; include `X-DSS-Internal-Secret` when `DSS_INTERNAL_SECRET` is set.
+* **`DSS_SHOP_ACCESS_TOKENS` parse issues**: use comma-separated `shop.myshopify.com|shpat_...` pairs.
+* **`[monolith] MONOLITH_BASE_URL is unset` despite being configured**: duplicate `MONOLITH_BASE_URL` / `MONOLITH_API_KEY` lines (often empty trailing blocks pasted from templates) cause **last value wins**. Remove the trailing empties so only one assignment remains; redeploy/restart.
+* **`Monolith store api-key … status=404` with HTML `<h1>Not Found`**: DSS hit `{MONOLITH_BASE_URL}/stores/api-key` (before optional prefix). Use the REST API domain (often `api.…`), or set `MONOLITH_API_PREFIX` if routes live under a path (`api/v1`). Confirm with `curl -i -X PUT https://your-api…/stores/api-key` (+ Bearer header) outside DSS.
+* **502 Bad Gateway on `PUBLIC_BASE_URL`**: the reverse proxy forwards to the wrong container port. The JVM binds `PORT` (see `[http] Listening …` startup line). Dockerfile sets `ENV PORT=9999`, but dashboards that add an empty `PORT=` override that with blank. Set `PORT=9999` explicitly or remove the `PORT` key so the image default wins; Traefik/nginx must target the **same** port.
+* **Insecure monolith URL rejected**: set `DSS_ALLOW_INSECURE_MONOLITH=true` only for local development; production should remain HTTPS.
+
+IDE-specific troubleshooting lives in [docs/setup-intellij-idea.md](./docs/setup-intellij-idea.md).

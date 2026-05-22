@@ -1,11 +1,56 @@
+# This is our "version catalog", as Gradle calls it.
+#
+# It specifies all the versions and dependencies in a way that IntelliJ (and tools like Dependabot) can understand it.
+# It is important to know that (as it says on the Gradle website):
+# > A dependency catalog doesn't enforce the version of a dependency: like a regular dependency notation,
+# > it declares the requested version or a rich version. That version is not necessarily the version that
+# > is selected during conflict resolution.
+# In other words: if you really want to narrow versions down (which is a good idea), you need to use `strictly`
+# for individual dependencies, or version locking for the project as a whole:
+# https://docs.gradle.org/current/userguide/dependency_locking.html
+
+
 [versions]
-kotlinVersion = "2.2.20"
+
+# [PINNED] = Pinned, do not upgrade this dependency (a comment should be added to explain why).
+
+
+# Aligned with the `dropnext-monolith` repo to keep both projects on the same compiler.
+# https://kotlinlang.org/docs/releases.html#release-details
+kotlinVersion = "2.3.21"
+
+# Latest, see: https://github.com/ktorio/ktor/releases
 ktorVersion = "3.4.1"
+
+# Latest, see: https://github.com/ExpediaGroup/graphql-kotlin/releases
 kotlinGraphqlVersion = "9.0.0"
+
+# Latest, see: https://github.com/OpenAPITools/openapi-generator/releases
+openapiGeneratorVersion = "7.6.0"
+
+# Latest, see: https://mvnrepository.com/artifact/ch.qos.logback/logback-classic
+logbackVersion = "1.5.32"
+
+# Latest, see: https://mvnrepository.com/artifact/org.slf4j/slf4j-api
+slf4jVersion = "2.0.18"
+
+# Latest, see: https://mvnrepository.com/artifact/io.github.oshai/kotlin-logging-jvm
+kotlinLoggingVersion = "8.0.02"
+
+# Latest, see: https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter-engine
+junitVersion = "6.0.3"
+
+# Latest, see: https://mvnrepository.com/artifact/com.lemonappdev/konsist
+konsistVersion = "0.17.3"
+
+
 [libraries]
+
+# GraphQL client (Shopify Admin API).
 graphqlKotlinKtorClient = { group = "com.expediagroup", name = "graphql-kotlin-ktor-client", version.ref = "kotlinGraphqlVersion" }
 graphqlKotlinClientSerialization = { group = "com.expediagroup", name = "graphql-kotlin-client-serialization", version.ref = "kotlinGraphqlVersion" }
-logbackClassic = { group = "ch.qos.logback", name = "logback-classic", version = "1.5.18" }
+
+# Ktor (HTTP client + server).
 ktorClientOkhttp = { group = "io.ktor", name = "ktor-client-okhttp", version.ref = "ktorVersion" }
 ktorClientContentNegotiation = { group = "io.ktor", name = "ktor-client-content-negotiation", version.ref = "ktorVersion" }
 ktorSerializationKotlinxJson = { group = "io.ktor", name = "ktor-serialization-kotlinx-json", version.ref = "ktorVersion" }
@@ -14,6 +59,24 @@ ktorServerStatusPages = { group = "io.ktor", name = "ktor-server-status-pages", 
 ktorServerContentNegotiation = { group = "io.ktor", name = "ktor-server-content-negotiation", version.ref = "ktorVersion" }
 ktorServerCallLogging = { group = "io.ktor", name = "ktor-server-call-logging", version.ref = "ktorVersion" }
 
+# Logging
+kotlinLogging = { group = "io.github.oshai", name = "kotlin-logging-jvm", version.ref = "kotlinLoggingVersion" }
+slf4jApi = { group = "org.slf4j", name = "slf4j-api", version.ref = "slf4jVersion" }
+logbackClassic = { group = "ch.qos.logback", name = "logback-classic", version.ref = "logbackVersion" }
+
+# Test dependencies
+junitJupiterEngine = { group = "org.junit.jupiter", name = "junit-jupiter-engine", version.ref = "junitVersion" }
+konsist = { group = "com.lemonappdev", name = "konsist", version.ref = "konsistVersion" }
+
+
 [plugins]
-kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlinVersion" }
+
+kotlinJvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlinVersion" }
+kotlinXSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlinVersion" }
+kotlinPowerAssert = { id = "org.jetbrains.kotlin.plugin.power-assert", version.ref = "kotlinVersion" }
+
+# Shopify GraphQL client codegen (introspection + typed Kotlin classes from `.graphql` query files).
 kotlinGraphql = { id = "com.expediagroup.graphql", version.ref = "kotlinGraphqlVersion" }
+
+# Generates DTOs from `openapi.json` so request/response shapes stay in sync with the monolith spec.
+openapiGenerator = { id = "org.openapi.generator", version.ref = "openapiGeneratorVersion" }

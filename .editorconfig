@@ -15,9 +15,10 @@ trim_trailing_whitespace = true
 # Sections to make targeting as specific as we can while keeping it terse
 #
 
-[/{build,settings}.gradle.kts]
+[/**.kts]
 indent_style = space
 indent_size = 2
+
 
 [/{src,test}/**.kt]
 # For Kotlin 2 spaces is an override of the official style.
@@ -30,16 +31,24 @@ ij_kotlin_name_count_to_use_star_import = 999
 ij_kotlin_name_count_to_use_star_import_for_members = 9999
 
 
-[/src/main/resources/queries/*.graphql]
+[/src/resources/*.graphql]
 indent_style = space
 indent_size = 2
 
 
-[graphql.config.yml]
+[/**/*.{js,json,xml,yml,yaml}]
 indent_style = space
 indent_size = 2
+
+
+[/**/*.html]
+indent_style = space
+indent_size = 2
+max_line_length = 999
 
 
 [*.md]
+indent_style = space
+indent_size = 2
 max_line_length = 999
 trim_trailing_whitespace = false
