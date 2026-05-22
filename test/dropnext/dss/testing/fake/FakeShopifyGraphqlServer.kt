@@ -23,7 +23,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
 /**
- * Embedded CIO server that fakes a Shopify Admin GraphQL endpoint.
+ * Embedded CIO server that fakes a Shopify Admin Graphql endpoint.
  * Records every POST'd request by `operationName` and serves a stubbed response payload.
  */
 class FakeShopifyGraphqlServer {

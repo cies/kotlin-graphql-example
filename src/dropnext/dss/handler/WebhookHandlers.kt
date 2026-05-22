@@ -1,8 +1,8 @@
 package dropnext.dss.handler
 
-import dropnext.dss.GraphQLClientCache
+import dropnext.dss.GraphqlClientCache
 import dropnext.dss.config.DssAppConfig
-import dropnext.dss.config.DssPaths
+import dropnext.dss.path.DssPaths
 import dropnext.dss.lib.dss.ShopAccessTokenCache
 import dropnext.dss.lib.dss.ShopifyAdminToken
 import dropnext.dss.lib.dss.dto.DeleteProductVariantsRequest
@@ -36,7 +36,7 @@ private val log = KotlinLogging.logger {}
 /** Handler for `POST` to [DssPaths.WEBHOOKS_SHOPIFY] — verifies HMAC and dispatches per topic. */
 class WebhookHandlers(
   private val dssConfig: DssAppConfig,
-  private val gqlClientCache: GraphQLClientCache,
+  private val gqlClientCache: GraphqlClientCache,
   private val httpMonolithClient: MonolithService?,
   private val shopTokens: ShopAccessTokenCache,
 ) {
@@ -72,22 +72,22 @@ class WebhookHandlers(
       return
     }
 
-    val graphQLClient = gqlClientCache.forShop(shopNorm, config.apiVersion)
+    val gqlClient = gqlClientCache.forShop(shopNorm, config.apiVersion)
     when (topic) {
       ShopifyWebhookTopic.ProductsCreate, ShopifyWebhookTopic.ProductsUpdate ->
-        handleProductUpsert(graphQLClient, token, shopNorm, bodyStr, topic.raw)
+        handleProductUpsert(gqlClient, token, shopNorm, bodyStr, topic.raw)
       ShopifyWebhookTopic.ProductsDelete -> handleProductDelete(shopNorm, bodyStr)
       ShopifyWebhookTopic.OrdersCreate ->
-        handleOrderWebhook(graphQLClient, token, shopNorm, bodyStr, topic.raw, syncToMonolith = true)
+        handleOrderWebhook(gqlClient, token, shopNorm, bodyStr, topic.raw, syncToMonolith = true)
       ShopifyWebhookTopic.OrdersUpdated ->
-        handleOrderWebhook(graphQLClient, token, shopNorm, bodyStr, topic.raw, syncToMonolith = dssConfig.syncOrderOnUpdated)
+        handleOrderWebhook(gqlClient, token, shopNorm, bodyStr, topic.raw, syncToMonolith = dssConfig.syncOrderOnUpdated)
       is ShopifyWebhookTopic.Other -> log.info { "Webhook topic not handled: ${topic.raw}" }
     }
     call.respond(HttpStatusCode.OK)
   }
 
   private suspend fun handleProductUpsert(
-    graphQLClient: GraphQLKtorClient,
+    gqlClient: GraphQLKtorClient,
     token: String,
     shopNorm: String,
     bodyStr: String,
@@ -95,10 +95,10 @@ class WebhookHandlers(
   ) {
     val id = graphqlResourceIdFromShopifyWebhook(topic, bodyStr)
     if (id == null) {
-      log.warn { "Webhook product: could not parse GraphQL id from body" }
+      log.warn { "Webhook product: could not parse Graphql id from body" }
       return
     }
-    val r = graphQLClient.execute(GetProductById(GetProductById.Variables(id))) {
+    val r = gqlClient.execute(GetProductById(GetProductById.Variables(id))) {
       header("X-Shopify-Access-Token", token)
     }
     val product = r.data?.product
@@ -148,7 +148,7 @@ class WebhookHandlers(
   }
 
   private suspend fun handleOrderWebhook(
-    graphQLClient: GraphQLKtorClient,
+    gqlClient: GraphQLKtorClient,
     token: String,
     shopNorm: String,
     bodyStr: String,
@@ -157,11 +157,11 @@ class WebhookHandlers(
   ) {
     val id = graphqlResourceIdFromShopifyWebhook(topic, bodyStr)
     if (id == null) {
-      log.warn { "Webhook order: could not parse GraphQL id from body" }
+      log.warn { "Webhook order: could not parse Graphql id from body" }
       return
     }
     if (syncToMonolith && httpMonolithClient != null) {
-      syncShopifyOrderToMonolith(graphQLClient, token, shopNorm, httpMonolithClient, id, topic)
+      syncShopifyOrderToMonolith(gqlClient, token, shopNorm, httpMonolithClient, id, topic)
       return
     }
     log.info { "Webhook $topic acknowledged id=$id (monolith sync disabled)" }

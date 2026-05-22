@@ -1,7 +1,7 @@
 package dropnext.dss.handler
 
 import dropnext.dss.config.DssAppConfig
-import dropnext.dss.config.DssPaths
+import dropnext.dss.path.DssPaths
 import dropnext.dss.lib.dss.ShopAccessTokenCache
 import dropnext.dss.lib.ktor.respondBadRequestText
 import dropnext.dss.lib.ktor.shopifyAccessTokenFromHeader
@@ -51,7 +51,7 @@ class DiagnosticsHandlers(
         POST ${DssPaths.TRACKING_UPDATES.padEnd(40)} Same TrackingUpdate body as .../sync-shipments-with-fulfillments (compat)
 
       --- Demo routes$demoNote ---
-        GET  ${DssPaths.DEMO_PRODUCTS.padEnd(28)}?shop=     List products via Shopify GraphQL
+        GET  ${DssPaths.DEMO_PRODUCTS.padEnd(28)}?shop=     List products via Shopify Graphql
         GET  ${DssPaths.DEMO_ORDER.padEnd(28)}?shop=&id=  Load a single order by GID or numeric ID
         POST ${DssPaths.DEMO_FULFILLMENT_CREATE.padEnd(40)} Create a fulfillment with tracking
         POST ${DssPaths.DEMO_FULFILLMENT_TRACKING.padEnd(40)} Update fulfillment tracking info

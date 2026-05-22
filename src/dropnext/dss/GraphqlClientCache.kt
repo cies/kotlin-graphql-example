@@ -10,7 +10,7 @@ import java.util.concurrent.ConcurrentHashMap
  * Caches [GraphQLKtorClient] instances keyed by shop + API version so that a new client object
  * is not allocated on every request. The underlying [httpClient] is shared.
  */
-class GraphQLClientCache(private val httpClient: HttpClient) {
+class GraphqlClientCache(private val httpClient: HttpClient) {
   private val cache = ConcurrentHashMap<String, GraphQLKtorClient>()
 
   fun forShop(shop: String, apiVersion: String): GraphQLKtorClient {

@@ -1,7 +1,7 @@
 package dropnext.dss.shopify
 
 import dropnext.dss.config.ShopifyConfig
-import dropnext.dss.config.ShopifyPaths
+import dropnext.dss.path.ShopifyPaths
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.post

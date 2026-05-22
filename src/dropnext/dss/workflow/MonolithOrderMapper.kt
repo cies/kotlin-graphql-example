@@ -16,7 +16,7 @@ import java.util.Locale
 import kotlin.math.roundToLong
 
 /**
- * Builds [CreateShopifyOrderRequest] from Shopify Admin GraphQL [Order] (hydrated after a webhook).
+ * Builds [CreateShopifyOrderRequest] from Shopify Admin Graphql [Order] (hydrated after a webhook).
  * Field names and JSON shape match `openapi.json` / monolith contract (snake_case in wire format).
  */
 fun orderToCreateShopifyOrderRequest(
@@ -78,7 +78,7 @@ private fun OrderDisplayFinancialStatus.toFinancialString(): String {
 
 /**
  * Monolith expects REST-style fulfillment: `fulfilled` / `partial` / `restocked`, or **`null`**
- * when nothing is shipped yet (do not send GraphQL labels like `unfulfilled`).
+ * when nothing is shipped yet (do not send Graphql labels like `unfulfilled`).
  */
 private fun OrderDisplayFulfillmentStatus.toMonolithFulfillmentStatus(): String? =
   when (this) {

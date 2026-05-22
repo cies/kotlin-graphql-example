@@ -24,7 +24,7 @@ class ShopifyWebhookRegistrationTest {
 
   private lateinit var fake: FakeShopifyGraphqlServer
   private lateinit var httpClient: HttpClient
-  private lateinit var graphQlClient: GraphQLKtorClient
+  private lateinit var gqlClient: GraphQLKtorClient
 
   @BeforeTest
   fun setUp() {
@@ -39,7 +39,7 @@ class ShopifyWebhookRegistrationTest {
       }
     }
     val url = URI("http://localhost:$port/admin/api/2026-04/graphql.json").toURL()
-    graphQlClient = GraphQLKtorClient(url, httpClient)
+    gqlClient = GraphQLKtorClient(url, httpClient)
   }
 
   @AfterTest
@@ -54,7 +54,7 @@ class ShopifyWebhookRegistrationTest {
     stubExistingSubscriptions(emptyList())
     stubRegisterOk()
 
-    val report = registerStandardWebhooks(graphQlClient, "tok", "https://dss.example/webhooks/shopify")
+    val report = registerStandardWebhooks(gqlClient, "tok", "https://dss.example/webhooks/shopify")
 
     // Five RegisterWebhook calls — one per topic.
     val registers = fake.calls.filter { it.operationName == "RegisterWebhook" }
@@ -67,7 +67,7 @@ class ShopifyWebhookRegistrationTest {
     stubExistingSubscriptions(emptyList())
     stubRegisterOk()
 
-    registerStandardWebhooks(graphQlClient, "tok", "https://dss.example/webhooks/shopify")
+    registerStandardWebhooks(gqlClient, "tok", "https://dss.example/webhooks/shopify")
 
     val registers = fake.calls.filter { it.operationName == "RegisterWebhook" }
     val ordersCalls = registers.filter { call ->
@@ -104,7 +104,7 @@ class ShopifyWebhookRegistrationTest {
       RegisterWebhook.Result.serializer(),
     )
 
-    val report = registerStandardWebhooks(graphQlClient, "tok", "https://dss.example/webhooks/shopify")
+    val report = registerStandardWebhooks(gqlClient, "tok", "https://dss.example/webhooks/shopify")
     assert(report.failedTopics.size == 5)
     assert(report.failedTopics.all { "duplicate subscription" in it.second })
   }
@@ -127,7 +127,7 @@ class ShopifyWebhookRegistrationTest {
     stubExistingSubscriptions(active)
     stubRegisterOk()
 
-    val report = registerStandardWebhooks(graphQlClient, "tok", "https://dss.example/webhooks/shopify")
+    val report = registerStandardWebhooks(gqlClient, "tok", "https://dss.example/webhooks/shopify")
     assert(report.addedSubscriptions.isEmpty())
     assert(report.activeSubscriptions.size == active.size)
   }

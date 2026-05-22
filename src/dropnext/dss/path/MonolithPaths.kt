@@ -1,4 +1,4 @@
-package dropnext.dss.config
+package dropnext.dss.path
 
 
 /**
@@ -9,7 +9,7 @@ package dropnext.dss.config
  * `MONOLITH_CREATE_ORDER_PATH` (see `DssAppConfig.monolithCreateOrderPath`).
  */
 object MonolithPaths {
-  /** `POST /orders` — create a Shopify order in the monolith. Default for [DssAppConfig.monolithCreateOrderPath]. */
+  /** `POST /orders` — create a Shopify order in the monolith. Default for [dropnext.dss.config.DssAppConfig.monolithCreateOrderPath]. */
   const val ORDERS = "/orders"
 
   /** `GET /stores` — look up a store by `shopify_subdomain`. */

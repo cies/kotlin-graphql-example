@@ -32,7 +32,7 @@ fun createSharedHttpClient(): HttpClient = HttpClient(OkHttp) {
 
 /**
  * Derives a monolith-specific [HttpClient] that retries on connection/IO errors with exponential
- * backoff. Shopify GraphQL and OAuth traffic continue to use the base [createSharedHttpClient] so
+ * backoff. Shopify Graphql and OAuth traffic continue to use the base [createSharedHttpClient] so
  * non-idempotent mutations are never duplicated. The OkHttp engine and connection pool are shared.
  */
 fun createMonolithHttpClient(base: HttpClient): HttpClient =

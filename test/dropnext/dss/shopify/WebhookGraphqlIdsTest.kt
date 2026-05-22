@@ -2,7 +2,7 @@ package dropnext.dss.shopify
 
 import kotlin.test.Test
 
-class ShopDomainFromWebhookBodyTest {
+class WebhookGraphqlIdsTest {
 
   @Test
   fun `parses domain field from webhook JSON`() {

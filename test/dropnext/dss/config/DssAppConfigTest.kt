@@ -22,10 +22,12 @@ class DssAppConfigTest {
   private fun appConfig(
     shopify: ShopifyConfig = shopify(),
     dssInternalSecret: String? = null,
+    monolithBaseUrl: String? = null,
+    allowInsecureMonolithUrl: Boolean = false,
   ): DssAppConfig =
     DssAppConfig(
       shopify = shopify,
-      monolithBaseUrl = null,
+      monolithBaseUrl = monolithBaseUrl,
       monolithApiPrefix = null,
       monolithApiKey = null,
       monolithCreateOrderPath = "/orders",
@@ -33,7 +35,7 @@ class DssAppConfigTest {
       enableDemoRoutes = false,
       enableTestHarness = false,
       sandboxFakeShopify = false,
-      allowInsecureMonolithUrl = false,
+      allowInsecureMonolithUrl = allowInsecureMonolithUrl,
       syncOrderOnUpdated = false,
     )
 
@@ -82,6 +84,32 @@ class DssAppConfigTest {
   fun `dssInternalSecret length 32 is accepted`() {
     val issues = computeRuntimeConfigIssues(appConfig(dssInternalSecret = "y".repeat(32)))
     assert(issues.none { "at least 32 characters" in it })
+  }
+
+  @Test
+  fun `http monolith URL without allowInsecure is flagged`() {
+    val issues = computeRuntimeConfigIssues(appConfig(monolithBaseUrl = "http://monolith.local"))
+    assert(issues.any { "MONOLITH_BASE_URL must use https" in it })
+  }
+
+  @Test
+  fun `http monolith URL with allowInsecure is accepted`() {
+    val issues = computeRuntimeConfigIssues(
+      appConfig(monolithBaseUrl = "http://monolith.local", allowInsecureMonolithUrl = true),
+    )
+    assert(issues.none { "MONOLITH_BASE_URL" in it })
+  }
+
+  @Test
+  fun `https monolith URL is accepted`() {
+    val issues = computeRuntimeConfigIssues(appConfig(monolithBaseUrl = "https://monolith.example.org"))
+    assert(issues.none { "MONOLITH_BASE_URL" in it })
+  }
+
+  @Test
+  fun `null monolith URL is accepted`() {
+    val issues = computeRuntimeConfigIssues(appConfig(monolithBaseUrl = null))
+    assert(issues.none { "MONOLITH_BASE_URL" in it })
   }
 
   @Test

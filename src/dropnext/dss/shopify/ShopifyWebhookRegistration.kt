@@ -24,7 +24,7 @@ data class WebhookRegistrationReport(
 )
 
 suspend fun registerStandardWebhooks(
-  graphQLClient: GraphQLKtorClient,
+  gqlClient: GraphQLKtorClient,
   accessToken: String,
   callbackUrl: URL,
 ): WebhookRegistrationReport {
@@ -38,16 +38,16 @@ suspend fun registerStandardWebhooks(
     )
   // For orders topics, restrict the webhook payload to only the order ID fields.
   // This avoids Shopify's "protected customer data" approval requirement, since
-  // the DSS only needs the ID to make its own GraphQL call for the full order.
+  // the DSS only needs the ID to make its own Graphql call for the full order.
   val ordersTopics = setOf(WebhookSubscriptionTopic.ORDERS_CREATE, WebhookSubscriptionTopic.ORDERS_UPDATED)
   val ordersSafeFields = listOf("id", "admin_graphql_api_id")
 
-  val existingSubscriptions = fetchWebhookSubscriptions(graphQLClient, accessToken, callbackUrl, topics)
+  val existingSubscriptions = fetchWebhookSubscriptions(gqlClient, accessToken, callbackUrl, topics)
   val failedTopics = mutableListOf<Pair<WebhookSubscriptionTopic, String>>()
   for (topic in topics) {
     val includeFields = if (topic in ordersTopics) ordersSafeFields else null
     val wh =
-      graphQLClient.execute(RegisterWebhook(RegisterWebhook.Variables(topic, callbackUrl, includeFields))) {
+      gqlClient.execute(RegisterWebhook(RegisterWebhook.Variables(topic, callbackUrl, includeFields))) {
         header("X-Shopify-Access-Token", accessToken)
       }
     val graphqlErrorMsg =
@@ -67,7 +67,7 @@ suspend fun registerStandardWebhooks(
       }
     }
   }
-  val activeSubscriptions = fetchWebhookSubscriptions(graphQLClient, accessToken, callbackUrl, topics)
+  val activeSubscriptions = fetchWebhookSubscriptions(gqlClient, accessToken, callbackUrl, topics)
   val existingIds = existingSubscriptions.mapTo(mutableSetOf()) { it.id }
   val addedSubscriptions = activeSubscriptions.filter { subscription -> subscription.id !in existingIds }
   return WebhookRegistrationReport(
@@ -78,13 +78,13 @@ suspend fun registerStandardWebhooks(
 }
 
 private suspend fun fetchWebhookSubscriptions(
-  graphQLClient: GraphQLKtorClient,
+  gqlClient: GraphQLKtorClient,
   accessToken: String,
   callbackUrl: URL,
   topics: List<WebhookSubscriptionTopic>,
 ): List<WebhookSubscriptionStatus> {
   val result =
-    graphQLClient.execute(GetWebhookSubscriptions(GetWebhookSubscriptions.Variables(topics, callbackUrl))) {
+    gqlClient.execute(GetWebhookSubscriptions(GetWebhookSubscriptions.Variables(topics, callbackUrl))) {
       header("X-Shopify-Access-Token", accessToken)
     }
   if (!result.errors.isNullOrEmpty()) {

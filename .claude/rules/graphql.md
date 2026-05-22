@@ -3,7 +3,7 @@ paths:
   - "src/resources/*.graphql"
   - "src/dropnext/dss/shopify/**/*.kt"
 ---
-# Rules for Shopify GraphQL queries and codegen
+# Rules for Shopify Graphql queries and codegen
 
 
 ## Query files
@@ -32,7 +32,7 @@ paths:
 
 ## Per-shop clients
 
-GraphQL calls are made against the **shop-specific** endpoint `https://{shop}/admin/api/{version}/graphql.json` with a per-shop Admin access token. Use `GraphQLClientCache` to retrieve a client — do not construct one ad hoc.
+Graphql calls are made against the **shop-specific** endpoint `https://{shop}/admin/api/{version}/graphql.json` with a per-shop Admin access token. Use `GraphqlClientCache` to retrieve a client — do not construct one ad hoc.
 
 
 ## Webhook handling

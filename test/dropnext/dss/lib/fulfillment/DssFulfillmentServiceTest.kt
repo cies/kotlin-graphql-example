@@ -32,7 +32,7 @@ class DssFulfillmentServiceTest {
 
   private lateinit var fake: FakeShopifyGraphqlServer
   private lateinit var httpClient: HttpClient
-  private lateinit var graphQlClient: GraphQLKtorClient
+  private lateinit var gqlClient: GraphQLKtorClient
   private val service = DssFulfillmentService()
 
   @BeforeTest
@@ -53,7 +53,7 @@ class DssFulfillmentServiceTest {
       }
     }
     val url = URI("http://localhost:$port/admin/api/2026-04/graphql.json").toURL()
-    graphQlClient = GraphQLKtorClient(url, httpClient)
+    gqlClient = GraphQLKtorClient(url, httpClient)
   }
 
   @AfterTest
@@ -71,7 +71,7 @@ class DssFulfillmentServiceTest {
       GetOrderForDss.Result(order = null),
       GetOrderForDss.Result.serializer(),
     )
-    val result = service.syncShipmentsWithFulfillments(graphQlClient, "tok", syncRequest())
+    val result = service.syncShipmentsWithFulfillments(gqlClient, "tok", syncRequest())
     assert(result is FulfillmentResult.Err.NotFound)
     assert("order 1001 not found" in (result as FulfillmentResult.Err.NotFound).detail)
   }
@@ -96,7 +96,7 @@ class DssFulfillmentServiceTest {
       ),
       FulfillmentCreateWithLineItems.Result.serializer(),
     )
-    val result = service.syncShipmentsWithFulfillments(graphQlClient, "tok", syncRequest())
+    val result = service.syncShipmentsWithFulfillments(gqlClient, "tok", syncRequest())
     assert(result is FulfillmentResult.Ok)
     assert((result as FulfillmentResult.Ok).value.newFulfillmentIds == listOf(5000L))
     val ops = fake.calls.map { it.operationName }
@@ -146,7 +146,7 @@ class DssFulfillmentServiceTest {
       ),
       FulfillmentCreateWithLineItems.Result.serializer(),
     )
-    val result = service.syncShipmentsWithFulfillments(graphQlClient, "tok", syncRequest())
+    val result = service.syncShipmentsWithFulfillments(gqlClient, "tok", syncRequest())
     assert(result is FulfillmentResult.Ok)
     val ops = fake.calls.map { it.operationName }
     // Expected: GetOrder → Cancel → GetOrder (reload) → Create.
@@ -189,7 +189,7 @@ class DssFulfillmentServiceTest {
       ),
       FulfillmentCreateWithLineItems.Result.serializer(),
     )
-    val result = service.syncShipmentsWithFulfillments(graphQlClient, "tok", syncRequest())
+    val result = service.syncShipmentsWithFulfillments(gqlClient, "tok", syncRequest())
     assert(result is FulfillmentResult.Ok)
     assert((result as FulfillmentResult.Ok).value.newFulfillmentIds == listOf(9001L))
   }
@@ -217,7 +217,7 @@ class DssFulfillmentServiceTest {
       ),
       FulfillmentCancelMutation.Result.serializer(),
     )
-    val result = service.syncShipmentsWithFulfillments(graphQlClient, "tok", syncRequest())
+    val result = service.syncShipmentsWithFulfillments(gqlClient, "tok", syncRequest())
     assert(result is FulfillmentResult.Err.UserError)
     assert("fulfillment locked" in (result as FulfillmentResult.Err.UserError).messages.single())
   }
@@ -244,7 +244,7 @@ class DssFulfillmentServiceTest {
       ),
       FulfillmentCreateWithLineItems.Result.serializer(),
     )
-    val result = service.syncShipmentsWithFulfillments(graphQlClient, "tok", syncRequest())
+    val result = service.syncShipmentsWithFulfillments(gqlClient, "tok", syncRequest())
     assert(result is FulfillmentResult.Err.UserError)
   }
 
@@ -252,17 +252,17 @@ class DssFulfillmentServiceTest {
 
   @Test
   fun `createTrackingEvent rejects unsupported status as UserError`() = runBlocking {
-    val result = service.createTrackingEvent(graphQlClient, "tok", trackingRequest(status = "yeeted"))
+    val result = service.createTrackingEvent(gqlClient, "tok", trackingRequest(status = "yeeted"))
     assert(result is FulfillmentResult.Err.UserError)
     assert("unsupported tracking status" in (result as FulfillmentResult.Err.UserError).messages.single())
-    // No GraphQL call should be made for invalid input.
+    // No Graphql call should be made for invalid input.
     assert(fake.calls.isEmpty())
   }
 
   @Test
   fun `createTrackingEvent returns NotFound when order is missing`() = runBlocking {
     fake.stubData("GetOrderForDss", GetOrderForDss.Result(order = null), GetOrderForDss.Result.serializer())
-    val result = service.createTrackingEvent(graphQlClient, "tok", trackingRequest())
+    val result = service.createTrackingEvent(gqlClient, "tok", trackingRequest())
     assert(result is FulfillmentResult.Err.NotFound)
   }
 
@@ -282,7 +282,7 @@ class DssFulfillmentServiceTest {
       GetOrderForDss.Result(order = orderWithDifferentTracking),
       GetOrderForDss.Result.serializer(),
     )
-    val result = service.createTrackingEvent(graphQlClient, "tok", trackingRequest(trackingNumber = "1Z999"))
+    val result = service.createTrackingEvent(gqlClient, "tok", trackingRequest(trackingNumber = "1Z999"))
     assert(result is FulfillmentResult.Err.NotFound)
     assert("no fulfillment with tracking number 1Z999" in (result as FulfillmentResult.Err.NotFound).detail)
   }
@@ -313,7 +313,7 @@ class DssFulfillmentServiceTest {
       ),
       FulfillmentEventCreateMutation.Result.serializer(),
     )
-    val result = service.createTrackingEvent(graphQlClient, "tok", trackingRequest(trackingNumber = "1Z999"))
+    val result = service.createTrackingEvent(gqlClient, "tok", trackingRequest(trackingNumber = "1Z999"))
     assert(result is FulfillmentResult.Ok)
     assert((result as FulfillmentResult.Ok).value.fulfillmentEventId == 7777L)
   }
@@ -345,25 +345,25 @@ class DssFulfillmentServiceTest {
       ),
       FulfillmentEventCreateMutation.Result.serializer(),
     )
-    val result = service.createTrackingEvent(graphQlClient, "tok", trackingRequest(trackingNumber = "1Z999"))
+    val result = service.createTrackingEvent(gqlClient, "tok", trackingRequest(trackingNumber = "1Z999"))
     assert(result is FulfillmentResult.Err.UserError)
   }
 
   @Test
-  fun `syncShipments returns GraphQlError when response contains top-level errors`() = runBlocking {
+  fun `syncShipments returns GraphqlError when response contains top-level errors`() = runBlocking {
     // Raw stub with `errors` populated to exercise the `!r.errors.isNullOrEmpty()` branch.
     fake.stubRaw(
       "GetOrderForDss",
       """{"data":{"order":null},"errors":[{"message":"throttled"}]}""",
     )
-    val result = service.syncShipmentsWithFulfillments(graphQlClient, "tok", syncRequest())
+    val result = service.syncShipmentsWithFulfillments(gqlClient, "tok", syncRequest())
     // GetOrderForDss returns null even when errors are present, so this surfaces as NotFound
     // by the service's `?: return ... NotFound` path; this test pins that current behaviour.
     assert(result is FulfillmentResult.Err.NotFound)
   }
 
   @Test
-  fun `syncShipments returns GraphQlError when create-mutation response carries errors`() = runBlocking {
+  fun `syncShipments returns GraphqlError when create-mutation response carries errors`() = runBlocking {
     fake.stubData(
       "GetOrderForDss",
       GetOrderForDss.Result(order = minimalOrder().copy(fulfillments = emptyList())),
@@ -373,9 +373,9 @@ class DssFulfillmentServiceTest {
       "FulfillmentCreateWithLineItems",
       """{"data":{"fulfillmentCreate":{"fulfillment":null,"userErrors":[]}},"errors":[{"message":"throttled"}]}""",
     )
-    val result = service.syncShipmentsWithFulfillments(graphQlClient, "tok", syncRequest())
-    assert(result is FulfillmentResult.Err.GraphQlError)
-    assert("throttled" in (result as FulfillmentResult.Err.GraphQlError).raw)
+    val result = service.syncShipmentsWithFulfillments(gqlClient, "tok", syncRequest())
+    assert(result is FulfillmentResult.Err.GraphqlError)
+    assert("throttled" in (result as FulfillmentResult.Err.GraphqlError).raw)
   }
 
   @Test
@@ -383,7 +383,7 @@ class DssFulfillmentServiceTest {
     // The production loadOrder swallows network errors and returns null, which the caller
     // maps to NotFound. This pins that behaviour; the Network branch lives in cancel/create.
     fake.stop()
-    val result = service.syncShipmentsWithFulfillments(graphQlClient, "tok", syncRequest())
+    val result = service.syncShipmentsWithFulfillments(gqlClient, "tok", syncRequest())
     assert(result is FulfillmentResult.Err.NotFound)
   }
 
@@ -399,7 +399,7 @@ class DssFulfillmentServiceTest {
     // which the service maps to FulfillmentResult.Err.Network.
     fake.stubRaw("FulfillmentCancelMutation", "{not-valid-json")
 
-    val result = service.syncShipmentsWithFulfillments(graphQlClient, "tok", syncRequest())
+    val result = service.syncShipmentsWithFulfillments(gqlClient, "tok", syncRequest())
     assert(result is FulfillmentResult.Err.Network)
   }
 

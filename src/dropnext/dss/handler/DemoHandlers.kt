@@ -1,8 +1,8 @@
 package dropnext.dss.handler
 
-import dropnext.dss.GraphQLClientCache
+import dropnext.dss.GraphqlClientCache
 import dropnext.dss.config.DssAppConfig
-import dropnext.dss.config.DssPaths
+import dropnext.dss.path.DssPaths
 import dropnext.dss.lib.dss.ShopAccessTokenCache
 import dropnext.dss.lib.dss.ShopifyAdminToken
 import dropnext.dss.lib.dss.clientErrorMessage
@@ -36,7 +36,7 @@ private val log = KotlinLogging.logger {}
  */
 class DemoHandlers(
   private val dssConfig: DssAppConfig,
-  private val gqlClientCache: GraphQLClientCache,
+  private val gqlClientCache: GraphqlClientCache,
   private val httpMonolithClient: MonolithService?,
   private val shopTokens: ShopAccessTokenCache,
 ) {
@@ -70,8 +70,8 @@ class DemoHandlers(
     val first = call.request.queryParameters["first"]?.toIntOrNull()?.coerceIn(1, 50) ?: 10
     val after = call.request.queryParameters["after"]
     try {
-      val graphQLClient = gqlClientCache.forShop(shop, config.apiVersion)
-      val result = graphQLClient.execute(SyncProductsPage(SyncProductsPage.Variables(first = first, after = after))) {
+      val gqlClient = gqlClientCache.forShop(shop, config.apiVersion)
+      val result = gqlClient.execute(SyncProductsPage(SyncProductsPage.Variables(first = first, after = after))) {
         header("X-Shopify-Access-Token", token)
       }
       val gqlErrors = result.errors
@@ -144,8 +144,8 @@ class DemoHandlers(
       "gid://shopify/Order/$n"
     }
     try {
-      val graphQLClient = gqlClientCache.forShop(shop, config.apiVersion)
-      val result = graphQLClient.execute(GetOrderById(GetOrderById.Variables(orderGid))) {
+      val gqlClient = gqlClientCache.forShop(shop, config.apiVersion)
+      val result = gqlClient.execute(GetOrderById(GetOrderById.Variables(orderGid))) {
         header("X-Shopify-Access-Token", token)
       }
       val o = result.data?.order
@@ -187,13 +187,13 @@ class DemoHandlers(
       )
     }
     try {
-      val graphQLClient = gqlClientCache.forShop(shop, config.apiVersion)
+      val gqlClient = gqlClientCache.forShop(shop, config.apiVersion)
       val tracking = FulfillmentTrackingInput(
         company = body.company,
         number = body.trackingNumber,
         url = body.trackingUrl,
       )
-      val r = graphQLClient.execute(
+      val r = gqlClient.execute(
         FulfillmentCreateWithTracking(
           FulfillmentCreateWithTracking.Variables(
             fulfillmentOrderId = body.fulfillmentOrderId,
@@ -236,13 +236,13 @@ class DemoHandlers(
       )
     }
     try {
-      val graphQLClient = gqlClientCache.forShop(shop, config.apiVersion)
+      val gqlClient = gqlClientCache.forShop(shop, config.apiVersion)
       val tracking = FulfillmentTrackingInput(
         company = body.company,
         number = body.trackingNumber,
         url = body.trackingUrl,
       )
-      val r = graphQLClient.execute(
+      val r = gqlClient.execute(
         FulfillmentTrackingInfoUpdateMutation(
           FulfillmentTrackingInfoUpdateMutation.Variables(
             fulfillmentId = body.fulfillmentId,

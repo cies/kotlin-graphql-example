@@ -28,7 +28,7 @@ class DssFulfillmentService {
    * product_variant_id against fulfillment order line items.
    */
   suspend fun syncShipmentsWithFulfillments(
-    graphQLClient: GraphQLKtorClient,
+    gqlClient: GraphQLKtorClient,
     accessToken: String,
     payload: SyncShipmentsWithFulfillmentsRequest,
   ): FulfillmentResult<SyncShipmentsWithFulfillmentsResponse> {
@@ -36,7 +36,7 @@ class DssFulfillmentService {
 
     // Load the order to get current fulfillments
     val orderBefore =
-      loadOrder(graphQLClient, accessToken, orderGid)
+      loadOrder(gqlClient, accessToken, orderGid)
         ?: return FulfillmentResult.Err.NotFound("order ${payload.shopifyOrderId} not found")
 
     // Cancel all existing non-canceled fulfillments
@@ -48,7 +48,7 @@ class DssFulfillmentService {
     for (fulfillmentGid in existingFulfillmentGids) {
       val r =
         runCatching {
-          graphQLClient.execute(FulfillmentCancelMutation(FulfillmentCancelMutation.Variables(fulfillmentGid))) {
+          gqlClient.execute(FulfillmentCancelMutation(FulfillmentCancelMutation.Variables(fulfillmentGid))) {
             header("X-Shopify-Access-Token", accessToken)
           }
         }.getOrElse { e -> return FulfillmentResult.Err.Network(e.message ?: "network error") }
@@ -59,7 +59,7 @@ class DssFulfillmentService {
         return FulfillmentResult.Err.UserError(realErrs.map { it.message })
       }
       if (!r.errors.isNullOrEmpty()) {
-        return FulfillmentResult.Err.GraphQlError(r.errors.toString())
+        return FulfillmentResult.Err.GraphqlError(r.errors.toString())
       }
     }
 
@@ -68,13 +68,13 @@ class DssFulfillmentService {
       if (existingFulfillmentGids.isEmpty()) {
         orderBefore
       } else {
-        loadOrder(graphQLClient, accessToken, orderGid)
+        loadOrder(gqlClient, accessToken, orderGid)
           ?: return FulfillmentResult.Err.NotFound("order not found after cancel")
       }
 
     val newIds = mutableListOf<Long>()
     for (shipment in payload.shipments) {
-      val result = createFulfillmentForShipment(graphQLClient, accessToken, orderAfter, shipment)
+      val result = createFulfillmentForShipment(gqlClient, accessToken, orderAfter, shipment)
       when (result) {
         is FulfillmentResult.Ok -> newIds.addAll(result.value)
         is FulfillmentResult.Err -> return result
@@ -87,7 +87,7 @@ class DssFulfillmentService {
    * Looks up the Shopify fulfillment by order + tracking number, then creates a FulfillmentEvent.
    */
   suspend fun createTrackingEvent(
-    graphQLClient: GraphQLKtorClient,
+    gqlClient: GraphQLKtorClient,
     accessToken: String,
     payload: TrackingUpdateRequest,
   ): FulfillmentResult<TrackingUpdateResponse> {
@@ -101,7 +101,7 @@ class DssFulfillmentService {
 
     val orderGid = orderGid(payload.shopifyOrderId)
     val order =
-      loadOrder(graphQLClient, accessToken, orderGid)
+      loadOrder(gqlClient, accessToken, orderGid)
         ?: return FulfillmentResult.Err.NotFound("order ${payload.shopifyOrderId} not found")
 
     // Find the fulfillment with the matching tracking number
@@ -124,7 +124,7 @@ class DssFulfillmentService {
       )
     val r =
       runCatching {
-        graphQLClient.execute(FulfillmentEventCreateMutation(FulfillmentEventCreateMutation.Variables(input))) {
+        gqlClient.execute(FulfillmentEventCreateMutation(FulfillmentEventCreateMutation.Variables(input))) {
           header("X-Shopify-Access-Token", accessToken)
         }
       }.getOrElse { e -> return FulfillmentResult.Err.Network(e.message ?: "network error") }
@@ -133,7 +133,7 @@ class DssFulfillmentService {
       return FulfillmentResult.Err.UserError(errs.map { it.message })
     }
     if (!r.errors.isNullOrEmpty()) {
-      return FulfillmentResult.Err.GraphQlError(r.errors.toString())
+      return FulfillmentResult.Err.GraphqlError(r.errors.toString())
     }
     val ev = r.data?.fulfillmentEventCreate?.fulfillmentEvent
     val eid =
@@ -150,7 +150,7 @@ class DssFulfillmentService {
    * collapses them into a single fulfillment, but the API takes a list).
    */
   private suspend fun createFulfillmentForShipment(
-    graphQLClient: GraphQLKtorClient,
+    gqlClient: GraphQLKtorClient,
     accessToken: String,
     order: Order,
     shipment: Shipment,
@@ -187,7 +187,7 @@ class DssFulfillmentService {
 
     val r =
       runCatching {
-        graphQLClient.execute(FulfillmentCreateWithLineItems(variables)) {
+        gqlClient.execute(FulfillmentCreateWithLineItems(variables)) {
           header("X-Shopify-Access-Token", accessToken)
         }
       }.getOrElse { e -> return FulfillmentResult.Err.Network(e.message ?: "network error") }
@@ -197,7 +197,7 @@ class DssFulfillmentService {
       return FulfillmentResult.Err.UserError(createErrs.map { it.message })
     }
     if (!r.errors.isNullOrEmpty()) {
-      return FulfillmentResult.Err.GraphQlError(r.errors.toString())
+      return FulfillmentResult.Err.GraphqlError(r.errors.toString())
     }
 
     val f = r.data?.fulfillmentCreate?.fulfillment
@@ -206,13 +206,13 @@ class DssFulfillmentService {
   }
 
   private suspend fun loadOrder(
-    graphQLClient: GraphQLKtorClient,
+    gqlClient: GraphQLKtorClient,
     accessToken: String,
     orderGid: String,
   ): Order? {
     val r =
       runCatching {
-        graphQLClient.execute(GetOrderForDss(GetOrderForDss.Variables(orderGid))) {
+        gqlClient.execute(GetOrderForDss(GetOrderForDss.Variables(orderGid))) {
           header("X-Shopify-Access-Token", accessToken)
         }
       }.getOrElse { return null }

@@ -1,5 +1,7 @@
 package dropnext.dss.config
 
+import dropnext.dss.path.DssPaths
+
 
 data class ShopifyConfig(
   val appClientId: String,

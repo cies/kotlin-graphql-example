@@ -43,10 +43,14 @@ junitVersion = "6.0.3"
 # Latest, see: https://mvnrepository.com/artifact/com.lemonappdev/konsist
 konsistVersion = "0.17.3"
 
+# Latest, see: https://mvnrepository.com/artifact/org.jetbrains.kotlinx/kotlinx-html-jvm
+# Compile-time-generated DSL only — no JVM reflection.
+kotlinxHtmlVersion = "0.11.0"
+
 
 [libraries]
 
-# GraphQL client (Shopify Admin API).
+# Graphql client (Shopify Admin API).
 graphqlKotlinKtorClient = { group = "com.expediagroup", name = "graphql-kotlin-ktor-client", version.ref = "kotlinGraphqlVersion" }
 graphqlKotlinClientSerialization = { group = "com.expediagroup", name = "graphql-kotlin-client-serialization", version.ref = "kotlinGraphqlVersion" }
 
@@ -58,6 +62,9 @@ ktorServerCio = { group = "io.ktor", name = "ktor-server-cio", version.ref = "kt
 ktorServerStatusPages = { group = "io.ktor", name = "ktor-server-status-pages", version.ref = "ktorVersion" }
 ktorServerContentNegotiation = { group = "io.ktor", name = "ktor-server-content-negotiation", version.ref = "ktorVersion" }
 ktorServerCallLogging = { group = "io.ktor", name = "ktor-server-call-logging", version.ref = "ktorVersion" }
+
+# HTML rendering (compile-time-generated builder DSL; no reflection).
+kotlinxHtml = { group = "org.jetbrains.kotlinx", name = "kotlinx-html-jvm", version.ref = "kotlinxHtmlVersion" }
 
 # Logging
 kotlinLogging = { group = "io.github.oshai", name = "kotlin-logging-jvm", version.ref = "kotlinLoggingVersion" }
@@ -75,7 +82,7 @@ kotlinJvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlinVersion" }
 kotlinXSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlinVersion" }
 kotlinPowerAssert = { id = "org.jetbrains.kotlin.plugin.power-assert", version.ref = "kotlinVersion" }
 
-# Shopify GraphQL client codegen (introspection + typed Kotlin classes from `.graphql` query files).
+# Shopify Graphql client codegen (introspection + typed Kotlin classes from `.graphql` query files).
 kotlinGraphql = { id = "com.expediagroup.graphql", version.ref = "kotlinGraphqlVersion" }
 
 # Generates DTOs from `openapi.json` so request/response shapes stay in sync with the monolith spec.

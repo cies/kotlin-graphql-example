@@ -14,7 +14,7 @@ import dropnext.dss.lib.dss.dto.ShipmentLineItem
 import dropnext.dss.workflow.minimalOrder
 import kotlin.test.Test
 
-class FulfillmentOrderMatchingTest {
+class FulfillmentOrderMatcherTest {
 
   @Test
   fun `matches open fulfillment order line items`() {

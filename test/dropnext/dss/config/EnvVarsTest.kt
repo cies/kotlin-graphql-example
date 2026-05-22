@@ -52,4 +52,28 @@ class EnvVarsTest {
     assert(EnvVars.normalizeQuoted("\"hello") == "\"hello")
     assert(EnvVars.normalizeQuoted("hello\"") == "hello\"")
   }
+
+  @Test
+  fun `parseBool true is case-insensitive`() {
+    assert(EnvVars.parseBool("true"))
+    assert(EnvVars.parseBool("TRUE"))
+    assert(EnvVars.parseBool("True"))
+  }
+
+  @Test
+  fun `parseBool strips wrapping quotes and whitespace`() {
+    assert(EnvVars.parseBool("  true  "))
+    assert(EnvVars.parseBool("\"true\""))
+    assert(EnvVars.parseBool("' true '"))
+  }
+
+  @Test
+  fun `parseBool returns false for null empty and non-true values`() {
+    assert(!EnvVars.parseBool(null))
+    assert(!EnvVars.parseBool(""))
+    assert(!EnvVars.parseBool("   "))
+    assert(!EnvVars.parseBool("false"))
+    assert(!EnvVars.parseBool("1"))
+    assert(!EnvVars.parseBool("yes"))
+  }
 }

@@ -1,6 +1,6 @@
 package dropnext.dss.lib.monolith
 
-import dropnext.dss.config.MonolithPaths
+import dropnext.dss.path.MonolithPaths
 import dropnext.dss.lib.json.MonolithJson
 import dropnext.dss.lib.dss.dto.CreateShopifyOrderRequest
 import dropnext.dss.lib.dss.dto.DeleteProductVariantsRequest

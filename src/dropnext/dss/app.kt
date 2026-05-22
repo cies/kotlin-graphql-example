@@ -32,7 +32,7 @@ import io.ktor.server.routing.routing
 private val log = KotlinLogging.logger {}
 
 fun main() {
-  val dssConfig = DssAppConfig.fromEnv() ?: return
+  val dssConfig = DssAppConfig.fromEnv()
   val shopifyConfig = dssConfig.shopify
 
   log.info {
@@ -72,7 +72,7 @@ fun main() {
     )
   }
 
-  val gqlClientCache = GraphQLClientCache(httpClient)
+  val gqlClientCache = GraphqlClientCache(httpClient)
   val shopTokens = ShopAccessTokenCache(shopAccessTokensFromEnv(enableTestHarness = dssConfig.enableTestHarness))
 
   val diagnosticsHandlers = DiagnosticsHandlers(dssConfig, shopTokens)
@@ -88,7 +88,9 @@ fun main() {
     shopTokens = shopTokens,
   )
 
-  val appLog = log // captured to avoid shadowing by io.ktor.server.application.Application.log inside the module
+  // Captured to avoid shadowing by [io.ktor.server.application.Application.log] inside the module.
+  val appLog = log
+
   val server = embeddedServer(CIO, port = shopifyConfig.serverPort, host = "0.0.0.0") {
     installDssTraceId()
     install(StatusPages) {

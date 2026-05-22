@@ -1,7 +1,7 @@
 package dropnext.dss.handler
 
-import dropnext.dss.GraphQLClientCache
-import dropnext.dss.config.DssPaths
+import dropnext.dss.GraphqlClientCache
+import dropnext.dss.path.DssPaths
 import dropnext.dss.shopify.signedOAuthState
 import dropnext.dss.testing.fake.FakeMonolithService
 import dropnext.dss.testing.fake.FakeShopifyGraphqlServer
@@ -23,7 +23,6 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.Parameters
 import io.ktor.http.formUrlEncode
-import io.ktor.server.application.call
 import io.ktor.server.cio.CIO
 import io.ktor.server.cio.CIOApplicationEngine
 import io.ktor.server.engine.EmbeddedServer
@@ -32,7 +31,6 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
 import java.nio.charset.StandardCharsets
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
@@ -209,7 +207,7 @@ class OAuthHandlersTest {
       val fakeMonolith = FakeMonolithService()
       val shopifyConfig = testShopifyConfig(appClientSecret = secret)
       val dssConfig = testDssAppConfig(shopify = shopifyConfig)
-      val cache = GraphQLClientCache(rewritingClient)
+      val cache = GraphqlClientCache(rewritingClient)
       current = OAuthHandlers(dssConfig, rewritingClient, cache, httpMonolithClient = fakeMonolith, shopTokens = tokens)
 
       val state = signedOAuthState(shop, secret)
@@ -252,7 +250,7 @@ class OAuthHandlersTest {
   private fun handlers(): OAuthHandlers {
     val shopifyConfig = testShopifyConfig(appClientSecret = "oauth-test-secret")
     val dssConfig = testDssAppConfig(shopify = shopifyConfig)
-    val cache = GraphQLClientCache(client)
+    val cache = GraphqlClientCache(client)
     return OAuthHandlers(
       dssConfig,
       client,

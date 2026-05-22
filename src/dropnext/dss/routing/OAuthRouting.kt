@@ -1,6 +1,6 @@
 package dropnext.dss.routing
 
-import dropnext.dss.config.DssPaths
+import dropnext.dss.path.DssPaths
 import dropnext.dss.handler.OAuthHandlers
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get

@@ -9,8 +9,8 @@ import dropnext.graphql.generated.getproductbyid.Product
 import kotlin.math.roundToLong
 
 /**
- * Maps a Shopify Admin GraphQL product (from [GetProductById]) to a list of [ProductVariantItem]
- * DTOs ready to be sent to the monolith via `POST` to [dropnext.dss.config.MonolithPaths.PRODUCT_VARIANTS].
+ * Maps a Shopify Admin Graphql product (from [GetProductById]) to a list of [ProductVariantItem]
+ * DTOs ready to be sent to the monolith via `POST` to [dropnext.dss.path.MonolithPaths.PRODUCT_VARIANTS].
  *
  * @param currencyCode ISO 4217 currency code for the shop (e.g. "USD"); obtain from the
  *   `shop { currencyCode }` field returned alongside the product query.

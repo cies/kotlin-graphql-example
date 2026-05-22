@@ -28,13 +28,13 @@ Companion project: [`dropnext-monolith`](../dropnext/dropnext-monolith). Convent
 ```
 
 
-### Codegen — GraphQL & OpenAPI
+### Codegen — Graphql & OpenAPI
 
 ```bash
-# Re-download the Shopify Admin GraphQL schema (after bumping SHOPIFY_API_VERSION)
+# Re-download the Shopify Admin Graphql schema (after bumping SHOPIFY_API_VERSION)
 ./gradlew graphqlIntrospectSchema
 
-# Re-generate the typed Kotlin GraphQL client from the .graphql files in src/resources/
+# Re-generate the typed Kotlin Graphql client from the .graphql files in src/resources/
 ./gradlew graphqlGenerateClient
 
 # Re-generate monolith DTOs from openapi.json (also runs automatically as a dependency of compileKotlin)
@@ -57,7 +57,7 @@ Companion project: [`dropnext-monolith`](../dropnext/dropnext-monolith). Convent
 - **Language**: Kotlin 2.3.21 on JVM 25 (toolchain — Gradle downloads it).
 - **Web Framework**: [Ktor](https://ktor.io/) (CIO engine).
 - **HTTP Client**: Ktor + OkHttp (shared singleton; see `SharedHttpClient.kt`).
-- **GraphQL Client**: [graphql-kotlin](https://github.com/ExpediaGroup/graphql-kotlin) — compile-time typed against the Shopify Admin schema (proxy: `https://shopify.dev/admin-graphql-direct-proxy/{version}`).
+- **Graphql Client**: [graphql-kotlin](https://github.com/ExpediaGroup/graphql-kotlin) — compile-time typed against the Shopify Admin schema (proxy: `https://shopify.dev/admin-graphql-direct-proxy/{version}`).
 - **Serialization**: `kotlinx.serialization` (no reflection).
 - **Logging**: Logback (`src/resources/logback.xml`) with MDC trace IDs.
 - **Testing**: JUnit 5 with Kotlin power-assert and Konsist for architecture tests.
@@ -73,7 +73,7 @@ Companion project: [`dropnext-monolith`](../dropnext/dropnext-monolith). Convent
 ├── MonolithJson.kt              # Shared Json config for outbound monolith calls (snake_case mapping).
 ├── DssTraceId.kt                # Per-request trace ID propagation (Logback MDC + `X-Trace-Id`).
 ├── SharedHttpClient.kt          # Ktor HttpClient singleton with OkHttp engine.
-├── GraphQLClientCache.kt        # Per-shop GraphQL client cache (shop-scoped access tokens).
+├── GraphqlClientCache.kt        # Per-shop Graphql client cache (shop-scoped access tokens).
 ├── config/                      # Environment + Shopify config + per-shop token map.
 │   ├── EnvVars.kt
 │   ├── ShopifyConfig.kt
@@ -105,7 +105,7 @@ Companion project: [`dropnext-monolith`](../dropnext/dropnext-monolith). Convent
 1. Shopify POSTs to `/webhooks/shopify`.
 2. `ShopifyRouting` verifies `X-Shopify-Hmac-Sha256` (constant-time compare) against the app secret.
 3. Topic-specific handler runs:
-   - `PRODUCTS_*`: parses body for resource id, runs `GetProductById` GraphQL query.
+   - `PRODUCTS_*`: parses body for resource id, runs `GetProductById` Graphql query.
    - `ORDERS_CREATE`: if `MONOLITH_BASE_URL` is set, runs `GetOrderForDss` and POSTs to the monolith via `MonolithService`.
    - `ORDERS_UPDATED`: only syncs to monolith when `DSS_SYNC_ORDER_ON_UPDATED=true` (default off to avoid duplicate POSTs).
 
@@ -162,6 +162,7 @@ TODO: document retry / backoff policy (currently single attempt — confirm).
 - **2 blank lines between the import block and the first statement.**
 - **Prefer `headerNames.forEach { headerName -> ... }`** over `for (...)` loops.
 - **Naming**: plural-named functions return collections; singular-named functions return one item.
+- **GraphQL casing**: in our own identifiers, log strings, and documentation, write the word as `Graphql` (PascalCase, e.g. `GraphqlClientCache`), `Gql` (short PascalCase, e.g. `GqlClient`), or `gql` (camelCase / lowercase, e.g. `gqlClient`, `gql-schema`). **Never** `GraphQL` or `GraphQl`. Third-party types like `com.expediagroup.graphql.client.ktor.GraphQLKtorClient` keep their upstream casing in imports, but our local variables/fields holding such instances follow the rule (e.g. `private val gqlClient: GraphQLKtorClient`).
 - **Extract common variables early** and **return early** when possible.
 - Prefer proper imports + short names over fully qualified type references unless ambiguity needs to be avoided.
 
@@ -173,7 +174,7 @@ TODO: document retry / backoff policy (currently single attempt — confirm).
 - **API DTOs are always defined separately**: never reuse a generated OpenAPI DTO as an internal model or vice-versa.
 
 
-### GraphQL queries
+### Graphql queries
 
 - Query files live in `src/resources/*.graphql`. The `graphql-kotlin` plugin generates typed Kotlin classes from them at compile time.
 - After bumping `SHOPIFY_API_VERSION`, re-run `./gradlew graphqlIntrospectSchema graphqlGenerateClient` and fix schema drift.

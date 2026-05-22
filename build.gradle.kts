@@ -18,7 +18,7 @@ plugins {
   // Improves the DX on `assert` errors significantly (shows what went wrong).
   alias(libs.plugins.kotlinPowerAssert)
 
-  // Generates typed Kotlin classes from the Shopify Admin GraphQL schema and our `.graphql` query files.
+  // Generates typed Kotlin classes from the Shopify Admin Graphql schema and our `.graphql` query files.
   alias(libs.plugins.kotlinGraphql)
 
   // Generates DTOs from `openapi.json` so request/response shapes stay in sync with the monolith spec.
@@ -139,7 +139,7 @@ tasks {
 }
 
 dependencies {
-  // Shopify Admin API GraphQL client (typed Kotlin classes generated from `.graphql` queries).
+  // Shopify Admin API Graphql client (typed Kotlin classes generated from `.graphql` queries).
   implementation(libs.graphqlKotlinKtorClient)
   implementation(libs.graphqlKotlinClientSerialization)
 
@@ -151,6 +151,9 @@ dependencies {
   implementation(libs.ktorServerStatusPages)
   implementation(libs.ktorServerContentNegotiation)
   implementation(libs.ktorServerCallLogging)
+
+  // HTML rendering for the OAuth install success page (no reflection).
+  implementation(libs.kotlinxHtml)
 
   // Logging
   implementation(libs.kotlinLogging) // Kotlinesque wrapper over SLF4J

@@ -1,7 +1,7 @@
 package dropnext.dss.shopify
 
 import dropnext.dss.config.ShopifyConfig
-import dropnext.dss.config.ShopifyPaths
+import dropnext.dss.path.ShopifyPaths
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.security.SecureRandom

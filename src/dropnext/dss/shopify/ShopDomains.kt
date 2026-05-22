@@ -1,6 +1,6 @@
 package dropnext.dss.shopify
 
-import dropnext.dss.config.ShopifyPaths
+import dropnext.dss.path.ShopifyPaths
 
 private val shopRegex =
   Regex("^(?:https?://)?([a-zA-Z0-9][a-zA-Z0-9\\-]*)\\.myshopify\\.com/?.*$")

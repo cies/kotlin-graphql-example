@@ -12,10 +12,10 @@ This guide focuses only on IntelliJ IDEA.
 
 The Community Edition will do. The Ultimate Edition is noticeably better because:
 
-* The bundled [GraphQL plugin](https://plugins.jetbrains.com/plugin/8097-graphql) ships pre-installed — useful since we have a lot of `.graphql` files.
+* The bundled [Graphql plugin](https://plugins.jetbrains.com/plugin/8097-graphql) ships pre-installed — useful since we have a lot of `.graphql` files.
 * The subscription comes with some out-of-the-box AI capabilities (multi-line autocomplete) that save time.
 
-The Community Edition can install the GraphQL plugin manually.
+The Community Edition can install the Graphql plugin manually.
 
 
 ## How to install
@@ -53,20 +53,20 @@ sudo ln -f -s /home/$USER/.jdks/corretto-*/bin/java /etc/alternatives/java
 
 These instructions are for the Ultimate Edition, but mostly work for the Community Edition too.
 
-* `File > Settings > Plugins` — switch off plugins you don't expect to use (speeds up the IDE a lot). Ensure the **GraphQL** plugin is enabled.
+* `File > Settings > Plugins` — switch off plugins you don't expect to use (speeds up the IDE a lot). Ensure the **Graphql** plugin is enabled.
 * `Help > Change Memory Settings` — set it to `4096` (also speeds up the IDE).
 * Right-click the status bar and enable `Memory Indicator` — always good to know if something is running out of hand.
 
 
-## GraphQL plugin configuration
+## Graphql plugin configuration
 
-The bundled GraphQL plugin reads schema location from `graphql.config.yml` (if present at the repo root or `src/`).
+The bundled Graphql plugin reads schema location from `graphql.config.yml` (if present at the repo root or `src/`).
 Our `graphqlIntrospectSchema` Gradle task writes the schema to `src/graphql-schema/schema.graphql` so the plugin can find it.
 
 If schema-aware completion stops working after a Shopify API version bump:
 
 1. Run `./gradlew graphqlIntrospectSchema graphqlGenerateClient` from the terminal.
-2. In IntelliJ, restart the GraphQL Language Service: `View > Tool Windows > GraphQL`, then click the refresh icon.
+2. In IntelliJ, restart the Graphql Language Service: `View > Tool Windows > Graphql`, then click the refresh icon.
 
 
 ## Troubleshooting

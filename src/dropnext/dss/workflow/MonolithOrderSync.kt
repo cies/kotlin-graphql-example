@@ -19,14 +19,14 @@ private val log = KotlinLogging.logger {}
  * Returns null when the order cannot be loaded or has no variant-backed lines.
  */
 suspend fun syncShopifyOrderToMonolith(
-  graphQLClient: GraphQLKtorClient,
+  gqlClient: GraphQLKtorClient,
   token: String,
   shopMyShopifyHost: String,
   monolith: MonolithService,
   orderGid: String,
   webhookTopic: String,
 ): CreateOrderResult? {
-  val result = graphQLClient.execute(GetOrderForDss(GetOrderForDss.Variables(orderGid))) {
+  val result = gqlClient.execute(GetOrderForDss(GetOrderForDss.Variables(orderGid))) {
     header("X-Shopify-Access-Token", token)
   }
   val order = result.data?.order
@@ -53,7 +53,7 @@ suspend fun syncShopifyOrderToMonolith(
   return postMappedOrderToMonolith(monolith, req, webhookTopic)
 }
 
-/** POSTs a mapped order and logs success/failure (testable without Shopify GraphQL). */
+/** POSTs a mapped order and logs success/failure (testable without Shopify Graphql). */
 suspend fun postMappedOrderToMonolith(
   monolith: MonolithService,
   req: CreateShopifyOrderRequest,

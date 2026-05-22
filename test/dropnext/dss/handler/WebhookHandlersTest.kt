@@ -1,14 +1,13 @@
 package dropnext.dss.handler
 
-import dropnext.dss.GraphQLClientCache
-import dropnext.dss.config.DssPaths
+import dropnext.dss.GraphqlClientCache
+import dropnext.dss.path.DssPaths
 import dropnext.dss.testing.fake.FakeMonolithService
 import dropnext.dss.testing.fake.FakeShopifyGraphqlServer
 import dropnext.dss.testing.fake.shopifyRewritingHttpClient
 import dropnext.dss.testing.fake.testDssAppConfig
 import dropnext.dss.testing.fake.testShopifyConfig
 import dropnext.dss.workflow.minimalOrder
-import dropnext.graphql.generated.GetOrderById
 import dropnext.graphql.generated.GetOrderForDss
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
@@ -17,7 +16,6 @@ import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.HttpStatusCode
-import io.ktor.server.application.call
 import io.ktor.server.cio.CIO
 import io.ktor.server.cio.CIOApplicationEngine
 import io.ktor.server.engine.EmbeddedServer
@@ -130,7 +128,7 @@ class WebhookHandlersTest {
   }
 
   @Test
-  fun `returns 200 without GraphQL when shop domain cannot be resolved`() = runBlocking {
+  fun `returns 200 without Graphql when shop domain cannot be resolved`() = runBlocking {
     val fake = FakeMonolithService()
     currentHandlers = handlers(monolith = fake)
     val body = """{"id":1}"""
@@ -144,7 +142,7 @@ class WebhookHandlersTest {
   }
 
   @Test
-  fun `returns 200 without GraphQL when no token is available for the shop`() = runBlocking {
+  fun `returns 200 without Graphql when no token is available for the shop`() = runBlocking {
     val fake = FakeMonolithService()
     currentHandlers = handlers(monolith = null, tokens = ConcurrentHashMap())
     val body = """{"id":1,"domain":"acme.myshopify.com"}"""
@@ -253,7 +251,7 @@ class WebhookHandlersTest {
       }
       assert(r.status == HttpStatusCode.OK)
       assert(monolith.createOrderCallCount == 0)
-      // With sync disabled, the handler should also skip the (now removed) bookkeeping GraphQL fetch.
+      // With sync disabled, the handler should also skip the (now removed) bookkeeping Graphql fetch.
       assert(gqlFake.calls.isEmpty())
     } finally {
       rewriter.close()
@@ -279,7 +277,7 @@ class WebhookHandlersTest {
       shopify = testShopifyConfig(appClientSecret = secret),
       syncOrderOnUpdated = syncOnUpdated,
     )
-    val cache = GraphQLClientCache(httpClient)
+    val cache = GraphqlClientCache(httpClient)
     return WebhookHandlers(dssConfig, cache, monolith, dropnext.dss.lib.dss.ShopAccessTokenCache(tokens))
   }
 

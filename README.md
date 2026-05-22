@@ -4,7 +4,7 @@ DropNext Shopify Service
 A stateless service that bridges retailer Shopify stores to the DropNext platform (`dropnext-monolith`):
 * OAuth install flow,
 * catalog/order webhooks,
-* typed Admin GraphQL calls, and
+* typed Admin Graphql calls, and
 * forwarding of order events to the [`dropnext-monolith`](../dropnext/dropnext-monolith).
 
 
@@ -17,10 +17,10 @@ Its application layer runs on the JVM and primarily uses libraries from the Kotl
 * [Ktor](https://ktor.io/) —
 Lightweight HTTP server (CIO engine) and client (with OkHttp engine). Used both as the inbound
 server (OAuth, webhooks, DSS REST) and as the outbound client (Shopify Admin API, monolith forwarding).
-That Kotlin's defacto standard GraphQL stack builds on top of KTor is the main reason this project is not
+That Kotlin's defacto standard Graphql stack builds on top of KTor is the main reason this project is not
 part of `dropnext-monolith` (which builds on `http4k`): to avoid dependency hell.
 * [graphql-kotlin](https://github.com/ExpediaGroup/graphql-kotlin) —
-Compile-time-typed GraphQL client. Queries live as `*.graphql` files in `src/resources/` and the
+Compile-time-typed Graphql client. Queries live as `*.graphql` files in `src/resources/` and the
 Gradle plugin generates typed Kotlin classes from them — schema drift fails the build instead of
 the producing error at runtime.
 * [kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization) —
@@ -85,7 +85,7 @@ docker compose --profile local-monolith up app-local-monolith  # DSS_ALLOW_INSEC
 
 ### Codegen
 
-#### GraphQL (Shopify Admin API)
+#### Graphql (Shopify Admin API)
 
 The project targets Admin API **`2026-04`**. Keep these in sync when changing versions:
 
@@ -115,12 +115,12 @@ Do not add handwritten copies of `CreateShopifyOrderRequest` or other spec DTOs.
 If codegen fails, fix the schema in `openapi.json`, then re-run `openApiGenerate` (or any compile task).
 
 
-### The JetBrains [GraphQL IDE plugin](https://plugins.jetbrains.com/plugin/8097-graphql)
+### The JetBrains [Graphql IDE plugin](https://plugins.jetbrains.com/plugin/8097-graphql)
 
-With this plugin, you get syntax + error highlighting and autocomplete on GraphQL queries in IntelliJ IDEA.
+With this plugin, you get syntax + error highlighting and autocomplete on Graphql queries in IntelliJ IDEA.
 It also lets you run queries against an endpoint directly from the IDE.
 
-The plugin's introspection (downloading of the schema) does not work well with the Shopify GraphQL API.
+The plugin's introspection (downloading of the schema) does not work well with the Shopify Graphql API.
 To mitigate, we use the Gradle plugin's introspection (the `graphqlIntrospectSchema` task) and
 point the IDE plugin at the committed `src/graphql-schema/schema.graphql`.
 
@@ -206,7 +206,7 @@ Unhandled server errors return a generic message; details stay in server logs on
 | `ENABLE_TEST_HARNESS` | no | Set `true` for `/dev/test-harness` and **/demo/* routes**. With harness on, a default fake token is merged for `SANDBOX_SHOP` unless `SANDBOX_ACCESS_TOKEN` is set. |
 | `SANDBOX_SHOP` | no | Short handle merged into the token map when the harness is on (default `harness-sandbox`). |
 | `SANDBOX_ACCESS_TOKEN` | no | Optional real dev-store Admin token for that sandbox shop; if unset with harness on, a **non-production placeholder** is used. |
-| `DSS_SANDBOX_FAKE_SHOPIFY` | no | Only with **`ENABLE_TEST_HARNESS=true`**. If `true`, sync/tracking/demo **skip real Shopify HTTP** and return stub **200** JSON/text so the test page does not hit 500/GraphQL throws. Use for local UI checks; never in production. |
+| `DSS_SANDBOX_FAKE_SHOPIFY` | no | Only with **`ENABLE_TEST_HARNESS=true`**. If `true`, sync/tracking/demo **skip real Shopify HTTP** and return stub **200** JSON/text so the test page does not hit 500/Graphql throws. Use for local UI checks; never in production. |
 
 Legacy compatibility: `SHOPIFY_API_KEY` and `SHOPIFY_API_SECRET` are still accepted as fallbacks when the new `SHOPIFY_APP_CLIENT_ID` / `SHOPIFY_APP_CLIENT_SECRET` vars are not set.
 

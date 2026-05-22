@@ -83,7 +83,7 @@ class ProductMapperTest {
   }
 
   @Test
-  fun `maps GraphQL ProductStatus to DTO`() {
+  fun `maps Graphql ProductStatus to DTO`() {
     assert(sampleProduct(status = GraphqlProductStatus.ACTIVE).toProductVariantItems("USD").single().productStatus == DtoProductStatus.ACTIVE)
     assert(sampleProduct(status = GraphqlProductStatus.ARCHIVED).toProductVariantItems("USD").single().productStatus == DtoProductStatus.ARCHIVED)
     assert(sampleProduct(status = GraphqlProductStatus.DRAFT).toProductVariantItems("USD").single().productStatus == DtoProductStatus.DRAFT)

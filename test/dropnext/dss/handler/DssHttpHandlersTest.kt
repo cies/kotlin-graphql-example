@@ -1,7 +1,7 @@
 package dropnext.dss.handler
 
-import dropnext.dss.GraphQLClientCache
-import dropnext.dss.config.DssPaths
+import dropnext.dss.GraphqlClientCache
+import dropnext.dss.path.DssPaths
 import dropnext.dss.lib.dss.dto.PutShopAccessTokenRequest
 import dropnext.dss.lib.dss.dto.PutShopAccessTokenResponse
 import dropnext.dss.lib.dss.dto.Shipment
@@ -29,7 +29,6 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
-import io.ktor.server.application.call
 import io.ktor.server.application.install
 import io.ktor.server.cio.CIO
 import io.ktor.server.cio.CIOApplicationEngine
@@ -327,7 +326,7 @@ class DssHttpHandlersTest {
       dssInternalSecret = internalSecret,
       sandboxFakeShopify = sandboxFakeShopify,
     )
-    val cache = GraphQLClientCache(client)
+    val cache = GraphqlClientCache(client)
     return DssHttpHandlers(
       shopifyConfig = shopify,
       dssConfig = dssConfig,

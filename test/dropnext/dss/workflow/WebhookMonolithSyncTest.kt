@@ -33,7 +33,7 @@ class WebhookMonolithSyncTest {
   }
 
   @Test
-  fun `syncShopifyOrderToMonolith loads via GraphQL and forwards to monolith`() {
+  fun `syncShopifyOrderToMonolith loads via Graphql and forwards to monolith`() {
     val gql = FakeShopifyGraphqlServer()
     val port = gql.start()
     val httpClient = HttpClient(OkHttp) {
@@ -54,7 +54,7 @@ class WebhookMonolithSyncTest {
       val monolith = FakeMonolithService()
       val result = runBlocking {
         syncShopifyOrderToMonolith(
-          graphQLClient = client,
+          gqlClient = client,
           token = "shpat_test",
           shopMyShopifyHost = "acme.myshopify.com",
           monolith = monolith,

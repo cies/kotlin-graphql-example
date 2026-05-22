@@ -1,6 +1,6 @@
 # DSS implementation log
 
-This document records what was implemented for the **DropNext Shopify Service (DSS)** in this repository: OpenAPI-shaped REST, Shopify Admin GraphQL (`2026-04`), **stateless** Admin token resolution (no `stores.json`), monolith order forwarding, fulfillment sync, and security hooks.
+This document records what was implemented for the **DropNext Shopify Service (DSS)** in this repository: OpenAPI-shaped REST, Shopify Admin Graphql (`2026-04`), **stateless** Admin token resolution (no `stores.json`), monolith order forwarding, fulfillment sync, and security hooks.
 
 ## Configuration
 
@@ -21,10 +21,10 @@ This document records what was implemented for the **DropNext Shopify Service (D
 ## Shopify integration
 
 - **OAuth callback**: after code exchange, runs `ShopIdentity`, sync sample products, registers webhooks; **does not persist tokens** — success page shows a `DSS_SHOP_ACCESS_TOKENS` example line.
-- **Webhooks**: require a token in the env map for the shop; otherwise log and return 200 without GraphQL.
-- **Fulfillment**: `DssFulfillmentService` — same GraphQL flow as before; tracking uses `FulfillmentEventCreateMutation` with string status parsing (`FulfillmentEventStatusParser`).
+- **Webhooks**: require a token in the env map for the shop; otherwise log and return 200 without Graphql.
+- **Fulfillment**: `DssFulfillmentService` — same Graphql flow as before; tracking uses `FulfillmentEventCreateMutation` with string status parsing (`FulfillmentEventStatusParser`).
 
-## GraphQL documents
+## Graphql documents
 
 - `GetOrderForDss.graphql` (includes `totalPriceSet` for monolith payload), `FulfillmentCancel.graphql`, `FulfillmentCreateWithLineItems.graphql`, `FulfillmentEventCreate.graphql`, `ShopIdentity.graphql` under `src/main/resources/`.
 

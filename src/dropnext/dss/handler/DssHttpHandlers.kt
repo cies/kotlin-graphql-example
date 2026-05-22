@@ -1,8 +1,8 @@
 package dropnext.dss.handler
 
-import dropnext.dss.GraphQLClientCache
+import dropnext.dss.GraphqlClientCache
 import dropnext.dss.config.DssAppConfig
-import dropnext.dss.config.DssPaths
+import dropnext.dss.path.DssPaths
 import dropnext.dss.config.ShopifyConfig
 import dropnext.dss.lib.dss.ShopAccessTokenCache
 import dropnext.dss.lib.dss.ShopifyAdminToken
@@ -41,7 +41,7 @@ private val log = KotlinLogging.logger {}
 class DssHttpHandlers(
   private val shopifyConfig: ShopifyConfig,
   private val dssConfig: DssAppConfig,
-  private val gqlClientCache: GraphQLClientCache,
+  private val gqlClientCache: GraphqlClientCache,
   private val fulfillmentService: DssFulfillmentService,
   private val monolithService: MonolithService? = null,
   private val shopTokens: ShopAccessTokenCache,
@@ -75,8 +75,8 @@ class DssHttpHandlers(
             )
           is ShopifyAdminToken.Resolved -> t.token
         }
-    val graphQLClient = gqlClientCache.forShop(shop, shopifyConfig.apiVersion)
-    when (val result = fulfillmentService.syncShipmentsWithFulfillments(graphQLClient, token, body)) {
+    val gqlClient = gqlClientCache.forShop(shop, shopifyConfig.apiVersion)
+    when (val result = fulfillmentService.syncShipmentsWithFulfillments(gqlClient, token, body)) {
       is FulfillmentResult.Ok -> call.respond(result.value)
       is FulfillmentResult.Err -> {
         val msg = result.toMessage()
@@ -116,8 +116,8 @@ class DssHttpHandlers(
             )
           is ShopifyAdminToken.Resolved -> t.token
         }
-    val graphQLClient = gqlClientCache.forShop(shop, shopifyConfig.apiVersion)
-    when (val result = fulfillmentService.createTrackingEvent(graphQLClient, token, body)) {
+    val gqlClient = gqlClientCache.forShop(shop, shopifyConfig.apiVersion)
+    when (val result = fulfillmentService.createTrackingEvent(gqlClient, token, body)) {
       is FulfillmentResult.Ok -> call.respond(result.value)
       is FulfillmentResult.Err -> {
         val msg = result.toMessage()
