@@ -63,10 +63,9 @@ class DssHttpHandlersTest {
     server = embeddedServer(CIO, port = 0) {
       install(ServerContentNegotiation) { json(AppJson) }
       routing {
-        // Routes match production wiring in DssRouting.kt (path names intentionally
-        // do not reflect body types — see DssRouting KDoc).
-        post(DssPaths.TRACKING_UPDATE) { dispatch { handleSyncShipments(call) } }
-        post(DssPaths.SYNC_SHIPMENTS_WITH_FULFILLMENTS) { dispatch { handleTrackingUpdate(call) } }
+        // Routes mirror production wiring in DssRouting.kt — paths match their request bodies.
+        post(DssPaths.SYNC_SHIPMENTS_WITH_FULFILLMENTS) { dispatch { handleSyncShipments(call) } }
+        post(DssPaths.TRACKING_UPDATE) { dispatch { handleTrackingUpdate(call) } }
         post(DssPaths.TRACKING_UPDATES) { dispatch { handleTrackingUpdate(call) } }
         put(DssPaths.STORES_API_KEY) { dispatch { handlePutStoreApiKey(call) } }
       }
@@ -109,7 +108,7 @@ class DssHttpHandlersTest {
   @Test
   fun `sync-shipments returns 401 when internal secret is required and not provided`() = runBlocking {
     current = handlers(internalSecret = "y".repeat(32))
-    val r = client.post("$baseUrl${DssPaths.TRACKING_UPDATE}") {
+    val r = client.post("$baseUrl${DssPaths.SYNC_SHIPMENTS_WITH_FULFILLMENTS}") {
       contentType(ContentType.Application.Json)
       setBody(validSyncRequest())
     }
@@ -120,7 +119,7 @@ class DssHttpHandlersTest {
   @Test
   fun `sync-shipments accepts when internal secret matches`() = runBlocking {
     current = handlers(internalSecret = "y".repeat(32), sandboxFakeShopify = true)
-    val r = client.post("$baseUrl${DssPaths.TRACKING_UPDATE}") {
+    val r = client.post("$baseUrl${DssPaths.SYNC_SHIPMENTS_WITH_FULFILLMENTS}") {
       header("X-DSS-Internal-Secret", "y".repeat(32))
       contentType(ContentType.Application.Json)
       setBody(validSyncRequest())
@@ -133,7 +132,7 @@ class DssHttpHandlersTest {
   @Test
   fun `sync-shipments returns 400 for non-positive shopify_order_id`() = runBlocking {
     current = handlers()
-    val r = client.post("$baseUrl${DssPaths.TRACKING_UPDATE}") {
+    val r = client.post("$baseUrl${DssPaths.SYNC_SHIPMENTS_WITH_FULFILLMENTS}") {
       contentType(ContentType.Application.Json)
       setBody(validSyncRequest().copy(shopifyOrderId = 0))
     }
@@ -144,7 +143,7 @@ class DssHttpHandlersTest {
   @Test
   fun `sync-shipments returns 400 for invalid shopify_subdomain`() = runBlocking {
     current = handlers()
-    val r = client.post("$baseUrl${DssPaths.TRACKING_UPDATE}") {
+    val r = client.post("$baseUrl${DssPaths.SYNC_SHIPMENTS_WITH_FULFILLMENTS}") {
       contentType(ContentType.Application.Json)
       setBody(validSyncRequest().copy(shopifySubdomain = "!!invalid!!"))
     }
@@ -157,7 +156,7 @@ class DssHttpHandlersTest {
   @Test
   fun `sync-shipments returns stub response when sandboxFakeShopify is true`() = runBlocking {
     current = handlers(sandboxFakeShopify = true)
-    val r = client.post("$baseUrl${DssPaths.TRACKING_UPDATE}") {
+    val r = client.post("$baseUrl${DssPaths.SYNC_SHIPMENTS_WITH_FULFILLMENTS}") {
       contentType(ContentType.Application.Json)
       setBody(validSyncRequest())
     }
@@ -169,7 +168,7 @@ class DssHttpHandlersTest {
   @Test
   fun `tracking-update returns stub response when sandboxFakeShopify is true`() = runBlocking {
     current = handlers(sandboxFakeShopify = true)
-    val r = client.post("$baseUrl${DssPaths.SYNC_SHIPMENTS_WITH_FULFILLMENTS}") {
+    val r = client.post("$baseUrl${DssPaths.TRACKING_UPDATE}") {
       contentType(ContentType.Application.Json)
       setBody(validTrackingRequest())
     }
@@ -183,7 +182,7 @@ class DssHttpHandlersTest {
   @Test
   fun `sync-shipments returns 401 when no token in header or env`() = runBlocking {
     current = handlers(shopAccessTokens = ConcurrentHashMap())
-    val r = client.post("$baseUrl${DssPaths.TRACKING_UPDATE}") {
+    val r = client.post("$baseUrl${DssPaths.SYNC_SHIPMENTS_WITH_FULFILLMENTS}") {
       contentType(ContentType.Application.Json)
       setBody(validSyncRequest())
     }

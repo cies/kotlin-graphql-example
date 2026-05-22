@@ -12,10 +12,10 @@ info:
     **Canonical machine-readable specification:** **`openapi.json`** at the repository root (`x-webhooks` map tells the monolith
     where to POST). Gradle **`openApiGenerate`** uses that JSON to generate Kotlin DTOs (`build.gradle.kts`).
 
-    **Inbound paths vs payloads (openapi `x-webhooks` naming):**
-    - **`POST /sync-shipments-with-fulfillments`** — body **`TrackingUpdateRequest`** — push tracking status → Shopify FulfillmentEvent.
-    - **`POST /tracking-update`** — body **`SyncShipmentsWithFulfillmentsRequest`** — sync shipments ↔ Shopify fulfillments.
-    - **`POST /tracking-updates`** — same body **`TrackingUpdateRequest`** as `/sync-shipments-with-fulfillments` (compatibility alias).
+    **Inbound paths vs payloads:**
+    - **`POST /sync-shipments-with-fulfillments`** — body **`SyncShipmentsWithFulfillmentsRequest`** — sync shipments ↔ Shopify fulfillments.
+    - **`POST /tracking-update`** — body **`TrackingUpdateRequest`** — push tracking status → Shopify FulfillmentEvent.
+    - **`POST /tracking-updates`** — same body **`TrackingUpdateRequest`** as `/tracking-update` (compatibility alias).
 
 servers:
   - url: /
@@ -28,8 +28,29 @@ paths:
   /sync-shipments-with-fulfillments:
     post:
       tags: [fulfillments]
+      summary: Sync DropNext shipments ↔ Shopify fulfillments (body SyncShipmentsWithFulfillmentsRequest)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SyncShipmentsWithFulfillmentsRequest"
+      responses:
+        "200":
+          description: Shipments were synced and new fulfillment IDs were returned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncShipmentsWithFulfillmentsResponse"
+        "400":
+          description: Shopify said no, or we couldn't match variants / fulfillment orders - check the error text
+        "401":
+          description: Wrong or missing `X-DSS-Internal-Secret`, missing Admin token header / env map, or invalid token
+
+  /tracking-update:
+    post:
+      tags: [fulfillments]
       summary: Tracking status → Shopify (FulfillmentEvent)
-      description: Matches **`openapi.json`** webhook `tracking-update` target URL. Body **`TrackingUpdateRequest`**.
       requestBody:
         required: true
         content:
@@ -51,7 +72,7 @@ paths:
   /tracking-updates:
     post:
       tags: [fulfillments]
-      summary: Compatibility alias — same payload as **`POST /sync-shipments-with-fulfillments`**
+      summary: Compatibility alias — same payload as **`POST /tracking-update`**
       requestBody:
         required: true
         content:
@@ -69,29 +90,6 @@ paths:
           description: Shopify rejected the event or we couldn't build it - see error message
         "401":
           description: Wrong or missing secret header (if configured)
-
-  /tracking-update:
-    post:
-      tags: [fulfillments]
-      summary: Sync DropNext shipments ↔ Shopify fulfillments (body SyncShipmentsWithFulfillmentsRequest)
-      description: Matches **`openapi.json`** webhook **`sync-shipments-with-fulfillments`** target URL.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SyncShipmentsWithFulfillmentsRequest"
-      responses:
-        "200":
-          description: Shipments were synced and new fulfillment IDs were returned.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SyncShipmentsWithFulfillmentsResponse"
-        "400":
-          description: Shopify said no, or we couldn't match variants / fulfillment orders - check the error text
-        "401":
-          description: Wrong or missing `X-DSS-Internal-Secret`, missing Admin token header / env map, or invalid token
 
   /stores/api-key:
     put:

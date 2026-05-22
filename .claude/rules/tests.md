@@ -6,7 +6,7 @@ paths:
 
 ## Test organization
 
-- Test files mirror source file structure: `src/dropnext/dss/lib/dss/MonolithOrderMapper.kt` → `test/dropnext/dss/lib/dss/MonolithOrderMapperTest.kt`.
+- Test files mirror source file structure: `src/dropnext/dss/workflow/MonolithOrderMapper.kt` → `test/dropnext/dss/workflow/MonolithOrderMapperTest.kt`.
 - Test class names = source file name (PascalCase) + `Test`.
 - Helpers and fixtures live alongside the tests that use them (e.g. `OrderTestFixtures.kt`, `testing/fake/FakeMonolithService.kt`).
 

@@ -40,4 +40,4 @@ Graphql calls are made against the **shop-specific** endpoint `https://{shop}/ad
 - Inbound webhooks are verified with `X-Shopify-Hmac-Sha256` in **constant time** (`SecureCompare.kt`).
 - Always validate HMAC before parsing the body.
 - Read the shop domain from `X-Shopify-Shop-Domain` header (reverse proxies must forward it).
-- Webhook topics and their behavior live in `ShopifyRouting.kt` and `ShopifyWebhookRegistration.kt`.
+- Inbound webhook wiring is in `routing/WebhookRouting.kt`; per-topic dispatch happens in `handler/WebhookHandlers.kt` (matches on `ShopifyWebhookTopic`). Outbound subscription registration on install lives in `shopify/ShopifyWebhookRegistration.kt`.

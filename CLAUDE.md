@@ -67,29 +67,41 @@ Companion project: [`dropnext-monolith`](../dropnext/dropnext-monolith). Convent
 
 ```
 /src/dropnext/dss                # Application code (Kotlin)
-├── ShopifyServer.kt             # Main entry point (Ktor `embeddedServer`).
-├── ShopifyRouting.kt            # HTTP route definitions for Shopify install/OAuth/webhook/demo flows.
-├── AppJson.kt                   # Shared kotlinx.serialization Json config for inbound Shopify payloads.
-├── MonolithJson.kt              # Shared Json config for outbound monolith calls (snake_case mapping).
-├── DssTraceId.kt                # Per-request trace ID propagation (Logback MDC + `X-Trace-Id`).
+├── app.kt                       # `main` — wires config, handlers, routing into a Ktor `embeddedServer`.
 ├── SharedHttpClient.kt          # Ktor HttpClient singleton with OkHttp engine.
 ├── GraphqlClientCache.kt        # Per-shop Graphql client cache (shop-scoped access tokens).
 ├── config/                      # Environment + Shopify config + per-shop token map.
-│   ├── EnvVars.kt
-│   ├── ShopifyConfig.kt
 │   ├── DssAppConfig.kt
-│   └── ShopAccessTokensEnv.kt
+│   ├── EnvVars.kt
+│   ├── ShopAccessTokensEnv.kt
+│   └── ShopifyConfig.kt
+├── path/                        # Inbound/outbound HTTP path constants (single source of truth).
+│   ├── DssPaths.kt
+│   ├── MonolithPaths.kt
+│   └── ShopifyPaths.kt
 ├── shopify/                     # Shopify-specific helpers (OAuth, webhooks, signatures, mappers).
 ├── handler/                     # HTTP request handlers (Ktor `ApplicationCall` → response).
-│   └── DssHttpHandlers.kt
+│   ├── DemoHandlers.kt
+│   ├── DiagnosticsHandlers.kt
+│   ├── DssHttpHandlers.kt
+│   ├── OAuthHandlers.kt
+│   └── WebhookHandlers.kt
 ├── routing/                     # Ktor route bindings — wires handlers to URL paths.
-│   └── DssRouting.kt
+│   ├── DemoRouting.kt
+│   ├── DiagnosticsRouting.kt
+│   ├── DssRouting.kt
+│   ├── OAuthRouting.kt
+│   └── WebhookRouting.kt
+├── presentation/                # Pure view layer (data in, HTML string out — no Ktor/HTTP types).
+│   └── OAuthInstallView.kt
 ├── workflow/                    # Orchestration: load order, map, post to monolith. No HTTP/routing concerns.
 │   ├── MonolithOrderMapper.kt
 │   └── MonolithOrderSync.kt
 └── lib/                         # Small, focused utilities.
     ├── dss/                     # DSS-protocol primitives (auth, secure compare, GIDs, token resolution).
     ├── fulfillment/             # Shopify fulfillment domain (matching, validation, service, result types).
+    ├── json/                    # Shared kotlinx.serialization configs (AppJson inbound, MonolithJson outbound).
+    ├── ktor/                    # Ktor server extensions (trace-id MDC, error helpers).
     └── monolith/                # Outbound monolith HTTP client + error logging.
 
 /src/resources                   # JVM classpath resources (logback.xml, .graphql queries, openapi.json fallback)
@@ -103,10 +115,11 @@ Companion project: [`dropnext-monolith`](../dropnext/dropnext-monolith). Convent
 ### Inbound webhook flow
 
 1. Shopify POSTs to `/webhooks/shopify`.
-2. `ShopifyRouting` verifies `X-Shopify-Hmac-Sha256` (constant-time compare) against the app secret.
-3. Topic-specific handler runs:
-   - `PRODUCTS_*`: parses body for resource id, runs `GetProductById` Graphql query.
-   - `ORDERS_CREATE`: if `MONOLITH_BASE_URL` is set, runs `GetOrderForDss` and POSTs to the monolith via `MonolithService`.
+2. `WebhookHandlers.handleShopifyWebhook` verifies `X-Shopify-Hmac-Sha256` (constant-time compare via `ShopifySignatures.verifyWebhook`) against the app secret.
+3. Topic-specific dispatch on `ShopifyWebhookTopic` runs:
+   - `PRODUCTS_CREATE` / `PRODUCTS_UPDATE`: parses body for resource id, runs `GetProductById` Graphql query, then upserts variants on the monolith.
+   - `PRODUCTS_DELETE`: parses variant legacy ids from the webhook body and soft-deletes them on the monolith.
+   - `ORDERS_CREATE`: if `MONOLITH_BASE_URL` is set, runs `GetOrderForDss` and POSTs the mapped order to the monolith via `MonolithService`.
    - `ORDERS_UPDATED`: only syncs to monolith when `DSS_SYNC_ORDER_ON_UPDATED=true` (default off to avoid duplicate POSTs).
 
 TODO: document deduplication strategy for at-least-once webhook delivery in multi-instance deployments.

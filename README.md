@@ -164,11 +164,12 @@ On `products/create` and `products/update`, the app parses the webhook body for 
 OpenAPI (human-readable mirror): [`docs/openapi/dss-api.yaml`](docs/openapi/dss-api.yaml).
 **Canonical:** [`openapi.json`](openapi.json) at repo root (Gradle `openApiGenerate` uses it).
 
-* `POST /sync-shipments-with-fulfillments` — accepts `TrackingUpdateRequest` (tracking → Shopify).
-* `POST /tracking-update` — accepts `SyncShipmentsWithFulfillmentsRequest` sync payload.
-* `POST /tracking-updates` — alias matching the tracking payload.
+* `POST /sync-shipments-with-fulfillments` — accepts `SyncShipmentsWithFulfillmentsRequest` (sync DropNext shipments ↔ Shopify fulfillments).
+* `POST /tracking-update` — accepts `TrackingUpdateRequest` (tracking status → Shopify FulfillmentEvent).
+* `POST /tracking-updates` — alias for `/tracking-update`, same payload.
+* `PUT /stores/api-key` — accepts `PutShopAccessTokenRequest`; caches the Shopify Admin token in memory and forwards it to the monolith when `MONOLITH_BASE_URL` is set.
 
-Pass `X-Shopify-Access-Token` or configure `DSS_SHOP_ACCESS_TOKENS`.
+Pass `X-Shopify-Access-Token` or configure `DSS_SHOP_ACCESS_TOKENS`. When `DSS_INTERNAL_SECRET` is set, all four routes also require header `X-DSS-Internal-Secret`.
 
 
 ### Security notes (production)

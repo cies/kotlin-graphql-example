@@ -9,12 +9,12 @@ Checklist for verifying **supplier shipment → Shopify fulfillment** via the mo
 - Shopify Admin token available to DSS via `DSS_SHOP_ACCESS_TOKENS` or monolith `X-Shopify-Access-Token` header.
 - `MONOLITH_BASE_URL` set on DSS for order/product webhooks (Shopify → monolith).
 
-## Path reference (easy to miswire)
+## Path reference
 
 | Monolith intent | DSS URL | Request body |
 |-----------------|---------|--------------|
-| Supplier created/reorganized shipment | `POST /tracking-update` | `SyncShipmentsWithFulfillmentsRequest` |
-| Carrier tracking status (e.g. AfterShip) | `POST /sync-shipments-with-fulfillments` | `TrackingUpdateRequest` |
+| Supplier created/reorganized shipment | `POST /sync-shipments-with-fulfillments` | `SyncShipmentsWithFulfillmentsRequest` |
+| Carrier tracking status (e.g. AfterShip) | `POST /tracking-update` | `TrackingUpdateRequest` |
 | Compat alias for tracking status | `POST /tracking-updates` | `TrackingUpdateRequest` |
 
 See also [`docs/openapi/dss-api.yaml`](openapi/dss-api.yaml).
@@ -28,7 +28,7 @@ See also [`docs/openapi/dss-api.yaml`](openapi/dss-api.yaml).
 ## Step B — Supplier shipment → Shopify fulfill
 
 1. Create a supplier shipment in the monolith for that order.
-2. Monolith POSTs to `{DSS_URL}/tracking-update` with a body like:
+2. Monolith POSTs to `{DSS_URL}/sync-shipments-with-fulfillments` with a body like:
 
 ```json
 {
@@ -54,7 +54,7 @@ See also [`docs/openapi/dss-api.yaml`](openapi/dss-api.yaml).
 
 ## Step C — Tracking event (AfterShip-style)
 
-1. Monolith POSTs to `{DSS_URL}/sync-shipments-with-fulfillments` with the **same** `tracking_number` as step B:
+1. Monolith POSTs to `{DSS_URL}/tracking-update` with the **same** `tracking_number` as step B:
 
 ```json
 {
@@ -76,7 +76,7 @@ $env:DSS_SANDBOX_FAKE_SHOPIFY="true"
 .\gradlew.bat run
 ```
 
-POST `/tracking-update` with the step B JSON → fake `new_fulfillment_ids`. POST `/sync-shipments-with-fulfillments` with step C JSON → fake `fulfillment_event_id`.
+POST `/sync-shipments-with-fulfillments` with the step B JSON → fake `new_fulfillment_ids`. POST `/tracking-update` with step C JSON → fake `fulfillment_event_id`.
 
 ## Operational notes
 
@@ -90,4 +90,4 @@ POST `/tracking-update` with the step B JSON → fake `new_fulfillment_ids`. POS
 .\gradlew.bat test
 ```
 
-Covers request validation, fulfillment order matching, HTTP status mapping, order mapper FO id behavior, and OpenAPI DTO deserialization (`OpenapiWebhookBodySerializationTest`).
+Covers request validation, fulfillment order matching, HTTP status mapping, and order mapper FO id behavior.

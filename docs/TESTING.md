@@ -1,6 +1,6 @@
 # Testing (DSS)
 
-## Policy (all `src/test`)
+## Policy (all `test/`)
 
 | Rule | Detail |
 | ---- | ------ |
