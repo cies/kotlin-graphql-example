@@ -29,8 +29,7 @@ suspend fun syncShopifyOrderToMonolith(
   val result = gqlClient.execute(GetOrderForDss(GetOrderForDss.Variables(orderGid))) {
     header("X-Shopify-Access-Token", token)
   }
-  val order = result.data?.order
-  if (order == null) {
+  val order = result.data?.order ?: run {
     log.error { "Webhook $webhookTopic: order null orderGid=$orderGid errors=${result.errors}" }
     return null
   }

@@ -1,6 +1,6 @@
 package dropnext.dss.handler
 
-import dropnext.dss.GraphqlClientCache
+import dropnext.dss.shopify.GraphqlClientCache
 import dropnext.dss.path.DssPaths
 import dropnext.dss.shopify.signedOAuthState
 import dropnext.dss.testing.fake.FakeMonolithService

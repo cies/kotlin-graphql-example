@@ -1,6 +1,6 @@
 package dropnext.dss.handler
 
-import dropnext.dss.GraphqlClientCache
+import dropnext.dss.shopify.GraphqlClientCache
 import dropnext.dss.config.DssAppConfig
 import dropnext.dss.path.DssPaths
 import dropnext.dss.lib.auth.ShopAccessTokenCache

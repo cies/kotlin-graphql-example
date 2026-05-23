@@ -1,6 +1,6 @@
 package dropnext.dss.handler
 
-import dropnext.dss.GraphqlClientCache
+import dropnext.dss.shopify.GraphqlClientCache
 import dropnext.dss.path.DssPaths
 import dropnext.dss.testing.fake.FakeMonolithService
 import dropnext.dss.testing.fake.FakeShopifyGraphqlServer
@@ -37,12 +37,12 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class WebhookHandlersTest {
+class ShopifyWebhookHandlersTest {
 
   private val secret = "shpss_test_webhook_secret"
 
   @Volatile
-  private var currentHandlers: WebhookHandlers? = null
+  private var currentHandlers: ShopifyWebhookHandlers? = null
 
   private lateinit var server: EmbeddedServer<CIOApplicationEngine, CIOApplicationEngine.Configuration>
   private lateinit var baseUrl: String
@@ -265,20 +265,20 @@ class WebhookHandlersTest {
     monolith: FakeMonolithService? = null,
     tokens: MutableMap<String, String> = ConcurrentHashMap(),
     syncOnUpdated: Boolean = false,
-  ): WebhookHandlers = handlersWith(monolith, tokens, httpClient, syncOnUpdated)
+  ): ShopifyWebhookHandlers = handlersWith(monolith, tokens, httpClient, syncOnUpdated)
 
   private fun handlersWith(
     monolith: FakeMonolithService?,
     tokens: MutableMap<String, String>,
     httpClient: HttpClient,
     syncOnUpdated: Boolean = false,
-  ): WebhookHandlers {
+  ): ShopifyWebhookHandlers {
     val dssConfig = testDssAppConfig(
       shopify = testShopifyConfig(appClientSecret = secret),
       syncOrderOnUpdated = syncOnUpdated,
     )
     val cache = GraphqlClientCache(httpClient)
-    return WebhookHandlers(dssConfig, cache, monolith, dropnext.dss.lib.auth.ShopAccessTokenCache(tokens))
+    return ShopifyWebhookHandlers(dssConfig, cache, monolith, dropnext.dss.lib.auth.ShopAccessTokenCache(tokens))
   }
 
   private fun base64HmacSha256(secret: String, body: ByteArray): String {

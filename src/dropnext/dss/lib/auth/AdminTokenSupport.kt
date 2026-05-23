@@ -1,8 +1,5 @@
-package dropnext.dss.handler
+package dropnext.dss.lib.auth
 
-import dropnext.dss.lib.auth.ShopAccessTokenCache
-import dropnext.dss.lib.auth.ShopifyAdminToken
-import dropnext.dss.lib.auth.shopifyAdminTokenWithMonolithFallback
 import dropnext.dss.lib.ktor.DssError
 import dropnext.dss.lib.ktor.respondError
 import dropnext.dss.lib.ktor.shopifyAccessTokenFromHeader

@@ -1,7 +1,7 @@
 package dropnext.dss.handler
 
-import dropnext.dss.GraphqlClientCache
-import dropnext.dss.createSharedHttpClient
+import dropnext.dss.shopify.GraphqlClientCache
+import dropnext.dss.lib.ktor.createSharedHttpClient
 import dropnext.dss.path.DssPaths
 import dropnext.dss.lib.auth.ShopAccessTokenCache
 import dropnext.dss.lib.dto.PutShopAccessTokenRequest
@@ -38,7 +38,7 @@ import io.ktor.server.testing.testApplication
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.test.Test
 
-class DssHttpHandlersTest {
+class MonolithShopifyWebhookHandlersTest {
 
   @Test
   fun `sync-shipments returns 401 when internal secret is required and not provided`() =
@@ -259,12 +259,12 @@ class DssHttpHandlersTest {
   /**
    * Mounts production [installDssRoutes] + [installJsonContentNegotiation] inside ktor's in-memory
    * test engine and exposes a content-negotiating client to [block]. No sockets, no random ports.
-   * Routes, plugin order, and serialization come from shipping code — only the [DssHttpHandlers]
+   * Routes, plugin order, and serialization come from shipping code — only the [MonolithWebhookHandlers]
    * instance is swapped per test.
    */
   private fun runDssApp(
-    handlers: DssHttpHandlers,
-    block: suspend ApplicationTestBuilder.(HttpClient) -> Unit,
+      handlers: MonolithWebhookHandlers,
+      block: suspend ApplicationTestBuilder.(HttpClient) -> Unit,
   ) = testApplication {
     application { dssRoutesOnly(handlers) }
     val client = createClient {
@@ -274,7 +274,7 @@ class DssHttpHandlersTest {
   }
 
   /** Mounts plugins + [installDssRoutes] only — sister flows (OAuth, webhooks, demo) stay out so tests are fast. */
-  private fun Application.dssRoutesOnly(handlers: DssHttpHandlers) {
+  private fun Application.dssRoutesOnly(handlers: MonolithWebhookHandlers) {
     installJsonContentNegotiation()
     routing { installDssRoutes(handlers) }
   }
@@ -287,7 +287,7 @@ class DssHttpHandlersTest {
     },
     monolith: FakeMonolithService? = null,
     shopTokens: ShopAccessTokenCache = ShopAccessTokenCache(shopAccessTokens),
-  ): DssHttpHandlers {
+  ): MonolithWebhookHandlers {
     val shopify = testShopifyConfig()
     val dssConfig = testDssAppConfig(
       shopify = shopify,
@@ -297,13 +297,13 @@ class DssHttpHandlersTest {
     // The cache is never queried in these tests (sandbox short-circuits, or missing-token returns 401
     // before any GraphQL call), so reusing the production shared client keeps us off the ad-hoc
     // HttpClient() construction that ArchitectureTest forbids in src/.
-    return DssHttpHandlers(
+    return MonolithWebhookHandlers(
       shopifyConfig = shopify,
       dssConfig = dssConfig,
       gqlClientCache = GraphqlClientCache(createSharedHttpClient()),
       fulfillmentService = DssFulfillmentService,
       monolithService = monolith,
-      shopTokens = shopTokens,
+      shopTokenCache = shopTokens,
     )
   }
 

@@ -1,10 +1,10 @@
 package dropnext.dss.handler
 
-import dropnext.dss.GraphqlClientCache
+import dropnext.dss.shopify.GraphqlClientCache
 import dropnext.dss.config.DssAppConfig
 import dropnext.dss.path.DssPaths
-import dropnext.dss.config.ShopifyConfig
 import dropnext.dss.lib.auth.ShopAccessTokenCache
+import dropnext.dss.lib.auth.resolveShopifyAdminToken
 import dropnext.dss.lib.dto.PutShopAccessTokenRequest
 import dropnext.dss.lib.dto.PutShopAccessTokenResponse
 import dropnext.dss.lib.dto.SyncShipmentsWithFulfillmentsRequest
@@ -36,28 +36,29 @@ import io.ktor.server.response.respond
 
 private val log = KotlinLogging.logger {}
 
-class DssHttpHandlers(
-  private val shopifyConfig: ShopifyConfig,
+class MonolithWebhookHandlers(
+  private val shopifyApiVersion: String,
   private val dssConfig: DssAppConfig,
   private val gqlClientCache: GraphqlClientCache,
   private val fulfillmentService: DssFulfillmentService,
   private val monolithService: MonolithService? = null,
-  private val shopTokens: ShopAccessTokenCache,
+  private val shopTokenCache: ShopAccessTokenCache,
 ) {
   suspend fun handleSyncShipments(call: ApplicationCall) {
-    if (!call.requireDssInternalSecret(dssConfig.dssInternalSecret)) return
+    if (!call.requireDssInternalSecret(dssConfig.dssInternalSecret)) return // TODO(cies): bad
     val body = call.receiveOr400<SyncShipmentsWithFulfillmentsRequest>() ?: return
     if (!call.validateOrRespond(validateSyncShipmentsRequest(body))) return
     val shop = call.normalizeShopOrRespond(body.shopifySubdomain) ?: return
-    if (dssConfig.dev.sandboxFakeShopify) {
+    if (dssConfig.dev.sandboxFakeShopify) { // TODO(cies): bad
       return call.respond(
         HttpStatusCode.OK,
         SyncShipmentsWithFulfillmentsResponse(newFulfillmentIds = listOf(9_000_000_000_000_001L)),
       )
     }
-    val token = call.resolveShopifyAdminToken(shop, shopTokens, monolithService).tokenOrNull
+    // TODO: possibly make a token service or smth
+    val token = call.resolveShopifyAdminToken(shop, shopTokenCache, monolithService).tokenOrNull
       ?: return call.respondError(DssError.MissingShopifyAdminToken)
-    val gqlClient = gqlClientCache.forShop(shop, shopifyConfig.apiVersion)
+    val gqlClient = gqlClientCache.forShop(shop, shopifyApiVersion)
     when (val result = fulfillmentService.syncShipmentsWithFulfillments(gqlClient, token, body)) {
       is FulfillmentResult.Ok -> call.respond(result.value)
       is FulfillmentResult.Err -> {
@@ -79,9 +80,9 @@ class DssHttpHandlers(
         TrackingUpdateResponse(fulfillmentEventId = 9_000_000_000_000_001L),
       )
     }
-    val token = call.resolveShopifyAdminToken(shop, shopTokens, monolithService).tokenOrNull
+    val token = call.resolveShopifyAdminToken(shop, shopTokenCache, monolithService).tokenOrNull
       ?: return call.respondError(DssError.MissingShopifyAdminToken)
-    val gqlClient = gqlClientCache.forShop(shop, shopifyConfig.apiVersion)
+    val gqlClient = gqlClientCache.forShop(shop, shopifyApiVersion)
     when (val result = fulfillmentService.createTrackingEvent(gqlClient, token, body)) {
       is FulfillmentResult.Ok -> call.respond(result.value)
       is FulfillmentResult.Err -> {
@@ -98,7 +99,7 @@ class DssHttpHandlers(
     val body = call.receiveOr400<PutShopAccessTokenRequest>() ?: return
     val shop = call.normalizeShopOrRespond(body.shopifySubdomain) ?: return
 
-    shopTokens[shop] = body.apiKey
+    shopTokenCache[shop] = body.apiKey
     log.info { "PUT ${DssPaths.STORES_API_KEY}: token cached in memory for shop=$shop" }
 
     monolithService?.let { monolith ->

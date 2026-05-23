@@ -52,7 +52,7 @@ fun Application.dssModule(deps: DssDependencies) {
       handlers = deps.oauthHandlers,
       oauthCallbackPath = deps.config.shopify.oauthRedirectPath,
     )
-    installWebhookRoutes(handlers = deps.webhookHandlers)
+    installWebhookRoutes(handlers = deps.shopifyWebhookHandlers)
     if (deps.config.dev.enableDemoRoutes) installDemoRoutes(handlers = deps.demoHandlers)
     installDssRoutes(handlers = deps.dssHandlers)
   }

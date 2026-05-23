@@ -215,7 +215,7 @@ class ArchitectureTest {
    * `HttpClient` via dependency injection so engine config and OkHttp pooling stay consistent.
    */
   private val httpClientConstructionAllowList = listOf(
-    "/dropnext/dss/SharedHttpClient.kt",
+    "/dropnext/dss/lib/ktor/httpClientBuilders.kt",
   )
 
   @Test

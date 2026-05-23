@@ -4,13 +4,16 @@ import dropnext.dss.config.DssAppConfig
 import dropnext.dss.config.shopAccessTokensFromEnv
 import dropnext.dss.handler.DemoHandlers
 import dropnext.dss.handler.DiagnosticsHandlers
-import dropnext.dss.handler.DssHttpHandlers
+import dropnext.dss.handler.MonolithWebhookHandlers
 import dropnext.dss.handler.OAuthHandlers
-import dropnext.dss.handler.WebhookHandlers
+import dropnext.dss.handler.ShopifyWebhookHandlers
 import dropnext.dss.lib.auth.ShopAccessTokenCache
 import dropnext.dss.lib.fulfillment.DssFulfillmentService
+import dropnext.dss.lib.ktor.createMonolithHttpClient
+import dropnext.dss.lib.ktor.createSharedHttpClient
 import dropnext.dss.lib.monolith.HttpMonolithService
 import dropnext.dss.lib.monolith.MonolithService
+import dropnext.dss.shopify.GraphqlClientCache
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.client.HttpClient
 
@@ -31,9 +34,9 @@ data class DssDependencies(
   val shopTokens: ShopAccessTokenCache,
   val diagnosticsHandlers: DiagnosticsHandlers,
   val oauthHandlers: OAuthHandlers,
-  val webhookHandlers: WebhookHandlers,
+  val shopifyWebhookHandlers: ShopifyWebhookHandlers,
   val demoHandlers: DemoHandlers,
-  val dssHandlers: DssHttpHandlers,
+  val dssHandlers: MonolithWebhookHandlers,
 ) {
   /** Closes both HTTP clients with [runCatching] so a single failure doesn't skip the others. */
   fun close() {
@@ -63,15 +66,15 @@ fun dssDependencies(config: DssAppConfig): DssDependencies {
     shopTokens = shopTokens,
     diagnosticsHandlers = DiagnosticsHandlers(config, shopTokens),
     oauthHandlers = OAuthHandlers(config, httpClient, gqlClientCache, monolithService, shopTokens),
-    webhookHandlers = WebhookHandlers(config, gqlClientCache, monolithService, shopTokens),
+    shopifyWebhookHandlers = ShopifyWebhookHandlers(config, gqlClientCache, monolithService, shopTokens),
     demoHandlers = DemoHandlers(config, gqlClientCache, monolithService, shopTokens),
-    dssHandlers = DssHttpHandlers(
-      shopifyConfig = config.shopify,
+    dssHandlers = MonolithWebhookHandlers(
+      shopifyApiVersion = config.shopify.apiVersion,
       dssConfig = config,
       gqlClientCache = gqlClientCache,
       fulfillmentService = DssFulfillmentService,
       monolithService = monolithService,
-      shopTokens = shopTokens,
+      shopTokenCache = shopTokens,
     ),
   )
 }

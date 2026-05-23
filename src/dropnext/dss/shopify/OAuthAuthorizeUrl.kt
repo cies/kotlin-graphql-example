@@ -6,6 +6,8 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.security.SecureRandom
 
+
+// TODO: possibly make an OAuthAuthorizer service
 fun buildOAuthAuthorizeUrl(shop: String, config: ShopifyConfig, state: String): String {
   val enc: (String) -> String = { URLEncoder.encode(it, StandardCharsets.UTF_8) }
   return buildString {

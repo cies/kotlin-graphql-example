@@ -1,6 +1,6 @@
 package dropnext.dss.handler
 
-import dropnext.dss.GraphqlClientCache
+import dropnext.dss.shopify.GraphqlClientCache
 import dropnext.dss.config.DssAppConfig
 import dropnext.dss.path.DssPaths
 import dropnext.dss.lib.auth.ShopAccessTokenCache
@@ -130,7 +130,7 @@ class OAuthHandlers(
       null
     }
 
-  /** Persist the freshly-obtained Shopify Admin token to the monolith; return a presentation-layer outcome. */
+  /** Persist the freshly obtained Shopify Admin token to the monolith; return a presentation-layer outcome. */
   private suspend fun persistTokenToMonolith(
     domain: String,
     shopId: Long,

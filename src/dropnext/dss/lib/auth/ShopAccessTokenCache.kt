@@ -10,20 +10,20 @@ import java.util.concurrent.ConcurrentHashMap
  * fills the cache, every subsequent webhook / DSS REST call reads from here.
  *
  * Backed by a [ConcurrentHashMap] so OAuth callbacks, webhook handlers, and the monolith
- * fallback resolver can write concurrently without data races. Keys are normalised to
+ * fallback resolver can write concurrently without data races. Keys are normalized to
  * full `*.myshopify.com` host strings (lowercase).
  */
 class ShopAccessTokenCache(initial: Map<String, String> = emptyMap()) {
   private val tokens: ConcurrentHashMap<String, String> = ConcurrentHashMap(initial)
 
-  operator fun get(myshopifyHost: String): String? {
-    val direct = tokens[myshopifyHost]
+  operator fun get(myShopifyHost: String): String? {
+    val direct = tokens[myShopifyHost]
     if (direct != null) return direct
-    return tokens.entries.firstOrNull { (key, _) -> key.equals(myshopifyHost, ignoreCase = true) }?.value
+    return tokens.entries.firstOrNull { (key, _) -> key.equals(myShopifyHost, ignoreCase = true) }?.value
   }
 
-  operator fun set(myshopifyHost: String, token: String) {
-    tokens[myshopifyHost] = token
+  operator fun set(myShopifyHost: String, token: String) {
+    tokens[myShopifyHost] = token
   }
 
   /** Snapshot, primarily for diagnostics. */

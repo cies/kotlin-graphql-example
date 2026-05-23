@@ -1,10 +1,9 @@
 package dropnext.dss.lib.ktor
 
 import dropnext.dss.lib.dto.ErrorResponse
-import io.ktor.http.HttpStatusCode
-import io.ktor.server.application.ApplicationCall
-import io.ktor.server.response.respond
-import io.ktor.server.response.respondText
+import io.ktor.http.*
+import io.ktor.server.application.*
+import io.ktor.server.response.*
 
 
 /**
@@ -55,11 +54,15 @@ fun DssError.toHttpStatus(): HttpStatusCode = when (this) {
   is DssError.MissingParameter,
   is DssError.InvalidParameter,
     -> HttpStatusCode.BadRequest
+
   is DssError.Unauthorized,
   is DssError.MissingShopifyAdminToken,
     -> HttpStatusCode.Unauthorized
+
   is DssError.InvalidSignature -> HttpStatusCode.Forbidden
+
   is DssError.NotFound -> HttpStatusCode.NotFound
+
   is DssError.UpstreamFailure -> HttpStatusCode.BadGateway
 }
 
