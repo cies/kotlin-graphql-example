@@ -6,7 +6,6 @@ import dropnext.dss.lib.dss.dto.SelectedOption
 import dropnext.graphql.generated.getproductbyid.Media
 import dropnext.graphql.generated.getproductbyid.MediaImage
 import dropnext.graphql.generated.getproductbyid.Product
-import kotlin.math.roundToLong
 
 /**
  * Maps a Shopify Admin Graphql product (from [GetProductById]) to a list of [ProductVariantItem]
@@ -22,7 +21,7 @@ fun Product.toProductVariantItems(currencyCode: String): List<ProductVariantItem
   return variants.edges.mapNotNull { variantEdge ->
     val v = variantEdge.node
     val variantLegacyId = v.legacyResourceId.toLongOrNull() ?: return@mapNotNull null
-    val priceMinor = decimalToMinorUnits(v.price)
+    val priceMinor = shopifyDecimalToMinorUnits(v.price)
     ProductVariantItem(
       productVariantId = variantLegacyId,
       productId = productLegacyId,
@@ -69,7 +68,3 @@ private fun dropnext.graphql.generated.enums.ProductStatus.toProductStatus(): Pr
     else -> ProductStatus.ACTIVE
   }
 
-private fun decimalToMinorUnits(amountDecimal: String): Long {
-  val d = amountDecimal.toDoubleOrNull() ?: return 0L
-  return (d * 100.0).roundToLong()
-}

@@ -1,16 +1,15 @@
 package dropnext.dss.lib.dss
 
-import dropnext.dss.lib.ktor.shopifyAccessTokenFromHeader
 import dropnext.dss.lib.monolith.GetStoreResult
 import dropnext.dss.lib.monolith.MonolithService
 import dropnext.dss.lib.monolith.logMonolithFailure
-import dropnext.dss.shopify.normalizeShopDomain
 import dropnext.dss.shopify.shopifySubdomainShort
-import io.ktor.server.application.ApplicationCall
+
 
 /**
- * Resolving the Shopify Admin API token for a shop without server-side persistence:
- * optional `X-Shopify-Access-Token` on the request, otherwise [ShopAccessTokenCache].
+ * Result of resolving a Shopify Admin API token for a single shop. The DSS keeps no
+ * server-side database; tokens are looked up in [ShopAccessTokenCache] (env + OAuth callback)
+ * with an optional monolith fallback when [shopifyAdminTokenWithMonolithFallback] is used.
  */
 sealed interface ShopifyAdminToken {
   data class Resolved(val token: String) : ShopifyAdminToken
@@ -18,15 +17,11 @@ sealed interface ShopifyAdminToken {
   data object Missing : ShopifyAdminToken
 }
 
-fun ApplicationCall.resolveShopifyAdminToken(
-  shopSubdomainOrHost: String,
-  tokens: ShopAccessTokenCache,
-): ShopifyAdminToken {
-  val headerToken = request.shopifyAccessTokenFromHeader()
-      ?: return fallbackTokenFromCache(shopSubdomainOrHost, tokens)
-  return ShopifyAdminToken.Resolved(headerToken)
-}
+/** The token string when resolved, or `null` when [ShopifyAdminToken.Missing]. */
+val ShopifyAdminToken.tokenOrNull: String?
+  get() = (this as? ShopifyAdminToken.Resolved)?.token
 
+/** Looks up a Shopify Admin API token for [shopMyShopifyHost] in the in-memory [tokens] cache only. */
 fun shopifyAdminTokenFromEnv(
   shopMyShopifyHost: String,
   tokens: ShopAccessTokenCache,
@@ -66,14 +61,4 @@ suspend fun shopifyAdminTokenWithMonolithFallback(
       ShopifyAdminToken.Missing
     }
   }
-}
-
-private fun ApplicationCall.fallbackTokenFromCache(
-  shopSubdomainOrHost: String,
-  tokens: ShopAccessTokenCache,
-): ShopifyAdminToken {
-  val shopNorm =
-    normalizeShopDomain(shopSubdomainOrHost)
-      ?: return ShopifyAdminToken.Missing
-  return shopifyAdminTokenFromEnv(shopNorm, tokens)
 }

@@ -82,7 +82,7 @@ fun main() {
   val dssHandlers = DssHttpHandlers(
     shopifyConfig = shopifyConfig,
     dssConfig = dssConfig,
-    gqlClientCache = gqlClientCache, // CHECK(cies): Is it okay to use the cache here as well?
+    gqlClientCache = gqlClientCache,
     fulfillmentService = DssFulfillmentService(),
     monolithService = httpMonolithClient,
     shopTokens = shopTokens,

@@ -4,6 +4,7 @@ import dropnext.dss.lib.dss.dto.CreateShopifyOrderRequest
 import dropnext.dss.lib.dss.dto.OrderLineItem
 import dropnext.dss.lib.dss.dto.ShippingAddress
 import dropnext.dss.lib.dss.legacyIdFromGid
+import dropnext.dss.shopify.shopifyDecimalToMinorUnits
 import dropnext.graphql.generated.enums.OrderDisplayFinancialStatus
 import dropnext.graphql.generated.enums.OrderDisplayFulfillmentStatus
 import dropnext.graphql.generated.getorderfordss.MailingAddress
@@ -13,7 +14,6 @@ import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Locale
-import kotlin.math.roundToLong
 
 /**
  * Builds [CreateShopifyOrderRequest] from Shopify Admin Graphql [Order] (hydrated after a webhook).
@@ -42,7 +42,7 @@ fun orderToCreateShopifyOrderRequest(
     val variantLegacy = variant.legacyResourceId.toLongOrNull() ?: return@mapNotNull null
     val foId = findFulfillmentOrderLegacyIdForVariant(order, variant) ?: return@mapNotNull null
     val lineId = legacyIdFromGid(li.id) ?: return@mapNotNull null
-    val minor = priceToMinorUnits(li.originalUnitPriceSet.shopMoney.amount)
+    val minor = shopifyDecimalToMinorUnits(li.originalUnitPriceSet.shopMoney.amount)
     OrderLineItem(
       shopifyLineItemId = lineId,
       productVariantId = variantLegacy,
@@ -53,7 +53,7 @@ fun orderToCreateShopifyOrderRequest(
       snapshotOfPriceInMinorUnits = minor,
     )
   }
-  val totalMinor = priceToMinorUnits(order.totalPriceSet.shopMoney.amount)
+  val totalMinor = shopifyDecimalToMinorUnits(order.totalPriceSet.shopMoney.amount)
     .takeIf { it > 0L }
     ?: lineItems.sumOf { it.snapshotOfPriceInMinorUnits * it.quantity.toLong() }.coerceAtLeast(0L)
   val currency = order.totalPriceSet.shopMoney.currencyCode.name
@@ -126,12 +126,6 @@ private fun MailingAddress.toDto(): ShippingAddress =
     zip = zip,
     phone = phone,
   )
-
-// TODO: This assumes a 100-based minor unit currency; not all currencies are like that.
-private fun priceToMinorUnits(amountDecimal: String): Long {
-  val d = amountDecimal.toDoubleOrNull() ?: return 0L
-  return (d * 100.0).roundToLong()
-}
 
 /** Normalizes Shopify Admin `DateTime` strings to UTC `…Z` (second precision), e.g. `2026-04-25T10:30:00Z`. */
 private fun formatCreatedAtUtcZ(createdAt: String): String =

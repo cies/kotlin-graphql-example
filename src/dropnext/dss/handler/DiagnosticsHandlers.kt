@@ -100,9 +100,6 @@ class DiagnosticsHandlers(
     )
   }
 
-  // REMOVED: this is something that logging should do (and the app should not start!)
-  // suspend fun handleApiReady(call: ApplicationCall) { ... }
-
   suspend fun handleHealth(call: ApplicationCall) {
     call.respondText("ok")
   }

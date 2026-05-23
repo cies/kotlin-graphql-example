@@ -4,10 +4,10 @@ import dropnext.dss.GraphqlClientCache
 import dropnext.dss.config.DssAppConfig
 import dropnext.dss.path.DssPaths
 import dropnext.dss.lib.dss.ShopAccessTokenCache
-import dropnext.dss.lib.dss.ShopifyAdminToken
 import dropnext.dss.lib.dss.dto.DeleteProductVariantsRequest
 import dropnext.dss.lib.dss.dto.UpsertProductVariantsRequest
 import dropnext.dss.lib.dss.shopifyAdminTokenWithMonolithFallback
+import dropnext.dss.lib.dss.tokenOrNull
 import dropnext.dss.lib.monolith.DeleteVariantsResult
 import dropnext.dss.lib.monolith.MonolithService
 import dropnext.dss.lib.monolith.UpsertVariantsResult
@@ -55,13 +55,8 @@ class WebhookHandlers(
     log.info { "Webhook verified topic=${topic.raw} shopDomainHeader=$shopDomainHeader bodyBytes=${body.size}" }
 
     val shopNorm = shopMyshopifyHostFromWebhook(shopDomainHeader, shopDomainFromWebhookBody(bodyStr))
-    val token = if (shopNorm != null) {
-      when (val t = shopifyAdminTokenWithMonolithFallback(shopNorm, shopTokens, httpMonolithClient)) {
-        ShopifyAdminToken.Missing -> null
-        is ShopifyAdminToken.Resolved -> t.token
-      }
-    } else {
-      null
+    val token = shopNorm?.let {
+      shopifyAdminTokenWithMonolithFallback(it, shopTokens, httpMonolithClient).tokenOrNull
     }
     if (shopNorm == null || token == null) {
       log.error {

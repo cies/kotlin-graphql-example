@@ -36,7 +36,4 @@ object DssPaths {
   const val DEMO_ORDER = "/demo/order"
   const val DEMO_FULFILLMENT_CREATE = "/demo/fulfillment/create"
   const val DEMO_FULFILLMENT_TRACKING = "/demo/fulfillment/tracking"
-
-  // --- Test harness ---
-  const val DEV_TEST_HARNESS = "/dev/test-harness"
 }

@@ -27,7 +27,7 @@ data class DssAppConfig(
 
   val enableDemoRoutes: Boolean,
 
-  /** When true, serve the HTML test harness at `GET` [dropnext.dss.path.DssPaths.DEV_TEST_HARNESS] (see `ENABLE_TEST_HARNESS`). */
+  /** When true, the sandbox token map is merged and the `/demo/` routes are forced on (see `ENABLE_TEST_HARNESS`). */
   val enableTestHarness: Boolean,
 
   /**

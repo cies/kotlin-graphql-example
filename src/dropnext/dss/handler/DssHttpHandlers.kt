@@ -5,7 +5,6 @@ import dropnext.dss.config.DssAppConfig
 import dropnext.dss.path.DssPaths
 import dropnext.dss.config.ShopifyConfig
 import dropnext.dss.lib.dss.ShopAccessTokenCache
-import dropnext.dss.lib.dss.ShopifyAdminToken
 import dropnext.dss.lib.dss.dto.ErrorResponse
 import dropnext.dss.lib.dss.dto.PutShopAccessTokenRequest
 import dropnext.dss.lib.dss.dto.PutShopAccessTokenResponse
@@ -14,8 +13,8 @@ import dropnext.dss.lib.dss.dto.SyncShipmentsWithFulfillmentsResponse
 import dropnext.dss.lib.dss.dto.TrackingUpdateRequest
 import dropnext.dss.lib.dss.dto.TrackingUpdateResponse
 import dropnext.dss.lib.dss.dto.UpdateStoreApiKeyRequest
+import dropnext.dss.lib.dss.tokenOrNull
 import dropnext.dss.lib.ktor.requireDssInternalSecret
-import dropnext.dss.lib.dss.shopifyAdminTokenWithMonolithFallback
 import dropnext.dss.lib.fulfillment.DssFulfillmentService
 import dropnext.dss.lib.fulfillment.FulfillmentResult
 import dropnext.dss.lib.fulfillment.RequestValidation
@@ -23,7 +22,6 @@ import dropnext.dss.lib.fulfillment.toHttpStatus
 import dropnext.dss.lib.fulfillment.toMessage
 import dropnext.dss.lib.fulfillment.validateSyncShipmentsRequest
 import dropnext.dss.lib.fulfillment.validateTrackingUpdateRequest
-import dropnext.dss.lib.ktor.shopifyAccessTokenFromHeader
 import dropnext.dss.lib.monolith.MonolithService
 import dropnext.dss.lib.monolith.StoreApiKeyResult
 import dropnext.dss.lib.monolith.logMonolithFailure
@@ -62,19 +60,8 @@ class DssHttpHandlers(
         SyncShipmentsWithFulfillmentsResponse(newFulfillmentIds = listOf(9_000_000_000_000_001L)),
       )
     }
-    val token = call.request.shopifyAccessTokenFromHeader()
-        ?: when (
-          val t = shopifyAdminTokenWithMonolithFallback(shop, shopTokens, monolithService)
-        ) {
-          ShopifyAdminToken.Missing ->
-            return call.respond(
-              HttpStatusCode.Unauthorized,
-              ErrorResponse(
-                error = "missing Shopify Admin token: use header X-Shopify-Access-Token or configure DSS_SHOP_ACCESS_TOKENS",
-              ),
-            )
-          is ShopifyAdminToken.Resolved -> t.token
-        }
+    val token = call.resolveShopifyAdminToken(shop, shopTokens, monolithService).tokenOrNull
+      ?: return call.respondMissingShopifyAdminToken()
     val gqlClient = gqlClientCache.forShop(shop, shopifyConfig.apiVersion)
     when (val result = fulfillmentService.syncShipmentsWithFulfillments(gqlClient, token, body)) {
       is FulfillmentResult.Ok -> call.respond(result.value)
@@ -103,19 +90,8 @@ class DssHttpHandlers(
         TrackingUpdateResponse(fulfillmentEventId = 9_000_000_000_000_001L),
       )
     }
-    val token = call.request.shopifyAccessTokenFromHeader()
-        ?: when (
-          val t = shopifyAdminTokenWithMonolithFallback(shop, shopTokens, monolithService)
-        ) {
-          ShopifyAdminToken.Missing ->
-            return call.respond(
-              HttpStatusCode.Unauthorized,
-              ErrorResponse(
-                error = "missing Shopify Admin token: use header X-Shopify-Access-Token or configure DSS_SHOP_ACCESS_TOKENS",
-              ),
-            )
-          is ShopifyAdminToken.Resolved -> t.token
-        }
+    val token = call.resolveShopifyAdminToken(shop, shopTokens, monolithService).tokenOrNull
+      ?: return call.respondMissingShopifyAdminToken()
     val gqlClient = gqlClientCache.forShop(shop, shopifyConfig.apiVersion)
     when (val result = fulfillmentService.createTrackingEvent(gqlClient, token, body)) {
       is FulfillmentResult.Ok -> call.respond(result.value)

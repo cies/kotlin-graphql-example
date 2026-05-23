@@ -4,10 +4,10 @@ import dropnext.dss.GraphqlClientCache
 import dropnext.dss.config.DssAppConfig
 import dropnext.dss.path.DssPaths
 import dropnext.dss.lib.dss.ShopAccessTokenCache
-import dropnext.dss.lib.dss.ShopifyAdminToken
 import dropnext.dss.lib.dss.clientErrorMessage
 import dropnext.dss.lib.dss.dto.ErrorResponse
 import dropnext.dss.lib.dss.shopifyAdminTokenWithMonolithFallback
+import dropnext.dss.lib.dss.tokenOrNull
 import dropnext.dss.lib.monolith.MonolithService
 import dropnext.dss.shopify.FulfillmentCreateDemoBody
 import dropnext.dss.shopify.FulfillmentTrackingUpdateDemoBody
@@ -270,12 +270,9 @@ class DemoHandlers(
   }
 
   /** Returns the resolved token, or null when missing (caller responds with 401). */
-  private suspend fun resolveToken(shop: String, logLabel: String): String? =
-    when (val t = shopifyAdminTokenWithMonolithFallback(shop, shopTokens, httpMonolithClient)) {
-      ShopifyAdminToken.Missing -> {
-        log.warn { "[demo] $logLabel — no_admin_token shop=$shop" }
-        null
-      }
-      is ShopifyAdminToken.Resolved -> t.token
-    }
+  private suspend fun resolveToken(shop: String, logLabel: String): String? {
+    val token = shopifyAdminTokenWithMonolithFallback(shop, shopTokens, httpMonolithClient).tokenOrNull
+    if (token == null) log.warn { "[demo] $logLabel — no_admin_token shop=$shop" }
+    return token
+  }
 }
