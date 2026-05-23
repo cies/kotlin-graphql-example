@@ -1,12 +1,12 @@
 package dropnext.dss.lib.fulfillment
 
-import dropnext.dss.lib.dss.dto.Shipment
-import dropnext.dss.lib.dss.dto.SyncShipmentsWithFulfillmentsRequest
-import dropnext.dss.lib.dss.dto.SyncShipmentsWithFulfillmentsResponse
-import dropnext.dss.lib.dss.dto.TrackingUpdateRequest
-import dropnext.dss.lib.dss.dto.TrackingUpdateResponse
-import dropnext.dss.lib.dss.legacyIdFromGid
-import dropnext.dss.lib.dss.orderGid
+import dropnext.dss.lib.dto.Shipment
+import dropnext.dss.lib.dto.SyncShipmentsWithFulfillmentsRequest
+import dropnext.dss.lib.dto.SyncShipmentsWithFulfillmentsResponse
+import dropnext.dss.lib.dto.TrackingUpdateRequest
+import dropnext.dss.lib.dto.TrackingUpdateResponse
+import dropnext.dss.shopify.legacyIdFromGid
+import dropnext.dss.shopify.orderGid
 import dropnext.graphql.generated.FulfillmentCancelMutation
 import dropnext.graphql.generated.FulfillmentCreateWithLineItems
 import dropnext.graphql.generated.FulfillmentEventCreateMutation
@@ -21,7 +21,16 @@ import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
 import io.ktor.client.request.header
 
 
-class DssFulfillmentService {
+/**
+ * Pure orchestration around the Shopify fulfillment Graphql mutations consumed by the DSS REST
+ * endpoints (see `DssHttpHandlers.handleSyncShipments` / `handleTrackingUpdate`).
+ *
+ * Stateless: no fields, no I/O of its own — every call receives the [GraphQLKtorClient] and Admin
+ * token so a single instance is safe to share across requests. Each operation returns a
+ * [FulfillmentResult] (`Ok` or one of the `Err.*` variants) so the handler can map the failure to
+ * the right HTTP status without catching exceptions.
+ */
+object DssFulfillmentService {
   /**
    * Cancels all existing open Shopify fulfillments for the order, then creates new fulfillments
    * from the provided shipments. Fulfillment orders are resolved automatically by matching

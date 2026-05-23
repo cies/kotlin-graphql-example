@@ -1,8 +1,8 @@
 package dropnext.dss.shopify
 
-import dropnext.dss.lib.dss.dto.ProductStatus
-import dropnext.dss.lib.dss.dto.ProductVariantItem
-import dropnext.dss.lib.dss.dto.SelectedOption
+import dropnext.dss.lib.dto.ProductStatus
+import dropnext.dss.lib.dto.ProductVariantItem
+import dropnext.dss.lib.dto.SelectedOption
 import dropnext.graphql.generated.getproductbyid.Media
 import dropnext.graphql.generated.getproductbyid.MediaImage
 import dropnext.graphql.generated.getproductbyid.Product

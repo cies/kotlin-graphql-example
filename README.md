@@ -46,6 +46,30 @@ Non-goals:
 * Async/reactive/coroutines beyond what Ktor's CIO engine provides out of the box.
 
 
+### Code map
+
+All Kotlin lives under `src/dropnext/dss/` (we set `srcDir("src")` in Gradle to skip the Maven `src/main/kotlin/` prefix). Layer rules are enforced by [`ArchitectureTest`](test/dropnext/dss/ArchitectureTest.kt).
+
+| Package | Role |
+| ------- | ---- |
+| [`app.kt`](src/dropnext/dss/app.kt) | `main` — reads config, builds the dependency graph, starts Ktor. |
+| [`config/`](src/dropnext/dss/config) | Env-var parsing, `DssAppConfig` + `ShopifyConfig`, sandbox token map. |
+| [`path/`](src/dropnext/dss/path) | URL path constants for inbound DSS routes, outbound monolith routes, and outbound Shopify routes. Single source of truth. |
+| [`shopify/`](src/dropnext/dss/shopify) | Shopify-specific helpers: OAuth, HMAC signatures, webhook body parsers, product/order mappers, shop-domain normalization. |
+| [`workflow/`](src/dropnext/dss/workflow) | Multi-step orchestration that doesn't touch HTTP types directly (e.g. webhook → load order → map → post to monolith). |
+| [`handler/`](src/dropnext/dss/handler) | Ktor handlers — `ApplicationCall → response`. Where validation, auth, and transport concerns live. |
+| [`routing/`](src/dropnext/dss/routing) | Thin Ktor route bindings (`installXyzRoutes(handlers)`). One per handler family. |
+| [`presentation/`](src/dropnext/dss/presentation) | Pure view layer — data in, HTML out. No Ktor/HTTP types. |
+| [`lib/dss/`](src/dropnext/dss/lib/dss) | DSS protocol primitives: `ShopAccessTokenCache`, GID helpers, constant-time compare, generated OpenAPI DTOs under `lib.dss.dto`. |
+| [`lib/fulfillment/`](src/dropnext/dss/lib/fulfillment) | Pure fulfillment domain: request validation, fulfillment-order matching, `FulfillmentResult` + status mapping, `DssFulfillmentService`. |
+| [`lib/monolith/`](src/dropnext/dss/lib/monolith) | Outbound monolith client: `MonolithService` interface, `HttpMonolithService` impl, error body parsing, structured logging. |
+| [`lib/json/`](src/dropnext/dss/lib/json) | Shared `kotlinx.serialization` configs: `AppJson` (inbound) and `MonolithJson` (outbound). |
+| [`lib/ktor/`](src/dropnext/dss/lib/ktor) | Ktor server extensions: trace-id MDC interceptor, plain-text error helpers, auth helpers. |
+| `src/resources/` | `.graphql` queries (compile-time-typed by the Gradle plugin), `logback.xml`. |
+| `src/graphql-schema/` | Committed Shopify Admin schema (regenerated via `./gradlew graphqlIntrospectSchema`). |
+| [`openapi.json`](openapi.json) | Canonical DSS ↔ monolith contract. DTOs under `lib.dss.dto` are **generated** from this by `openApiGenerate`. |
+
+
 ### Our preferred IDE
 
 See [docs/setup-intellij-idea.md](./docs/setup-intellij-idea.md) for IntelliJ IDEA setup and troubleshooting.

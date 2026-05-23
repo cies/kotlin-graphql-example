@@ -278,7 +278,7 @@ class WebhookHandlersTest {
       syncOrderOnUpdated = syncOnUpdated,
     )
     val cache = GraphqlClientCache(httpClient)
-    return WebhookHandlers(dssConfig, cache, monolith, dropnext.dss.lib.dss.ShopAccessTokenCache(tokens))
+    return WebhookHandlers(dssConfig, cache, monolith, dropnext.dss.lib.auth.ShopAccessTokenCache(tokens))
   }
 
   private fun base64HmacSha256(secret: String, body: ByteArray): String {

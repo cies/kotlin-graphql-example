@@ -1,4 +1,4 @@
-package dropnext.dss.lib.dss
+package dropnext.dss.lib.ktor
 
 /**
  * For HTTP 4xx JSON when Graphql/Shopify [Throwable]s escape (e.g. invalid access token, TLS).

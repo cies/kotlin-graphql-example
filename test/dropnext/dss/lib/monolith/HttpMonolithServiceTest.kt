@@ -1,10 +1,10 @@
 package dropnext.dss.lib.monolith
 
-import dropnext.dss.lib.dss.dto.DeleteProductVariantsRequest
-import dropnext.dss.lib.dss.dto.ProductStatus
-import dropnext.dss.lib.dss.dto.ProductVariantItem
-import dropnext.dss.lib.dss.dto.UpdateStoreApiKeyRequest
-import dropnext.dss.lib.dss.dto.UpsertProductVariantsRequest
+import dropnext.dss.lib.dto.DeleteProductVariantsRequest
+import dropnext.dss.lib.dto.ProductStatus
+import dropnext.dss.lib.dto.ProductVariantItem
+import dropnext.dss.lib.dto.UpdateStoreApiKeyRequest
+import dropnext.dss.lib.dto.UpsertProductVariantsRequest
 import dropnext.dss.lib.json.AppJson
 import dropnext.dss.testing.fake.FakeMonolithHttpServer
 import dropnext.dss.workflow.minimalOrder

@@ -7,7 +7,7 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 
 /**
- * Smoke-test routes only registered when `dssConfig.enableDemoRoutes` is true (see app.kt wiring).
+ * Smoke-test routes only registered when `dssConfig.dev.enableDemoRoutes` is true (see app.kt wiring).
  */
 fun Route.installDemoRoutes(handlers: DemoHandlers) {
   get(DssPaths.DEMO_PRODUCTS) { handlers.handleListProducts(call) }

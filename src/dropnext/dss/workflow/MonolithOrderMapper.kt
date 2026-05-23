@@ -1,9 +1,9 @@
 package dropnext.dss.workflow
 
-import dropnext.dss.lib.dss.dto.CreateShopifyOrderRequest
-import dropnext.dss.lib.dss.dto.OrderLineItem
-import dropnext.dss.lib.dss.dto.ShippingAddress
-import dropnext.dss.lib.dss.legacyIdFromGid
+import dropnext.dss.lib.dto.CreateShopifyOrderRequest
+import dropnext.dss.lib.dto.OrderLineItem
+import dropnext.dss.lib.dto.ShippingAddress
+import dropnext.dss.shopify.legacyIdFromGid
 import dropnext.dss.shopify.shopifyDecimalToMinorUnits
 import dropnext.graphql.generated.enums.OrderDisplayFinancialStatus
 import dropnext.graphql.generated.enums.OrderDisplayFulfillmentStatus

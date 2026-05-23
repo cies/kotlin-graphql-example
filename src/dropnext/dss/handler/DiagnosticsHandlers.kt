@@ -2,8 +2,9 @@ package dropnext.dss.handler
 
 import dropnext.dss.config.DssAppConfig
 import dropnext.dss.path.DssPaths
-import dropnext.dss.lib.dss.ShopAccessTokenCache
-import dropnext.dss.lib.ktor.respondBadRequestText
+import dropnext.dss.lib.auth.ShopAccessTokenCache
+import dropnext.dss.lib.ktor.DssError
+import dropnext.dss.lib.ktor.respondError
 import dropnext.dss.lib.ktor.shopifyAccessTokenFromHeader
 import dropnext.dss.shopify.normalizeShopDomain
 import io.ktor.http.ContentType
@@ -25,7 +26,7 @@ class DiagnosticsHandlers(
 
   suspend fun handleIndex(call: ApplicationCall) {
     val demoNote =
-      if (dssConfig.enableDemoRoutes) " (enabled)" else " (disabled — set ENABLE_DEMO_ROUTES=true)"
+      if (dssConfig.dev.enableDemoRoutes) " (enabled)" else " (disabled — set ENABLE_DEMO_ROUTES=true)"
     call.respondText(
       """
       API is running.
@@ -74,16 +75,16 @@ class DiagnosticsHandlers(
 
   suspend fun handleApiCheck(call: ApplicationCall) {
     val rawShop = call.request.queryParameters["shop"]
-      ?: return call.respondBadRequestText("Missing query param: shop")
+      ?: return call.respondError(DssError.MissingParameter("shop"))
 
     val normalizedShop = normalizeShopDomain(rawShop)
-      ?: return call.respondBadRequestText("Invalid shop domain format")
+      ?: return call.respondError(DssError.InvalidParameter("shop", "not a valid Shopify domain"))
 
     val headerToken = call.request.shopifyAccessTokenFromHeader()
     val hasHeaderToken = !headerToken.isNullOrBlank()
     val hasMappedToken = shopTokens[normalizedShop]?.isNotBlank() == true
     if (!hasHeaderToken && !hasMappedToken) {
-      return call.respondBadRequestText("Missing Admin token. Provide X-Shopify-Access-Token header or configure DSS_SHOP_ACCESS_TOKENS.")
+      return call.respondError(DssError.MissingShopifyAdminToken)
     }
 
     call.respond(
@@ -92,13 +93,16 @@ class DiagnosticsHandlers(
         checks = ApiCheckDetails(
           hasHeaderToken = hasHeaderToken,
           hasTokenMappedForShop = hasMappedToken,
-          demoRoutesEnabled = dssConfig.enableDemoRoutes,
-          testHarnessEnabled = dssConfig.enableTestHarness,
-          monolithConfigured = !dssConfig.monolithBaseUrl.isNullOrBlank(),
+          demoRoutesEnabled = dssConfig.dev.enableDemoRoutes,
+          testHarnessEnabled = dssConfig.dev.enableTestHarness,
+          monolithConfigured = !dssConfig.monolith.baseUrl.isNullOrBlank(),
         ),
       ),
     )
   }
+
+  // REMOVED: this is something that logging should do (and the app should not start!)
+  // suspend fun handleApiReady(call: ApplicationCall) { ... }
 
   suspend fun handleHealth(call: ApplicationCall) {
     call.respondText("ok")

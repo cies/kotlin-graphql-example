@@ -1,64 +1,64 @@
 package dropnext.dss.lib.fulfillment
 
-import dropnext.dss.lib.dss.dto.Shipment
-import dropnext.dss.lib.dss.dto.ShipmentLineItem
-import dropnext.dss.lib.dss.dto.SyncShipmentsWithFulfillmentsRequest
-import dropnext.dss.lib.dss.dto.TrackingUpdateRequest
+import dropnext.dss.lib.dto.Shipment
+import dropnext.dss.lib.dto.ShipmentLineItem
+import dropnext.dss.lib.dto.SyncShipmentsWithFulfillmentsRequest
+import dropnext.dss.lib.dto.TrackingUpdateRequest
 
 sealed interface RequestValidation {
   data object Valid : RequestValidation
 
-  data class Invalid(val message: String) : RequestValidation
+  data class Invalid(val messages: List<String>) : RequestValidation {
+    init { require(messages.isNotEmpty()) }
+
+    /** All messages joined for use in a single error body. */
+    val message: String get() = messages.joinToString("; ")
+  }
 }
 
+private fun List<String>.toResult(): RequestValidation =
+  if (isEmpty()) RequestValidation.Valid else RequestValidation.Invalid(this)
+
 fun validateSyncShipmentsRequest(request: SyncShipmentsWithFulfillmentsRequest): RequestValidation {
-  validateOrderId(request.shopifyOrderId)?.let { return it }
+  val errors = mutableListOf<String>()
+  errors += validateOrderId(request.shopifyOrderId)
   if (request.shipments.isEmpty()) {
-    return RequestValidation.Invalid("at least one shipment is required")
+    errors += "at least one shipment is required"
+  } else {
+    request.shipments.forEachIndexed { index, shipment ->
+      errors += validateShipment(shipment, index)
+    }
   }
-  for (shipment in request.shipments) {
-    validateShipment(shipment)?.let { return it }
-  }
-  return RequestValidation.Valid
+  return errors.toResult()
 }
 
 fun validateTrackingUpdateRequest(request: TrackingUpdateRequest): RequestValidation {
-  validateOrderId(request.shopifyOrderId)?.let { return it }
-  if (request.trackingNumber.isBlank()) {
-    return RequestValidation.Invalid("tracking_number is required")
-  }
-  if (request.status.isBlank()) {
-    return RequestValidation.Invalid("status is required")
-  }
-  return RequestValidation.Valid
+  val errors = mutableListOf<String>()
+  errors += validateOrderId(request.shopifyOrderId)
+  if (request.trackingNumber.isBlank()) errors += "tracking_number is required"
+  if (request.status.isBlank()) errors += "status is required"
+  return errors.toResult()
 }
 
-private fun validateOrderId(shopifyOrderId: Long): RequestValidation.Invalid? =
-  if (shopifyOrderId <= 0L) {
-    RequestValidation.Invalid("invalid shopify_order_id: must be positive")
-  } else {
-    null
-  }
+private fun validateOrderId(shopifyOrderId: Long): List<String> =
+  if (shopifyOrderId <= 0L) listOf("invalid shopify_order_id: must be positive") else emptyList()
 
-private fun validateShipment(shipment: Shipment): RequestValidation.Invalid? {
-  if (shipment.trackingNumber.isBlank()) {
-    return RequestValidation.Invalid("shipment tracking_number is required")
-  }
-  if (shipment.carrier.isNullOrBlank()) {
-    return RequestValidation.Invalid("shipment carrier is required")
-  }
+private fun validateShipment(shipment: Shipment, index: Int): List<String> {
+  val errors = mutableListOf<String>()
+  val prefix = "shipments[$index]"
+  if (shipment.trackingNumber.isBlank()) errors += "$prefix tracking_number is required"
+  if (shipment.carrier.isNullOrBlank()) errors += "$prefix carrier is required"
   if (shipment.lineItems.isEmpty()) {
-    return RequestValidation.Invalid("shipment line_items must not be empty")
+    errors += "$prefix line_items must not be empty"
+  } else {
+    shipment.lineItems.forEach { line -> errors += validateShipmentLineItem(line) }
   }
-  for (line in shipment.lineItems) {
-    validateShipmentLineItem(line)?.let { return it }
-  }
-  return null
+  return errors
 }
 
-private fun validateShipmentLineItem(line: ShipmentLineItem): RequestValidation.Invalid? =
+private fun validateShipmentLineItem(line: ShipmentLineItem): List<String> =
   if (line.quantity <= 0) {
-    RequestValidation.Invalid("line item quantity must be positive (variant_id=${line.productVariantId})")
+    listOf("line item quantity must be positive (variant_id=${line.productVariantId})")
   } else {
-    null
+    emptyList()
   }

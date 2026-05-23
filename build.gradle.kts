@@ -45,7 +45,7 @@ kotlin {
 }
 
 application {
-  mainClass.set("dropnext.dss.ShopifyServerKt")
+  mainClass.set("dropnext.dss.AppKt")
 }
 
 repositories {
@@ -164,6 +164,7 @@ dependencies {
   testImplementation(kotlin("test-junit5")) // Umbrella package that pulls in lots of other testing libs
   testRuntimeOnly(libs.junitJupiterEngine) // Needed separately when using JUnit5
   testImplementation(libs.konsist) // For architecture tests, among other features
+  testImplementation(libs.ktorServerTestHost) // In-memory Ktor test engine (`testApplication { … }`)
 }
 
 // Reproducible builds: every configuration's resolved dependencies get locked to `gradle/dependency-locks/`.
@@ -194,7 +195,7 @@ tasks.named<JacocoReport>("jacocoTestReport") {
       classDirectories.files.map { dir ->
         fileTree(dir) {
           // Exclude generated OpenAPI DTOs (not authored by us).
-          exclude("dropnext/dss/lib/dss/dto/**")
+          exclude("dropnext/dss/lib/dto/**")
         }
       }
     )
@@ -248,7 +249,7 @@ openApiGenerate {
   inputSpec.set(openApiSpecFile.toURI().toString())
   skipValidateSpec.set(false)
   outputDir.set("${layout.buildDirectory.get()}/generated/openapi")
-  modelPackage.set("dropnext.dss.lib.dss.dto")
+  modelPackage.set("dropnext.dss.lib.dto")
   generateApiTests.set(false)
   generateModelTests.set(false)
   globalProperties.set(mapOf(

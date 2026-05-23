@@ -1,4 +1,4 @@
-package dropnext.dss.lib.dss
+package dropnext.dss.shopify
 
 import kotlin.test.Test
 

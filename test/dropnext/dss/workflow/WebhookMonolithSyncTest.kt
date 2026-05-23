@@ -1,9 +1,9 @@
 package dropnext.dss.workflow
 
 import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
-import dropnext.dss.lib.dss.dto.CreateShopifyOrderRequest
-import dropnext.dss.lib.dss.dto.OrderLineItem
-import dropnext.dss.lib.dss.dto.ShippingAddress
+import dropnext.dss.lib.dto.CreateShopifyOrderRequest
+import dropnext.dss.lib.dto.OrderLineItem
+import dropnext.dss.lib.dto.ShippingAddress
 import dropnext.dss.lib.monolith.CreateOrderResult
 import dropnext.dss.testing.fake.FakeMonolithService
 import dropnext.dss.testing.fake.FakeShopifyGraphqlServer

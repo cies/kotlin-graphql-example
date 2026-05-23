@@ -1,4 +1,4 @@
-package dropnext.dss.lib.dss
+package dropnext.dss.lib.auth
 
 import dropnext.dss.lib.monolith.GetStoreResult
 import dropnext.dss.lib.monolith.MonolithService

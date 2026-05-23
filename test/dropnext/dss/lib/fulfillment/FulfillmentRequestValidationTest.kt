@@ -1,9 +1,9 @@
 package dropnext.dss.lib.fulfillment
 
-import dropnext.dss.lib.dss.dto.Shipment
-import dropnext.dss.lib.dss.dto.ShipmentLineItem
-import dropnext.dss.lib.dss.dto.SyncShipmentsWithFulfillmentsRequest
-import dropnext.dss.lib.dss.dto.TrackingUpdateRequest
+import dropnext.dss.lib.dto.Shipment
+import dropnext.dss.lib.dto.ShipmentLineItem
+import dropnext.dss.lib.dto.SyncShipmentsWithFulfillmentsRequest
+import dropnext.dss.lib.dto.TrackingUpdateRequest
 import kotlin.test.Test
 
 class FulfillmentRequestValidationTest {
@@ -161,6 +161,46 @@ class FulfillmentRequestValidationTest {
         ),
       ) is RequestValidation.Invalid,
     )
+  }
+
+  @Test
+  fun `accumulates multiple errors instead of short-circuiting on the first`() {
+    val result =
+      validateSyncShipmentsRequest(
+        SyncShipmentsWithFulfillmentsRequest(
+          shopifySubdomain = "acme",
+          shopifyOrderId = 0L,
+          shipments = listOf(
+            validShipment().copy(trackingNumber = "  ", carrier = null),
+            validShipment().copy(lineItems = listOf(ShipmentLineItem(productVariantId = 101L, quantity = 0))),
+          ),
+        ),
+      )
+    assert(result is RequestValidation.Invalid)
+    val messages = (result as RequestValidation.Invalid).messages
+    assert(messages.any { "shopify_order_id" in it })
+    assert(messages.any { "tracking_number" in it })
+    assert(messages.any { "carrier" in it })
+    assert(messages.any { "quantity must be positive" in it })
+    assert(messages.size >= 4)
+  }
+
+  @Test
+  fun `accumulates both tracking errors on tracking update`() {
+    val result =
+      validateTrackingUpdateRequest(
+        TrackingUpdateRequest(
+          shopifySubdomain = "acme",
+          shopifyOrderId = 0L,
+          trackingNumber = "",
+          status = "",
+          happenedAt = "2026-04-02T08:30:00Z",
+          message = null,
+        ),
+      )
+    assert(result is RequestValidation.Invalid)
+    val messages = (result as RequestValidation.Invalid).messages
+    assert(messages.size == 3)
   }
 
   private fun validShipment(): Shipment =

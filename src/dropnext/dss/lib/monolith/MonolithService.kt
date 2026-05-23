@@ -1,10 +1,10 @@
 package dropnext.dss.lib.monolith
 
 import dropnext.dss.path.MonolithPaths
-import dropnext.dss.lib.dss.dto.CreateShopifyOrderRequest
-import dropnext.dss.lib.dss.dto.DeleteProductVariantsRequest
-import dropnext.dss.lib.dss.dto.UpdateStoreApiKeyRequest
-import dropnext.dss.lib.dss.dto.UpsertProductVariantsRequest
+import dropnext.dss.lib.dto.CreateShopifyOrderRequest
+import dropnext.dss.lib.dto.DeleteProductVariantsRequest
+import dropnext.dss.lib.dto.UpdateStoreApiKeyRequest
+import dropnext.dss.lib.dto.UpsertProductVariantsRequest
 
 /** Outbound calls to the main backend (monolith). Path constants in [MonolithPaths]. */
 interface MonolithService {

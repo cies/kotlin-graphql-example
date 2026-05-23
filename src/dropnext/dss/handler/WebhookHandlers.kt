@@ -3,11 +3,11 @@ package dropnext.dss.handler
 import dropnext.dss.GraphqlClientCache
 import dropnext.dss.config.DssAppConfig
 import dropnext.dss.path.DssPaths
-import dropnext.dss.lib.dss.ShopAccessTokenCache
-import dropnext.dss.lib.dss.dto.DeleteProductVariantsRequest
-import dropnext.dss.lib.dss.dto.UpsertProductVariantsRequest
-import dropnext.dss.lib.dss.shopifyAdminTokenWithMonolithFallback
-import dropnext.dss.lib.dss.tokenOrNull
+import dropnext.dss.lib.auth.ShopAccessTokenCache
+import dropnext.dss.lib.dto.DeleteProductVariantsRequest
+import dropnext.dss.lib.dto.UpsertProductVariantsRequest
+import dropnext.dss.lib.auth.shopifyAdminTokenWithMonolithFallback
+import dropnext.dss.lib.auth.tokenOrNull
 import dropnext.dss.lib.monolith.DeleteVariantsResult
 import dropnext.dss.lib.monolith.MonolithService
 import dropnext.dss.lib.monolith.UpsertVariantsResult
@@ -75,7 +75,7 @@ class WebhookHandlers(
       ShopifyWebhookTopic.OrdersCreate ->
         handleOrderWebhook(gqlClient, token, shopNorm, bodyStr, topic.raw, syncToMonolith = true)
       ShopifyWebhookTopic.OrdersUpdated ->
-        handleOrderWebhook(gqlClient, token, shopNorm, bodyStr, topic.raw, syncToMonolith = dssConfig.syncOrderOnUpdated)
+        handleOrderWebhook(gqlClient, token, shopNorm, bodyStr, topic.raw, syncToMonolith = dssConfig.webhook.syncOrderOnUpdated)
       is ShopifyWebhookTopic.Other -> log.info { "Webhook topic not handled: ${topic.raw}" }
     }
     call.respond(HttpStatusCode.OK)

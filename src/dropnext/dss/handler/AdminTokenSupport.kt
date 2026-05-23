@@ -1,14 +1,13 @@
 package dropnext.dss.handler
 
-import dropnext.dss.lib.dss.ShopAccessTokenCache
-import dropnext.dss.lib.dss.ShopifyAdminToken
-import dropnext.dss.lib.dss.dto.ErrorResponse
-import dropnext.dss.lib.dss.shopifyAdminTokenWithMonolithFallback
+import dropnext.dss.lib.auth.ShopAccessTokenCache
+import dropnext.dss.lib.auth.ShopifyAdminToken
+import dropnext.dss.lib.auth.shopifyAdminTokenWithMonolithFallback
+import dropnext.dss.lib.ktor.DssError
+import dropnext.dss.lib.ktor.respondError
 import dropnext.dss.lib.ktor.shopifyAccessTokenFromHeader
 import dropnext.dss.lib.monolith.MonolithService
-import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
-import io.ktor.server.response.respond
 
 
 /**
@@ -28,10 +27,5 @@ suspend fun ApplicationCall.resolveShopifyAdminToken(
 
 /** Standard 401 JSON reply when the Shopify Admin token cannot be resolved. */
 suspend fun ApplicationCall.respondMissingShopifyAdminToken() {
-  respond(
-    HttpStatusCode.Unauthorized,
-    ErrorResponse(
-      error = "missing Shopify Admin token: use header X-Shopify-Access-Token or configure DSS_SHOP_ACCESS_TOKENS",
-    ),
-  )
+  respondError(DssError.MissingShopifyAdminToken)
 }

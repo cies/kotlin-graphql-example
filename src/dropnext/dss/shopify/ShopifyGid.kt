@@ -1,4 +1,4 @@
-package dropnext.dss.lib.dss
+package dropnext.dss.shopify
 
 /** Numeric REST-style id from a Shopify Admin Graphql GID (`gid://shopify/Resource/123`). */
 fun legacyIdFromGid(gid: String): Long? =

@@ -1,10 +1,10 @@
 package dropnext.dss.lib.fulfillment
 
 import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
-import dropnext.dss.lib.dss.dto.Shipment
-import dropnext.dss.lib.dss.dto.ShipmentLineItem
-import dropnext.dss.lib.dss.dto.SyncShipmentsWithFulfillmentsRequest
-import dropnext.dss.lib.dss.dto.TrackingUpdateRequest
+import dropnext.dss.lib.dto.Shipment
+import dropnext.dss.lib.dto.ShipmentLineItem
+import dropnext.dss.lib.dto.SyncShipmentsWithFulfillmentsRequest
+import dropnext.dss.lib.dto.TrackingUpdateRequest
 import dropnext.dss.testing.fake.FakeShopifyGraphqlServer
 import dropnext.dss.workflow.minimalOrder
 import dropnext.graphql.generated.FulfillmentCancelMutation
@@ -33,7 +33,7 @@ class DssFulfillmentServiceTest {
   private lateinit var fake: FakeShopifyGraphqlServer
   private lateinit var httpClient: HttpClient
   private lateinit var gqlClient: GraphQLKtorClient
-  private val service = DssFulfillmentService()
+  private val service = DssFulfillmentService
 
   @BeforeTest
   fun setUp() {

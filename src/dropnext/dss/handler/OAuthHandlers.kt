@@ -3,12 +3,11 @@ package dropnext.dss.handler
 import dropnext.dss.GraphqlClientCache
 import dropnext.dss.config.DssAppConfig
 import dropnext.dss.path.DssPaths
-import dropnext.dss.lib.dss.ShopAccessTokenCache
-import dropnext.dss.lib.dss.dto.UpdateStoreApiKeyRequest
-import dropnext.dss.lib.dss.legacyIdFromGid
-import dropnext.dss.lib.ktor.respondBadGatewayText
-import dropnext.dss.lib.ktor.respondBadRequestText
-import dropnext.dss.lib.ktor.respondForbiddenText
+import dropnext.dss.lib.auth.ShopAccessTokenCache
+import dropnext.dss.lib.dto.UpdateStoreApiKeyRequest
+import dropnext.dss.shopify.legacyIdFromGid
+import dropnext.dss.lib.ktor.DssError
+import dropnext.dss.lib.ktor.respondTextError
 import dropnext.dss.lib.monolith.MonolithService
 import dropnext.dss.lib.monolith.StoreApiKeyResult
 import dropnext.dss.lib.monolith.logMonolithFailure
@@ -31,6 +30,7 @@ import io.ktor.client.request.header
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.Parameters
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.header
 import io.ktor.server.response.respondRedirect
@@ -50,38 +50,38 @@ class OAuthHandlers(
   private val shopifyConfig = dssConfig.shopify
 
   suspend fun handleInstall(call: ApplicationCall) {
-    val rawShop = call.request.queryParameters["shop"]
-      ?: return call.respondBadRequestText("Missing ?shop=your-store.myshopify.com")
+    val rawShop = call.requireParam("shop") ?: return
     val shop = normalizeShopDomain(rawShop)
-      ?: return call.respondBadRequestText("Invalid shop domain")
+      ?: return call.respondTextError(DssError.InvalidParameter("shop", "not a valid Shopify domain"))
     val state = signedOAuthState(shop = shop, clientSecret = shopifyConfig.appClientSecret)
     call.respondRedirect(buildOAuthAuthorizeUrl(shop, shopifyConfig, state))
   }
 
   suspend fun handleOAuthCallback(call: ApplicationCall) {
     val params = call.request.queryParameters
-    val hmac = params["hmac"] ?: return call.respondBadRequestText("Missing hmac")
-    val rawShop = params["shop"] ?: return call.respondBadRequestText("Missing shop")
-    val shop = normalizeShopDomain(rawShop) ?: return call.respondBadRequestText("Invalid shop")
-    val state = params["state"] ?: return call.respondBadRequestText("Missing state")
-    val code = params["code"] ?: return call.respondBadRequestText("Missing code")
+    val hmac = call.requireParam("hmac") ?: return
+    val rawShop = call.requireParam("shop") ?: return
+    val shop = normalizeShopDomain(rawShop)
+      ?: return call.respondTextError(DssError.InvalidParameter("shop"))
+    val state = call.requireParam("state") ?: return
+    val code = call.requireParam("code") ?: return
 
     if (!ShopifySignatures.verifyOAuthCallback(params, shopifyConfig.appClientSecret, hmac)) {
-      return call.respondForbiddenText("Invalid HMAC")
+      return call.respondTextError(DssError.InvalidSignature("Invalid HMAC"))
     }
     if (!isValidSignedOAuthState(
         state = state,
         expectedShop = shop,
-        clientSecret = shopifyConfig.appClientSecret
+        clientSecret = shopifyConfig.appClientSecret,
       )
     ) {
-      return call.respondForbiddenText("Invalid or expired state")
+      return call.respondTextError(DssError.InvalidSignature("Invalid or expired state"))
     }
 
     val oauthResponse =
       exchangeAuthorizationCode(httpClient, shop, code, shopifyConfig).getOrElse { e ->
         log.warn { "OAuth code exchange failed for shop=$shop: ${e.message}" }
-        return call.respondBadGatewayText("OAuth failed: could not exchange authorization code")
+        return call.respondTextError(DssError.UpstreamFailure("OAuth failed: could not exchange authorization code"))
       }
 
     val gqlClient = gqlClientCache.forShop(shop, shopifyConfig.apiVersion)
@@ -123,6 +123,13 @@ class OAuthHandlers(
     call.respondText(html, ContentType.Text.Html, HttpStatusCode.OK)
   }
 
+  /** Reads a required query parameter and responds 400 (plain text) when it is absent. */
+  private suspend fun ApplicationCall.requireParam(name: String): String? =
+    request.queryParameters.required(name) ?: run {
+      respondTextError(DssError.MissingParameter(name))
+      null
+    }
+
   /** Persist the freshly-obtained Shopify Admin token to the monolith; return a presentation-layer outcome. */
   private suspend fun persistTokenToMonolith(
     domain: String,
@@ -147,3 +154,5 @@ class OAuthHandlers(
     }
   }
 }
+
+private fun Parameters.required(name: String): String? = this[name]

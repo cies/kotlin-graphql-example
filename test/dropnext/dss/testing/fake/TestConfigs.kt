@@ -1,8 +1,11 @@
 package dropnext.dss.testing.fake
 
+import dropnext.dss.config.DevConfig
 import dropnext.dss.config.DssAppConfig
+import dropnext.dss.config.MonolithConfig
 import dropnext.dss.config.ShopifyConfig
-import dropnext.dss.lib.dss.ShopAccessTokenCache
+import dropnext.dss.config.WebhookConfig
+import dropnext.dss.lib.auth.ShopAccessTokenCache
 
 fun testShopifyConfig(
   appClientSecret: String = "test-secret",
@@ -18,6 +21,32 @@ fun testShopifyConfig(
     serverPort = 0,
   )
 
+fun testMonolithConfig(
+  baseUrl: String? = null,
+  apiPrefix: String? = null,
+  apiKey: String? = null,
+  createOrderPath: String = "/orders",
+  allowInsecureUrl: Boolean = true,
+): MonolithConfig =
+  MonolithConfig(
+    baseUrl = baseUrl,
+    apiPrefix = apiPrefix,
+    apiKey = apiKey,
+    createOrderPath = createOrderPath,
+    allowInsecureUrl = allowInsecureUrl,
+  )
+
+fun testDevConfig(
+  enableDemoRoutes: Boolean = false,
+  enableTestHarness: Boolean = false,
+  sandboxFakeShopify: Boolean = false,
+): DevConfig =
+  DevConfig(
+    enableDemoRoutes = enableDemoRoutes,
+    enableTestHarness = enableTestHarness,
+    sandboxFakeShopify = sandboxFakeShopify,
+  )
+
 fun testDssAppConfig(
   shopify: ShopifyConfig = testShopifyConfig(),
   dssInternalSecret: String? = null,
@@ -27,16 +56,10 @@ fun testDssAppConfig(
 ): DssAppConfig =
   DssAppConfig(
     shopify = shopify,
-    monolithBaseUrl = monolithBaseUrl,
-    monolithApiPrefix = null,
-    monolithApiKey = null,
-    monolithCreateOrderPath = "/orders",
+    monolith = testMonolithConfig(baseUrl = monolithBaseUrl),
+    dev = testDevConfig(sandboxFakeShopify = sandboxFakeShopify),
+    webhook = WebhookConfig(syncOrderOnUpdated = syncOrderOnUpdated),
     dssInternalSecret = dssInternalSecret,
-    enableDemoRoutes = false,
-    enableTestHarness = false,
-    sandboxFakeShopify = sandboxFakeShopify,
-    allowInsecureMonolithUrl = true,
-    syncOrderOnUpdated = syncOrderOnUpdated,
   )
 
 fun testShopTokens(initial: Map<String, String> = emptyMap()): ShopAccessTokenCache =

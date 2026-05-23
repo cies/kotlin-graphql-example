@@ -1,4 +1,4 @@
-package dropnext.dss.lib.dss
+package dropnext.dss.lib.auth
 
 import kotlin.test.Test
 

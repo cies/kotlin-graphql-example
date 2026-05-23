@@ -99,7 +99,7 @@ class OAuthHandlersTest {
     current = handlers()
     val r = client.get("$baseUrl${DssPaths.INSTALL}")
     assert(r.status == HttpStatusCode.BadRequest)
-    assert("?shop=" in r.bodyAsText())
+    assert("Missing shop" in r.bodyAsText())
   }
 
   @Test
@@ -107,7 +107,7 @@ class OAuthHandlersTest {
     current = handlers()
     val r = client.get("$baseUrl${DssPaths.INSTALL}?shop=!!invalid!!")
     assert(r.status == HttpStatusCode.BadRequest)
-    assert("Invalid shop domain" in r.bodyAsText())
+    assert("Invalid shop" in r.bodyAsText())
   }
 
   @Test
@@ -203,7 +203,7 @@ class OAuthHandlersTest {
         """{"data":{"webhookSubscriptionCreate":{"userErrors":[],"webhookSubscription":null}}}""",
       )
 
-      val tokens = dropnext.dss.lib.dss.ShopAccessTokenCache()
+      val tokens = dropnext.dss.lib.auth.ShopAccessTokenCache()
       val fakeMonolith = FakeMonolithService()
       val shopifyConfig = testShopifyConfig(appClientSecret = secret)
       val dssConfig = testDssAppConfig(shopify = shopifyConfig)
@@ -256,7 +256,7 @@ class OAuthHandlersTest {
       client,
       cache,
       httpMonolithClient = null,
-      shopTokens = dropnext.dss.lib.dss.ShopAccessTokenCache(),
+      shopTokens = dropnext.dss.lib.auth.ShopAccessTokenCache(),
     )
   }
 

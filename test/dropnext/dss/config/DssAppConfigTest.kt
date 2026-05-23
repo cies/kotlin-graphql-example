@@ -27,16 +27,20 @@ class DssAppConfigTest {
   ): DssAppConfig =
     DssAppConfig(
       shopify = shopify,
-      monolithBaseUrl = monolithBaseUrl,
-      monolithApiPrefix = null,
-      monolithApiKey = null,
-      monolithCreateOrderPath = "/orders",
+      monolith = MonolithConfig(
+        baseUrl = monolithBaseUrl,
+        apiPrefix = null,
+        apiKey = null,
+        createOrderPath = "/orders",
+        allowInsecureUrl = allowInsecureMonolithUrl,
+      ),
+      dev = DevConfig(
+        enableDemoRoutes = false,
+        enableTestHarness = false,
+        sandboxFakeShopify = false,
+      ),
+      webhook = WebhookConfig(syncOrderOnUpdated = false),
       dssInternalSecret = dssInternalSecret,
-      enableDemoRoutes = false,
-      enableTestHarness = false,
-      sandboxFakeShopify = false,
-      allowInsecureMonolithUrl = allowInsecureMonolithUrl,
-      syncOrderOnUpdated = false,
     )
 
   @Test

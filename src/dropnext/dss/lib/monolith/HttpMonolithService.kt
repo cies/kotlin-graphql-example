@@ -2,16 +2,17 @@ package dropnext.dss.lib.monolith
 
 import dropnext.dss.path.MonolithPaths
 import dropnext.dss.lib.json.MonolithJson
-import dropnext.dss.lib.dss.dto.CreateShopifyOrderRequest
-import dropnext.dss.lib.dss.dto.DeleteProductVariantsRequest
-import dropnext.dss.lib.dss.dto.DeleteProductVariantsResponse
-import dropnext.dss.lib.dss.dto.StoreResponse
-import dropnext.dss.lib.dss.dto.UpdateStoreApiKeyRequest
-import dropnext.dss.lib.dss.dto.UpdateStoreApiKeyResponse
-import dropnext.dss.lib.dss.dto.UpsertProductVariantsRequest
-import dropnext.dss.lib.dss.dto.UpsertProductVariantsResponse
-import dropnext.dss.lib.dss.dto.VariantIdsResponse
+import dropnext.dss.lib.dto.CreateShopifyOrderRequest
+import dropnext.dss.lib.dto.DeleteProductVariantsRequest
+import dropnext.dss.lib.dto.DeleteProductVariantsResponse
+import dropnext.dss.lib.dto.StoreResponse
+import dropnext.dss.lib.dto.UpdateStoreApiKeyRequest
+import dropnext.dss.lib.dto.UpdateStoreApiKeyResponse
+import dropnext.dss.lib.dto.UpsertProductVariantsRequest
+import dropnext.dss.lib.dto.UpsertProductVariantsResponse
+import dropnext.dss.lib.dto.VariantIdsResponse
 import io.ktor.client.HttpClient
+import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -26,6 +27,16 @@ import io.ktor.http.contentType
 import java.io.IOException
 import kotlinx.serialization.json.JsonObject
 
+/**
+ * Production [MonolithService]: real HTTP calls to the DropNext monolith over Ktor + OkHttp.
+ *
+ * URLs are built from `{baseUrl}/{apiPathPrefix}{path}`; both edges are trimmed of slashes
+ * (see [prefixedBase]). Each method translates the HTTP outcome into a typed sealed result
+ * (e.g. `Ok` / `NotFound` / `Error`) instead of throwing — handlers can then map errors to
+ * the right log level and HTTP response without try/catch noise.
+ *
+ * Tests substitute the recording `FakeMonolithService`; see [docs/TESTING_WITH_FAKE_SERVICES.md].
+ */
 class HttpMonolithService(
   private val httpClient: HttpClient,
   private val baseUrl: String,
@@ -59,7 +70,7 @@ class HttpMonolithService(
     return "$prefixedBase/$rel"
   }
 
-  private fun authHeader(block: io.ktor.client.request.HttpRequestBuilder) {
+  private fun authHeader(block: HttpRequestBuilder) {
     if (!apiKey.isNullOrBlank()) {
       block.header("Authorization", "Bearer $apiKey")
     }
@@ -71,13 +82,12 @@ class HttpMonolithService(
       return CreateOrderResult.Error(0, payloadResult.reason, null)
     }
     val payload = (payloadResult as CreateOrderPayload.Ok).json
-    return try {
-      val response =
-        httpClient.post(url(createOrderPath)) {
-          contentType(ContentType.Application.Json)
-          authHeader(this)
-          setBody(payload)
-        }
+    return guardNetwork(onNetworkError = { CreateOrderResult.Error(0, it, null) }) {
+      val response = httpClient.post(url(createOrderPath)) {
+        contentType(ContentType.Application.Json)
+        authHeader(this)
+        setBody(payload)
+      }
       val body = response.bodyAsText()
       when (response.status) {
         HttpStatusCode.OK, HttpStatusCode.Conflict ->
@@ -87,19 +97,16 @@ class HttpMonolithService(
           CreateOrderResult.Error(response.status.value, msg, parsed)
         }
       }
-    } catch (e: IOException) {
-      CreateOrderResult.Error(0, e.message ?: "network error", null)
     }
   }
 
   override suspend fun putStoreApiKey(request: UpdateStoreApiKeyRequest): StoreApiKeyResult =
-    try {
-      val response =
-        httpClient.put(url(MonolithPaths.STORES_API_KEY)) {
-          contentType(ContentType.Application.Json)
-          authHeader(this)
-          setBody(MonolithJson.encodeToString(UpdateStoreApiKeyRequest.serializer(), request))
-        }
+    guardNetwork(onNetworkError = { StoreApiKeyResult.Error(0, it, null) }) {
+      val response = httpClient.put(url(MonolithPaths.STORES_API_KEY)) {
+        contentType(ContentType.Application.Json)
+        authHeader(this)
+        setBody(MonolithJson.encodeToString(UpdateStoreApiKeyRequest.serializer(), request))
+      }
       val body = response.bodyAsText()
       if (response.status == HttpStatusCode.OK) {
         val parsed = MonolithJson.decodeFromString(UpdateStoreApiKeyResponse.serializer(), body)
@@ -108,17 +115,14 @@ class HttpMonolithService(
         val (msg, parsed) = monolithError(response.status.value, body)
         StoreApiKeyResult.Error(response.status.value, msg, parsed)
       }
-    } catch (e: IOException) {
-      StoreApiKeyResult.Error(0, e.message ?: "network error", null)
     }
 
   override suspend fun getStore(shopifySubdomain: String): GetStoreResult =
-    try {
-      val response =
-        httpClient.get(url(MonolithPaths.STORES)) {
-          authHeader(this)
-          parameter("shopify_subdomain", shopifySubdomain)
-        }
+    guardNetwork(onNetworkError = { GetStoreResult.Error(0, it, null) }) {
+      val response = httpClient.get(url(MonolithPaths.STORES)) {
+        authHeader(this)
+        parameter("shopify_subdomain", shopifySubdomain)
+      }
       val body = response.bodyAsText()
       when (response.status) {
         HttpStatusCode.OK -> {
@@ -135,18 +139,15 @@ class HttpMonolithService(
           GetStoreResult.Error(response.status.value, msg, parsed)
         }
       }
-    } catch (e: IOException) {
-      GetStoreResult.Error(0, e.message ?: "network error", null)
     }
 
   override suspend fun upsertProductVariants(request: UpsertProductVariantsRequest): UpsertVariantsResult =
-    try {
-      val response =
-        httpClient.post(url(MonolithPaths.PRODUCT_VARIANTS)) {
-          contentType(ContentType.Application.Json)
-          authHeader(this)
-          setBody(MonolithJson.encodeToString(UpsertProductVariantsRequest.serializer(), request))
-        }
+    guardNetwork(onNetworkError = { UpsertVariantsResult.Error(0, it, null) }) {
+      val response = httpClient.post(url(MonolithPaths.PRODUCT_VARIANTS)) {
+        contentType(ContentType.Application.Json)
+        authHeader(this)
+        setBody(MonolithJson.encodeToString(UpsertProductVariantsRequest.serializer(), request))
+      }
       val body = response.bodyAsText()
       if (response.status == HttpStatusCode.OK) {
         val parsed = MonolithJson.decodeFromString(UpsertProductVariantsResponse.serializer(), body)
@@ -155,17 +156,14 @@ class HttpMonolithService(
         val (msg, parsed) = monolithError(response.status.value, body)
         UpsertVariantsResult.Error(response.status.value, msg, parsed)
       }
-    } catch (e: IOException) {
-      UpsertVariantsResult.Error(0, e.message ?: "network error", null)
     }
 
   override suspend fun getProductVariantIds(shopifySubdomain: String): GetVariantIdsResult =
-    try {
-      val response =
-        httpClient.get(url(MonolithPaths.PRODUCT_VARIANTS)) {
-          authHeader(this)
-          parameter("shopify_subdomain", shopifySubdomain)
-        }
+    guardNetwork(onNetworkError = { GetVariantIdsResult.Error(0, it, null) }) {
+      val response = httpClient.get(url(MonolithPaths.PRODUCT_VARIANTS)) {
+        authHeader(this)
+        parameter("shopify_subdomain", shopifySubdomain)
+      }
       val body = response.bodyAsText()
       when (response.status) {
         HttpStatusCode.OK -> {
@@ -178,18 +176,15 @@ class HttpMonolithService(
           GetVariantIdsResult.Error(response.status.value, msg, parsed)
         }
       }
-    } catch (e: IOException) {
-      GetVariantIdsResult.Error(0, e.message ?: "network error", null)
     }
 
   override suspend fun deleteProductVariants(request: DeleteProductVariantsRequest): DeleteVariantsResult =
-    try {
-      val response =
-        httpClient.delete(url(MonolithPaths.PRODUCT_VARIANTS)) {
-          contentType(ContentType.Application.Json)
-          authHeader(this)
-          setBody(MonolithJson.encodeToString(DeleteProductVariantsRequest.serializer(), request))
-        }
+    guardNetwork(onNetworkError = { DeleteVariantsResult.Error(0, it, null) }) {
+      val response = httpClient.delete(url(MonolithPaths.PRODUCT_VARIANTS)) {
+        contentType(ContentType.Application.Json)
+        authHeader(this)
+        setBody(MonolithJson.encodeToString(DeleteProductVariantsRequest.serializer(), request))
+      }
       val body = response.bodyAsText()
       if (response.status == HttpStatusCode.OK) {
         val parsed = MonolithJson.decodeFromString(DeleteProductVariantsResponse.serializer(), body)
@@ -198,8 +193,6 @@ class HttpMonolithService(
         val (msg, parsed) = monolithError(response.status.value, body)
         DeleteVariantsResult.Error(response.status.value, msg, parsed)
       }
-    } catch (e: IOException) {
-      DeleteVariantsResult.Error(0, e.message ?: "network error", null)
     }
 
   private sealed interface CreateOrderPayload {
@@ -220,4 +213,14 @@ class HttpMonolithService(
     }
     return CreateOrderPayload.Ok(json)
   }
+}
+
+/** Wraps a suspending block so a single [IOException] (network failure) becomes a typed [R] outcome via [onNetworkError]. */
+private suspend inline fun <R> guardNetwork(
+  onNetworkError: (message: String) -> R,
+  block: () -> R,
+): R = try {
+  block()
+} catch (e: IOException) {
+  onNetworkError(e.message ?: "network error")
 }
