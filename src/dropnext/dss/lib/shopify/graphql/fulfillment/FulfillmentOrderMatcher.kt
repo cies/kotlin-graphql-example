@@ -1,4 +1,4 @@
-package dropnext.dss.lib.fulfillment
+package dropnext.dss.lib.shopify.graphql.fulfillment
 
 import dropnext.graphql.generated.enums.FulfillmentOrderStatus
 import dropnext.graphql.generated.getorderfordss.FulfillmentOrder

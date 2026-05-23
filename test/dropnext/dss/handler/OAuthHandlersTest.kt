@@ -1,8 +1,9 @@
 package dropnext.dss.handler
 
-import dropnext.dss.shopify.GraphqlClientCache
+import dropnext.dss.lib.monolith.ShopAccessTokenCache
+import dropnext.dss.lib.shopify.graphql.GraphqlClientCache
 import dropnext.dss.path.DssPaths
-import dropnext.dss.shopify.signedOAuthState
+import dropnext.dss.lib.shopify.oauth.signedOAuthState
 import dropnext.dss.testing.fake.FakeMonolithService
 import dropnext.dss.testing.fake.FakeShopifyGraphqlServer
 import dropnext.dss.testing.fake.shopifyRewritingHttpClient
@@ -203,7 +204,7 @@ class OAuthHandlersTest {
         """{"data":{"webhookSubscriptionCreate":{"userErrors":[],"webhookSubscription":null}}}""",
       )
 
-      val tokens = dropnext.dss.lib.auth.ShopAccessTokenCache()
+      val tokens = ShopAccessTokenCache()
       val fakeMonolith = FakeMonolithService()
       val shopifyConfig = testShopifyConfig(appClientSecret = secret)
       val dssConfig = testDssAppConfig(shopify = shopifyConfig)
@@ -256,7 +257,7 @@ class OAuthHandlersTest {
       client,
       cache,
       httpMonolithClient = null,
-      shopTokens = dropnext.dss.lib.auth.ShopAccessTokenCache(),
+      shopTokens = ShopAccessTokenCache(),
     )
   }
 

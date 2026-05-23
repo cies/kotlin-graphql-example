@@ -1,4 +1,4 @@
-package dropnext.dss.shopify
+package dropnext.dss.lib.shopify.graphql
 
 import dropnext.graphql.generated.GetWebhookSubscriptions
 import dropnext.graphql.generated.RegisterWebhook
@@ -22,6 +22,9 @@ data class WebhookRegistrationReport(
   val addedSubscriptions: List<WebhookSubscriptionStatus>,
   val failedTopics: List<Pair<WebhookSubscriptionTopic, String>>,
 )
+
+
+// TODO(cies): these actions can also be put on a service
 
 suspend fun registerStandardWebhooks(
   gqlClient: GraphQLKtorClient,

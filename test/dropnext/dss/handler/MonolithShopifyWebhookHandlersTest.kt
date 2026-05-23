@@ -1,9 +1,9 @@
 package dropnext.dss.handler
 
-import dropnext.dss.shopify.GraphqlClientCache
+import dropnext.dss.lib.shopify.graphql.GraphqlClientCache
 import dropnext.dss.lib.ktor.createSharedHttpClient
 import dropnext.dss.path.DssPaths
-import dropnext.dss.lib.auth.ShopAccessTokenCache
+import dropnext.dss.lib.monolith.ShopAccessTokenCache
 import dropnext.dss.lib.dto.PutShopAccessTokenRequest
 import dropnext.dss.lib.dto.PutShopAccessTokenResponse
 import dropnext.dss.lib.dto.Shipment
@@ -12,7 +12,7 @@ import dropnext.dss.lib.dto.SyncShipmentsWithFulfillmentsRequest
 import dropnext.dss.lib.dto.SyncShipmentsWithFulfillmentsResponse
 import dropnext.dss.lib.dto.TrackingUpdateRequest
 import dropnext.dss.lib.dto.TrackingUpdateResponse
-import dropnext.dss.lib.fulfillment.DssFulfillmentService
+import dropnext.dss.lib.shopify.graphql.fulfillment.DssFulfillmentService
 import dropnext.dss.lib.json.AppJson
 import dropnext.dss.lib.ktor.installJsonContentNegotiation
 import dropnext.dss.routing.installDssRoutes
@@ -298,7 +298,7 @@ class MonolithShopifyWebhookHandlersTest {
     // before any GraphQL call), so reusing the production shared client keeps us off the ad-hoc
     // HttpClient() construction that ArchitectureTest forbids in src/.
     return MonolithWebhookHandlers(
-      shopifyConfig = shopify,
+      shopifyApiVersion = shopify.apiVersion,
       dssConfig = dssConfig,
       gqlClientCache = GraphqlClientCache(createSharedHttpClient()),
       fulfillmentService = DssFulfillmentService,

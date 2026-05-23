@@ -1,6 +1,7 @@
 package dropnext.dss.handler
 
-import dropnext.dss.shopify.GraphqlClientCache
+import dropnext.dss.lib.monolith.ShopAccessTokenCache
+import dropnext.dss.lib.shopify.graphql.GraphqlClientCache
 import dropnext.dss.path.DssPaths
 import dropnext.dss.testing.fake.FakeMonolithService
 import dropnext.dss.testing.fake.FakeShopifyGraphqlServer
@@ -278,7 +279,7 @@ class ShopifyWebhookHandlersTest {
       syncOrderOnUpdated = syncOnUpdated,
     )
     val cache = GraphqlClientCache(httpClient)
-    return ShopifyWebhookHandlers(dssConfig, cache, monolith, dropnext.dss.lib.auth.ShopAccessTokenCache(tokens))
+    return ShopifyWebhookHandlers(dssConfig, cache, monolith, ShopAccessTokenCache(tokens))
   }
 
   private fun base64HmacSha256(secret: String, body: ByteArray): String {

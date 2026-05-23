@@ -1,4 +1,4 @@
-package dropnext.dss.shopify
+package dropnext.dss.lib.shopify.oauth
 
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
@@ -7,6 +7,11 @@ import java.time.Instant
 import java.util.Base64
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
+
+
+
+// TODO(cies): make this part of the OAuth service
+
 
 private const val OAUTH_STATE_TTL_SECONDS = 300L
 

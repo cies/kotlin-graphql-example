@@ -1,4 +1,4 @@
-package dropnext.dss.lib.auth
+package dropnext.dss.lib.monolith
 
 import java.util.concurrent.ConcurrentHashMap
 
@@ -6,13 +6,14 @@ import java.util.concurrent.ConcurrentHashMap
  * In-memory cache of `shop.myshopify.com` → Shopify Admin access token.
  *
  * The DSS has no server-side database; tokens come from env (`DSS_SHOP_ACCESS_TOKENS`),
- * the OAuth callback after install, or a fallback fetch from the monolith. Whichever path
- * fills the cache, every subsequent webhook / DSS REST call reads from here.
+ * the OAuth callback after installation, or a fallback fetch from the monolith.
+ * Whichever path fills the cache, every subsequent webhook / DSS REST call reads from here.
  *
- * Backed by a [ConcurrentHashMap] so OAuth callbacks, webhook handlers, and the monolith
+ * Backed by a [java.util.concurrent.ConcurrentHashMap] so OAuth callbacks, webhook handlers, and the monolith
  * fallback resolver can write concurrently without data races. Keys are normalized to
  * full `*.myshopify.com` host strings (lowercase).
  */
+// TODO(cies): Why not standardize on lowercased keys? why not fold this into the monolith service?
 class ShopAccessTokenCache(initial: Map<String, String> = emptyMap()) {
   private val tokens: ConcurrentHashMap<String, String> = ConcurrentHashMap(initial)
 

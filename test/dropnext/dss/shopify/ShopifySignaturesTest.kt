@@ -1,6 +1,6 @@
 package dropnext.dss.shopify
 
-import io.ktor.http.Parameters
+import dropnext.dss.lib.shopify.webhook.ShopifySignatures
 import io.ktor.http.parametersOf
 import java.nio.charset.StandardCharsets
 import java.util.Base64

@@ -5,7 +5,7 @@ import dropnext.dss.config.DssAppConfig
 import dropnext.dss.config.MonolithConfig
 import dropnext.dss.config.ShopifyConfig
 import dropnext.dss.config.WebhookConfig
-import dropnext.dss.lib.auth.ShopAccessTokenCache
+import dropnext.dss.lib.monolith.ShopAccessTokenCache
 
 fun testShopifyConfig(
   appClientSecret: String = "test-secret",

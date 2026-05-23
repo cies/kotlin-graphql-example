@@ -1,6 +1,7 @@
 package dropnext.dss.shopify
 
 import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
+import dropnext.dss.lib.shopify.graphql.registerStandardWebhooks
 import dropnext.dss.testing.fake.FakeShopifyGraphqlServer
 import dropnext.graphql.generated.GetWebhookSubscriptions
 import dropnext.graphql.generated.RegisterWebhook
@@ -67,7 +68,7 @@ class ShopifyWebhookRegistrationTest {
     stubExistingSubscriptions(emptyList())
     stubRegisterOk()
 
-    registerStandardWebhooks(gqlClient, "tok", "https://dss.example/webhooks/shopify")
+      registerStandardWebhooks(gqlClient, "tok", "https://dss.example/webhooks/shopify")
 
     val registers = fake.calls.filter { it.operationName == "RegisterWebhook" }
     val ordersCalls = registers.filter { call ->

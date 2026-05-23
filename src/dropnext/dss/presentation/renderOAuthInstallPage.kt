@@ -1,9 +1,11 @@
 package dropnext.dss.presentation
 
+import dropnext.dss.domain.MonolithPersistOutcome
 import dropnext.dss.path.DssPaths
 import dropnext.dss.path.MonolithPaths
-import dropnext.dss.shopify.WebhookSubscriptionStatus
+import dropnext.dss.lib.shopify.graphql.WebhookSubscriptionStatus
 import dropnext.graphql.generated.enums.WebhookSubscriptionTopic
+import kotlinx.html.FlowContent
 import kotlinx.html.a
 import kotlinx.html.body
 import kotlinx.html.code
@@ -18,43 +20,30 @@ import kotlinx.html.stream.appendHTML
 import kotlinx.html.style
 import kotlinx.html.ul
 
-/**
- * Outcome of attempting to persist the freshly-obtained Shopify Admin token to the monolith
- * during OAuth install. The view renders one of three info / success / error notices from this.
- */
-sealed interface MonolithPersistOutcome {
-  data object MonolithNotConfigured : MonolithPersistOutcome
-  data class Persisted(val storeId: Long) : MonolithPersistOutcome
-  data class Failed(val httpStatus: Int, val detail: String?) : MonolithPersistOutcome
-}
-
-/** All data the install-success page needs. The view does not know about [io.ktor.server.application.ApplicationCall]. */
-data class OAuthInstallPageModel(
-  val shop: String,
-  val shopId: Long,
-  val monolithPersist: MonolithPersistOutcome,
-  val productEdgeCount: Int,
-  val webhookCallbackUrl: String,
-  val activeSubscriptions: List<WebhookSubscriptionStatus>,
-  val addedSubscriptions: List<WebhookSubscriptionStatus>,
-  val failedTopics: List<Pair<WebhookSubscriptionTopic, String>>,
-)
 
 /** Renders the post-install confirmation page as a complete HTML document. */
-fun renderOAuthInstallPage(model: OAuthInstallPageModel): String {
-  val builder = StringBuilder("<!DOCTYPE html>\n")
-  builder.appendHTML().html {
+fun renderOAuthInstallPage(
+  shop: String,
+  shopId: Long,
+  monolithPersist: MonolithPersistOutcome,
+  productEdgeCount: Int,
+  webhookCallbackUrl: String,
+  activeSubscriptions: List<WebhookSubscriptionStatus>,
+  addedSubscriptions: List<WebhookSubscriptionStatus>,
+  failedTopics: List<Pair<WebhookSubscriptionTopic, String>>,
+): String {
+  return StringBuilder("<!DOCTYPE html>\n").appendHTML().html {
     head {
       meta { name = "robots"; content = "noindex, nofollow" }
     }
     body {
       h1 { +"App installed" }
-      p { +"Shop: ${model.shop} (id ${model.shopId})" }
-      renderMonolithPersistBlock(model.monolithPersist)
-      p { +"SyncProductsPage (first 3) product edges: ${model.productEdgeCount}" }
+      p { +"Shop: $shop (id ${shopId})" }
+      renderMonolithPersistBlock(monolithPersist)
+      p { +"SyncProductsPage (first 3) product edges: $productEdgeCount" }
       p {
         +"Webhook callback URL: "
-        code { +model.webhookCallbackUrl }
+        code { +webhookCallbackUrl }
       }
       p {
         +"Active "
@@ -63,24 +52,21 @@ fun renderOAuthInstallPage(model: OAuthInstallPageModel): String {
         code { +"orders/*" }
         +" webhook subscriptions:"
       }
-      renderSubscriptionList(model.activeSubscriptions)
+      renderSubscriptionList(activeSubscriptions)
       p { +"Webhook subscriptions added in this install:" }
-      renderSubscriptionList(model.addedSubscriptions)
-      if (model.failedTopics.isNotEmpty()) {
-        renderFailedTopics(model.failedTopics)
+      renderSubscriptionList(addedSubscriptions)
+      if (failedTopics.isNotEmpty()) {
+        renderFailedTopics(failedTopics)
       }
-      val demoProductsHref = "${DssPaths.DEMO_PRODUCTS}?shop=${model.shop}"
-      val demoOrderHref = "${DssPaths.DEMO_ORDER}?shop=${model.shop}&id=ORDER_GID"
+      val demoProductsHref = "${DssPaths.DEMO_PRODUCTS}?shop=${shop}"
+      val demoOrderHref = "${DssPaths.DEMO_ORDER}?shop=${shop}&id=ORDER_GID"
       p { a(href = demoProductsHref) { +demoProductsHref } }
-      p { a(href = demoOrderHref) { +"${DssPaths.DEMO_ORDER}?shop=${model.shop}&id=..." } }
+      p { a(href = demoOrderHref) { +"${DssPaths.DEMO_ORDER}?shop=${shop}&id=..." } }
     }
-  }
-  return builder.toString()
+  }.toString()
 }
 
-private fun kotlinx.html.FlowContent.renderMonolithPersistBlock(
-  outcome: MonolithPersistOutcome,
-) {
+private fun FlowContent.renderMonolithPersistBlock(outcome: MonolithPersistOutcome) {
   when (outcome) {
     is MonolithPersistOutcome.MonolithNotConfigured -> {
       p {
@@ -123,7 +109,7 @@ private fun kotlinx.html.FlowContent.renderMonolithPersistBlock(
   }
 }
 
-private fun kotlinx.html.FlowContent.renderSubscriptionList(subs: List<WebhookSubscriptionStatus>) {
+private fun FlowContent.renderSubscriptionList(subs: List<WebhookSubscriptionStatus>) {
   ul {
     if (subs.isEmpty()) {
       li { +"None" }
@@ -142,7 +128,7 @@ private fun kotlinx.html.FlowContent.renderSubscriptionList(subs: List<WebhookSu
   }
 }
 
-private fun kotlinx.html.FlowContent.renderFailedTopics(failures: List<Pair<WebhookSubscriptionTopic, String>>) {
+private fun FlowContent.renderFailedTopics(failures: List<Pair<WebhookSubscriptionTopic, String>>) {
   p {
     style = "color:red"
     strong { +"Webhook registrations that failed (check app scopes in Partner Dashboard):" }

@@ -1,6 +1,8 @@
-package dropnext.dss.shopify
+package dropnext.dss.lib.shopify.webhook
+
 
 /** Inbound webhook topics this service routes on. [Other] captures any unhandled topic header. */
+// TODO(cies): Why not an enum that's nullable?
 sealed interface ShopifyWebhookTopic {
   val raw: String
 

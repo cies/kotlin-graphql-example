@@ -1,6 +1,7 @@
 package dropnext.dss.presentation
 
-import dropnext.dss.shopify.WebhookSubscriptionStatus
+import dropnext.dss.domain.MonolithPersistOutcome
+import dropnext.dss.lib.shopify.graphql.WebhookSubscriptionStatus
 import dropnext.graphql.generated.enums.WebhookSubscriptionTopic
 import kotlin.test.Test
 

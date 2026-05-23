@@ -1,13 +1,13 @@
 package dropnext.dss.handler
 
-import dropnext.dss.shopify.GraphqlClientCache
+import dropnext.dss.lib.shopify.graphql.GraphqlClientCache
 import dropnext.dss.config.DssAppConfig
 import dropnext.dss.path.DssPaths
-import dropnext.dss.lib.auth.ShopAccessTokenCache
+import dropnext.dss.lib.monolith.ShopAccessTokenCache
 import dropnext.dss.lib.ktor.clientErrorMessage
 import dropnext.dss.lib.dto.ErrorResponse
-import dropnext.dss.lib.auth.shopifyAdminTokenWithMonolithFallback
-import dropnext.dss.lib.auth.tokenOrNull
+import dropnext.dss.lib.monolith.shopifyAdminTokenWithMonolithFallback
+import dropnext.dss.lib.monolith.tokenOrNull
 import dropnext.dss.lib.monolith.MonolithService
 import dropnext.dss.shopify.FulfillmentCreateDemoBody
 import dropnext.dss.shopify.FulfillmentTrackingUpdateDemoBody

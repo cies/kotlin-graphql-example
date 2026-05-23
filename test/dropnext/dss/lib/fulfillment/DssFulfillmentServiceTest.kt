@@ -5,6 +5,8 @@ import dropnext.dss.lib.dto.Shipment
 import dropnext.dss.lib.dto.ShipmentLineItem
 import dropnext.dss.lib.dto.SyncShipmentsWithFulfillmentsRequest
 import dropnext.dss.lib.dto.TrackingUpdateRequest
+import dropnext.dss.lib.shopify.graphql.fulfillment.DssFulfillmentService
+import dropnext.dss.lib.shopify.graphql.fulfillment.FulfillmentResult
 import dropnext.dss.testing.fake.FakeShopifyGraphqlServer
 import dropnext.dss.workflow.minimalOrder
 import dropnext.graphql.generated.FulfillmentCancelMutation

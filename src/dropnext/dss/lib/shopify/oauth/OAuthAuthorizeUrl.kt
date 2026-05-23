@@ -1,4 +1,4 @@
-package dropnext.dss.shopify
+package dropnext.dss.lib.shopify.oauth
 
 import dropnext.dss.config.ShopifyConfig
 import dropnext.dss.path.ShopifyPaths

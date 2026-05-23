@@ -7,13 +7,13 @@ import dropnext.dss.handler.DiagnosticsHandlers
 import dropnext.dss.handler.MonolithWebhookHandlers
 import dropnext.dss.handler.OAuthHandlers
 import dropnext.dss.handler.ShopifyWebhookHandlers
-import dropnext.dss.lib.auth.ShopAccessTokenCache
-import dropnext.dss.lib.fulfillment.DssFulfillmentService
+import dropnext.dss.lib.monolith.ShopAccessTokenCache
+import dropnext.dss.lib.shopify.graphql.fulfillment.DssFulfillmentService
 import dropnext.dss.lib.ktor.createMonolithHttpClient
 import dropnext.dss.lib.ktor.createSharedHttpClient
 import dropnext.dss.lib.monolith.HttpMonolithService
 import dropnext.dss.lib.monolith.MonolithService
-import dropnext.dss.shopify.GraphqlClientCache
+import dropnext.dss.lib.shopify.graphql.GraphqlClientCache
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.client.HttpClient
 

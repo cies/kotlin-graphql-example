@@ -1,25 +1,25 @@
 package dropnext.dss.handler
 
-import dropnext.dss.shopify.GraphqlClientCache
+import dropnext.dss.lib.shopify.graphql.GraphqlClientCache
 import dropnext.dss.config.DssAppConfig
 import dropnext.dss.path.DssPaths
-import dropnext.dss.lib.auth.ShopAccessTokenCache
+import dropnext.dss.lib.monolith.ShopAccessTokenCache
 import dropnext.dss.lib.dto.DeleteProductVariantsRequest
 import dropnext.dss.lib.dto.UpsertProductVariantsRequest
-import dropnext.dss.lib.auth.shopifyAdminTokenWithMonolithFallback
-import dropnext.dss.lib.auth.tokenOrNull
+import dropnext.dss.lib.monolith.shopifyAdminTokenWithMonolithFallback
+import dropnext.dss.lib.monolith.tokenOrNull
 import dropnext.dss.lib.monolith.DeleteVariantsResult
 import dropnext.dss.lib.monolith.MonolithService
 import dropnext.dss.lib.monolith.UpsertVariantsResult
 import dropnext.dss.lib.monolith.logMonolithFailure
-import dropnext.dss.shopify.ShopifySignatures
-import dropnext.dss.shopify.ShopifyWebhookTopic
-import dropnext.dss.shopify.graphqlResourceIdFromShopifyWebhook
-import dropnext.dss.shopify.shopDomainFromWebhookBody
-import dropnext.dss.shopify.shopMyshopifyHostFromWebhook
+import dropnext.dss.lib.shopify.webhook.ShopifySignatures
+import dropnext.dss.lib.shopify.webhook.ShopifyWebhookTopic
+import dropnext.dss.lib.shopify.webhook.graphqlResourceIdFromShopifyWebhook
+import dropnext.dss.lib.shopify.webhook.shopDomainFromWebhookBody
+import dropnext.dss.shopify.shopMyShopifyHostFromWebhook
 import dropnext.dss.shopify.shopifySubdomainShort
 import dropnext.dss.shopify.toProductVariantItems
-import dropnext.dss.shopify.variantLegacyIdsFromProductWebhook
+import dropnext.dss.lib.shopify.webhook.variantLegacyIdsFromProductWebhook
 import dropnext.dss.workflow.syncShopifyOrderToMonolith
 import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
 import dropnext.graphql.generated.GetProductById
@@ -54,7 +54,7 @@ class ShopifyWebhookHandlers(
     val bodyStr = body.decodeToString()
     log.info { "Webhook verified topic=${topic.raw} shopDomainHeader=$shopDomainHeader bodyBytes=${body.size}" }
 
-    val shopNorm = shopMyshopifyHostFromWebhook(shopDomainHeader, shopDomainFromWebhookBody(bodyStr))
+    val shopNorm = shopMyShopifyHostFromWebhook(shopDomainHeader, shopDomainFromWebhookBody(bodyStr))
     val token = shopNorm?.let {
       shopifyAdminTokenWithMonolithFallback(it, shopTokens, httpMonolithClient).tokenOrNull
     }

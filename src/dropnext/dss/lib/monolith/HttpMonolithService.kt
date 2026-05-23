@@ -216,7 +216,7 @@ class HttpMonolithService(
 }
 
 /** Wraps a suspending block so a single [IOException] (network failure) becomes a typed [R] outcome via [onNetworkError]. */
-private suspend inline fun <R> guardNetwork(
+private inline fun <R> guardNetwork(
   onNetworkError: (message: String) -> R,
   block: () -> R,
 ): R = try {

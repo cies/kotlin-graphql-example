@@ -1,4 +1,4 @@
-package dropnext.dss.shopify
+package dropnext.dss.lib.shopify.oauth
 
 import dropnext.dss.config.ShopifyConfig
 import dropnext.dss.path.ShopifyPaths
@@ -11,19 +11,29 @@ import io.ktor.http.contentType
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
+
 @Serializable
 private data class OAuthAccessTokenRequest(
-  @SerialName(value = "client_id") val clientId: String,
-  @SerialName(value = "client_secret") val clientSecret: String,
-  @SerialName(value = "code") val code: String,
+  @SerialName("client_id")
+  val clientId: String,
+
+  @SerialName("client_secret")
+  val clientSecret: String,
+
+  @SerialName("code")
+  val code: String,
 )
 
 @Serializable
 data class OAuthAccessTokenResponse(
-  @SerialName(value = "access_token") val accessToken: String,
-  @SerialName(value = "scope") val scope: String,
+  @SerialName("access_token")
+  val accessToken: String,
+
+  @SerialName("scope")
+  val scope: String,
 )
 
+// TODO(cies): Seems this is an appropriate candidate for a service (shopify.json)
 suspend fun exchangeAuthorizationCode(
   httpClient: HttpClient,
   shop: String,

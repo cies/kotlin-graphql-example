@@ -1,6 +1,8 @@
 package dropnext.dss.shopify
 
 import dropnext.dss.config.ShopifyConfig
+import dropnext.dss.lib.shopify.oauth.buildOAuthAuthorizeUrl
+import dropnext.dss.lib.shopify.oauth.randomOAuthState
 import kotlin.test.Test
 
 class OAuthAuthorizeUrlTest {

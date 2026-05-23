@@ -1,5 +1,6 @@
 package dropnext.dss.shopify
 
+import dropnext.dss.lib.shopify.webhook.shopDomainFromWebhookBody
 import kotlin.test.Test
 
 class WebhookGraphqlIdsTest {
@@ -7,9 +8,9 @@ class WebhookGraphqlIdsTest {
   @Test
   fun `parses domain field from webhook JSON`() {
     val domain =
-      shopDomainFromWebhookBody(
-        """{"id":1001,"domain":"acme.myshopify.com","admin_graphql_api_id":"gid://shopify/Order/1001"}""",
-      )
+        shopDomainFromWebhookBody(
+            """{"id":1001,"domain":"acme.myshopify.com","admin_graphql_api_id":"gid://shopify/Order/1001"}""",
+        )
     assert(domain == "acme.myshopify.com")
   }
 

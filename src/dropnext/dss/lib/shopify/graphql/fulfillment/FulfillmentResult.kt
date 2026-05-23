@@ -1,4 +1,4 @@
-package dropnext.dss.lib.fulfillment
+package dropnext.dss.lib.shopify.graphql.fulfillment
 
 sealed interface FulfillmentResult<out T> {
   data class Ok<T>(val value: T) : FulfillmentResult<T>

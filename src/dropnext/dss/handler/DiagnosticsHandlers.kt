@@ -2,7 +2,7 @@ package dropnext.dss.handler
 
 import dropnext.dss.config.DssAppConfig
 import dropnext.dss.path.DssPaths
-import dropnext.dss.lib.auth.ShopAccessTokenCache
+import dropnext.dss.lib.monolith.ShopAccessTokenCache
 import dropnext.dss.lib.ktor.DssError
 import dropnext.dss.lib.ktor.respondError
 import dropnext.dss.lib.ktor.shopifyAccessTokenFromHeader

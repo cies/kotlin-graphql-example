@@ -1,10 +1,10 @@
 package dropnext.dss.handler
 
-import dropnext.dss.shopify.GraphqlClientCache
+import dropnext.dss.lib.shopify.graphql.GraphqlClientCache
 import dropnext.dss.config.DssAppConfig
 import dropnext.dss.path.DssPaths
-import dropnext.dss.lib.auth.ShopAccessTokenCache
-import dropnext.dss.lib.auth.resolveShopifyAdminToken
+import dropnext.dss.lib.monolith.ShopAccessTokenCache
+import dropnext.dss.lib.ktor.resolveShopifyAdminToken
 import dropnext.dss.lib.dto.PutShopAccessTokenRequest
 import dropnext.dss.lib.dto.PutShopAccessTokenResponse
 import dropnext.dss.lib.dto.SyncShipmentsWithFulfillmentsRequest
@@ -12,13 +12,13 @@ import dropnext.dss.lib.dto.SyncShipmentsWithFulfillmentsResponse
 import dropnext.dss.lib.dto.TrackingUpdateRequest
 import dropnext.dss.lib.dto.TrackingUpdateResponse
 import dropnext.dss.lib.dto.UpdateStoreApiKeyRequest
-import dropnext.dss.lib.auth.tokenOrNull
-import dropnext.dss.lib.fulfillment.DssFulfillmentService
-import dropnext.dss.lib.fulfillment.FulfillmentResult
-import dropnext.dss.lib.fulfillment.RequestValidation
-import dropnext.dss.lib.fulfillment.toDssError
-import dropnext.dss.lib.fulfillment.validateSyncShipmentsRequest
-import dropnext.dss.lib.fulfillment.validateTrackingUpdateRequest
+import dropnext.dss.lib.monolith.tokenOrNull
+import dropnext.dss.lib.shopify.graphql.fulfillment.DssFulfillmentService
+import dropnext.dss.lib.shopify.graphql.fulfillment.FulfillmentResult
+import dropnext.dss.lib.shopify.graphql.fulfillment.RequestValidation
+import dropnext.dss.lib.shopify.graphql.fulfillment.toDssError
+import dropnext.dss.lib.shopify.graphql.fulfillment.validateSyncShipmentsRequest
+import dropnext.dss.lib.shopify.graphql.fulfillment.validateTrackingUpdateRequest
 import dropnext.dss.lib.ktor.DssError
 import dropnext.dss.lib.ktor.receiveOr400
 import dropnext.dss.lib.ktor.requireDssInternalSecret

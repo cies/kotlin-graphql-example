@@ -1,5 +1,6 @@
-package dropnext.dss.lib.fulfillment
+package dropnext.dss.lib.shopify.graphql.fulfillment
 
+import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
 import dropnext.dss.lib.dto.Shipment
 import dropnext.dss.lib.dto.SyncShipmentsWithFulfillmentsRequest
 import dropnext.dss.lib.dto.SyncShipmentsWithFulfillmentsResponse
@@ -11,14 +12,11 @@ import dropnext.graphql.generated.FulfillmentCancelMutation
 import dropnext.graphql.generated.FulfillmentCreateWithLineItems
 import dropnext.graphql.generated.FulfillmentEventCreateMutation
 import dropnext.graphql.generated.GetOrderForDss
-import dropnext.graphql.generated.getorderfordss.FulfillmentOrder
 import dropnext.graphql.generated.getorderfordss.Order
 import dropnext.graphql.generated.inputs.FulfillmentEventInput
-import dropnext.graphql.generated.inputs.FulfillmentOrderLineItemInput
 import dropnext.graphql.generated.inputs.FulfillmentOrderLineItemsInput
 import dropnext.graphql.generated.inputs.FulfillmentTrackingInput
-import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
-import io.ktor.client.request.header
+import io.ktor.client.request.*
 
 
 /**
@@ -30,6 +28,7 @@ import io.ktor.client.request.header
  * [FulfillmentResult] (`Ok` or one of the `Err.*` variants) so the handler can map the failure to
  * the right HTTP status without catching exceptions.
  */
+// TODO(cies): name this a proper service that is constructed ones with gqlClient and access token
 object DssFulfillmentService {
   /**
    * Cancels all existing open Shopify fulfillments for the order, then creates new fulfillments
@@ -44,23 +43,22 @@ object DssFulfillmentService {
     val orderGid = orderGid(payload.shopifyOrderId)
 
     // Load the order to get current fulfillments
-    val orderBefore =
-      loadOrder(gqlClient, accessToken, orderGid)
-        ?: return FulfillmentResult.Err.NotFound("order ${payload.shopifyOrderId} not found")
+    val orderBefore = loadOrder(gqlClient, accessToken, orderGid)
+      ?: return FulfillmentResult.Err.NotFound("order ${payload.shopifyOrderId} not found")
 
     // Cancel all existing non-canceled fulfillments
-    val existingFulfillmentGids =
-      orderBefore.fulfillments
-        .map { it.id }
-        .filter { it.isNotBlank() }
+    val existingFulfillmentGids = orderBefore.fulfillments
+      .map { it.id }
+      .filter { it.isNotBlank() }
 
     for (fulfillmentGid in existingFulfillmentGids) {
-      val r =
-        runCatching {
-          gqlClient.execute(FulfillmentCancelMutation(FulfillmentCancelMutation.Variables(fulfillmentGid))) {
-            header("X-Shopify-Access-Token", accessToken)
-          }
-        }.getOrElse { e -> return FulfillmentResult.Err.Network(e.message ?: "network error") }
+      val r = runCatching {
+        gqlClient.execute(
+          FulfillmentCancelMutation(
+            FulfillmentCancelMutation.Variables(fulfillmentGid)
+          )
+        ) { header("X-Shopify-Access-Token", accessToken) }
+      }.getOrElse { e -> return FulfillmentResult.Err.Network(e.message ?: "network error") }
       val errs = r.data?.fulfillmentCancel?.userErrors.orEmpty()
       // Ignore "already canceled" errors — they are no-ops
       val realErrs = errs.filter { !it.message.contains("already", ignoreCase = true) }
@@ -73,23 +71,23 @@ object DssFulfillmentService {
     }
 
     // Reload order after cancellations so remaining quantities are accurate
-    val orderAfter =
-      if (existingFulfillmentGids.isEmpty()) {
-        orderBefore
-      } else {
-        loadOrder(gqlClient, accessToken, orderGid)
-          ?: return FulfillmentResult.Err.NotFound("order not found after cancel")
-      }
+    val orderAfter = if (existingFulfillmentGids.isEmpty()) {
+      orderBefore
+    } else {
+      loadOrder(gqlClient, accessToken, orderGid)
+        ?: return FulfillmentResult.Err.NotFound("order not found after cancel")
+    }
 
-    val newIds = mutableListOf<Long>()
-    for (shipment in payload.shipments) {
-      val result = createFulfillmentForShipment(gqlClient, accessToken, orderAfter, shipment)
-      when (result) {
-        is FulfillmentResult.Ok -> newIds.addAll(result.value)
+
+    val newIds = payload.shipments.flatMap { shipment ->
+      when (val result =
+        createFulfillmentForShipment(gqlClient, accessToken, orderAfter, shipment)) {
+
+        is FulfillmentResult.Ok -> result.value
         is FulfillmentResult.Err -> return result
       }
     }
-    return FulfillmentResult.Ok(SyncShipmentsWithFulfillmentsResponse(newFulfillmentIds = newIds))
+    return FulfillmentResult.Ok(SyncShipmentsWithFulfillmentsResponse(newIds))
   }
 
   /**
@@ -100,43 +98,42 @@ object DssFulfillmentService {
     accessToken: String,
     payload: TrackingUpdateRequest,
   ): FulfillmentResult<TrackingUpdateResponse> {
-    val parsedStatus = parseFulfillmentEventStatus(payload.status)
-    val status =
-      when (parsedStatus) {
-        is ParsedFulfillmentStatus.Known -> parsedStatus.value
-        is ParsedFulfillmentStatus.Unknown ->
-          return FulfillmentResult.Err.UserError(listOf("unsupported tracking status: ${parsedStatus.raw}"))
-      }
+    val status = when (val parsedStatus =
+      ParsedFulfillmentStatus.parseFulfillmentEventStatus(payload.status)) {
+      is ParsedFulfillmentStatus.Known -> parsedStatus.value
+      is ParsedFulfillmentStatus.Unknown ->
+        return FulfillmentResult.Err.UserError(listOf("unsupported tracking status: ${parsedStatus.raw}"))
+    }
 
     val orderGid = orderGid(payload.shopifyOrderId)
-    val order =
-      loadOrder(gqlClient, accessToken, orderGid)
-        ?: return FulfillmentResult.Err.NotFound("order ${payload.shopifyOrderId} not found")
+    val order = loadOrder(gqlClient, accessToken, orderGid)
+      ?: return FulfillmentResult.Err.NotFound("order ${payload.shopifyOrderId} not found")
 
     // Find the fulfillment with the matching tracking number
-    val fulfillmentGid =
-      order.fulfillments
-        .find { fulfillment ->
-          fulfillment.trackingInfo.any { it.number == payload.trackingNumber }
-        }
-        ?.id
-        ?: return FulfillmentResult.Err.NotFound(
-          "no fulfillment with tracking number ${payload.trackingNumber} on order ${payload.shopifyOrderId}",
-        )
-
-    val input =
-      FulfillmentEventInput(
-        fulfillmentId = fulfillmentGid,
-        happenedAt = payload.happenedAt,
-        status = status,
-        message = payload.message,
+    val fulfillmentGid = order.fulfillments.find { fulfillment ->
+      fulfillment.trackingInfo.any { it.number == payload.trackingNumber }
+    }?.id
+      ?: return FulfillmentResult.Err.NotFound(
+        "no fulfillment with tracking number ${payload.trackingNumber} on order ${payload.shopifyOrderId}",
       )
-    val r =
-      runCatching {
-        gqlClient.execute(FulfillmentEventCreateMutation(FulfillmentEventCreateMutation.Variables(input))) {
-          header("X-Shopify-Access-Token", accessToken)
-        }
-      }.getOrElse { e -> return FulfillmentResult.Err.Network(e.message ?: "network error") }
+
+    val input = FulfillmentEventInput(
+      fulfillmentId = fulfillmentGid,
+      happenedAt = payload.happenedAt,
+      status = status,
+      message = payload.message,
+    )
+    val r = runCatching {
+      gqlClient.execute(
+        FulfillmentEventCreateMutation(
+          FulfillmentEventCreateMutation.Variables(
+            input
+          )
+        )
+      ) {
+        header("X-Shopify-Access-Token", accessToken)
+      }
+    }.getOrElse { e -> return FulfillmentResult.Err.Network(e.message ?: "network error") }
     val errs = r.data?.fulfillmentEventCreate?.userErrors.orEmpty()
     if (errs.isNotEmpty()) {
       return FulfillmentResult.Err.UserError(errs.map { it.message })
@@ -145,9 +142,8 @@ object DssFulfillmentService {
       return FulfillmentResult.Err.GraphqlError(r.errors.toString())
     }
     val ev = r.data?.fulfillmentEventCreate?.fulfillmentEvent
-    val eid =
-      legacyIdFromGid(ev?.id.toString())
-        ?: return FulfillmentResult.Err.NotFound("missing fulfillment event id")
+    val eid = legacyIdFromGid(ev?.id.toString())
+      ?: return FulfillmentResult.Err.NotFound("missing fulfillment event id")
     return FulfillmentResult.Ok(TrackingUpdateResponse(fulfillmentEventId = eid))
   }
 
@@ -172,34 +168,30 @@ object DssFulfillmentService {
         is ShipmentMatchResult.UserError -> return FulfillmentResult.Err.UserError(matchResult.messages)
       }
 
-    val lineItemsByFo =
-      foGroups.entries.map { (fo, inputs) ->
-        FulfillmentOrderLineItemsInput(
-          fulfillmentOrderId = fo.id,
-          fulfillmentOrderLineItems = inputs,
-        )
+    val lineItemsByFo = foGroups.entries.map { (fo, inputs) ->
+      FulfillmentOrderLineItemsInput(
+        fulfillmentOrderId = fo.id,
+        fulfillmentOrderLineItems = inputs,
+      )
+    }
+
+    val tracking = FulfillmentTrackingInput(
+      company = shipment.carrier,
+      number = shipment.trackingNumber,
+      url = shipment.trackingUrl,
+    )
+
+    val variables = FulfillmentCreateWithLineItems.Variables(
+      lineItemsByFulfillmentOrder = lineItemsByFo,
+      tracking = tracking,
+      notifyCustomer = false,
+    )
+
+    val r = runCatching {
+      gqlClient.execute(FulfillmentCreateWithLineItems(variables)) {
+        header("X-Shopify-Access-Token", accessToken)
       }
-
-    val tracking =
-      FulfillmentTrackingInput(
-        company = shipment.carrier,
-        number = shipment.trackingNumber,
-        url = shipment.trackingUrl,
-      )
-
-    val variables =
-      FulfillmentCreateWithLineItems.Variables(
-        lineItemsByFulfillmentOrder = lineItemsByFo,
-        tracking = tracking,
-        notifyCustomer = false,
-      )
-
-    val r =
-      runCatching {
-        gqlClient.execute(FulfillmentCreateWithLineItems(variables)) {
-          header("X-Shopify-Access-Token", accessToken)
-        }
-      }.getOrElse { e -> return FulfillmentResult.Err.Network(e.message ?: "network error") }
+    }.getOrElse { e -> return FulfillmentResult.Err.Network(e.message ?: "network error") }
 
     val createErrs = r.data?.fulfillmentCreate?.userErrors.orEmpty()
     if (createErrs.isNotEmpty()) {
@@ -219,12 +211,11 @@ object DssFulfillmentService {
     accessToken: String,
     orderGid: String,
   ): Order? {
-    val r =
-      runCatching {
-        gqlClient.execute(GetOrderForDss(GetOrderForDss.Variables(orderGid))) {
-          header("X-Shopify-Access-Token", accessToken)
-        }
-      }.getOrElse { return null }
+    val r = runCatching {
+      gqlClient.execute(GetOrderForDss(GetOrderForDss.Variables(orderGid))) {
+        header("X-Shopify-Access-Token", accessToken)
+      }
+    }.getOrElse { return null }
     return r.data?.order
   }
 }

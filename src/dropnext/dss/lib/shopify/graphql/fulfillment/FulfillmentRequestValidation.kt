@@ -1,4 +1,4 @@
-package dropnext.dss.lib.fulfillment
+package dropnext.dss.lib.shopify.graphql.fulfillment
 
 import dropnext.dss.lib.dto.Shipment
 import dropnext.dss.lib.dto.ShipmentLineItem

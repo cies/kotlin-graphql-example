@@ -1,4 +1,4 @@
-package dropnext.dss.shopify
+package dropnext.dss.lib.shopify.webhook
 
 import dropnext.dss.lib.json.AppJson
 import kotlinx.serialization.json.JsonObject

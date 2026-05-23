@@ -1,4 +1,4 @@
-package dropnext.dss.shopify
+package dropnext.dss.lib.shopify.webhook
 
 import io.ktor.http.Parameters
 import java.nio.charset.StandardCharsets
@@ -7,18 +7,18 @@ import java.util.Base64
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
+
 object ShopifySignatures {
   fun verifyOAuthCallback(params: Parameters, clientSecret: String, hmacHex: String): Boolean {
     // Shopify: remove hmac/signature, sort by key, join with "&" as in query string (see OAuth docs).
-    val message =
-      params.entries()
-        .asSequence()
-        .filter { it.key != "hmac" && it.key != "signature" }
-        .sortedBy { it.key }
-        .joinToString("&") { e ->
-          val value = e.value.singleOrNull() ?: e.value.firstOrNull().orEmpty()
-          "${e.key}=$value"
-        }
+    val message = params.entries()
+      .asSequence()
+      .filter { it.key != "hmac" && it.key != "signature" }
+      .sortedBy { it.key }
+      .joinToString("&") { e ->
+        val value = e.value.singleOrNull() ?: e.value.firstOrNull().orEmpty()
+        "${e.key}=$value"
+      }
     val computedHex = hmacSha256Hex(clientSecret, message)
     return MessageDigest.isEqual(
       computedHex.lowercase().toByteArray(StandardCharsets.UTF_8),

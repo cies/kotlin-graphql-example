@@ -1,5 +1,6 @@
 package dropnext.dss.lib.auth
 
+import dropnext.dss.lib.ktor.constantTimeEquals
 import kotlin.test.Test
 
 class SecureCompareTest {

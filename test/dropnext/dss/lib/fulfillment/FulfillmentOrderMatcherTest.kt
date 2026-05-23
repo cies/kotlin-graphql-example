@@ -11,6 +11,9 @@ import dropnext.graphql.generated.getorderfordss.Order
 import dropnext.graphql.generated.getorderfordss.ProductVariant
 import dropnext.dss.lib.dto.Shipment
 import dropnext.dss.lib.dto.ShipmentLineItem
+import dropnext.dss.lib.shopify.graphql.fulfillment.ShipmentMatchResult
+import dropnext.dss.lib.shopify.graphql.fulfillment.isOpenForFulfillment
+import dropnext.dss.lib.shopify.graphql.fulfillment.matchShipmentToFulfillmentOrders
 import dropnext.dss.workflow.minimalOrder
 import kotlin.test.Test
 
@@ -20,10 +23,10 @@ class FulfillmentOrderMatcherTest {
   fun `matches open fulfillment order line items`() {
     val order = orderWithFulfillmentOrders(openFo(variantId = 101L, remaining = 2))
     val result =
-      matchShipmentToFulfillmentOrders(
-        order,
-        shipment(variantId = 101L, quantity = 1),
-      )
+        matchShipmentToFulfillmentOrders(
+            order,
+            shipment(variantId = 101L, quantity = 1),
+        )
     assert(result is ShipmentMatchResult.Ok)
     val ok = result as ShipmentMatchResult.Ok
     assert(ok.groups.size == 1)

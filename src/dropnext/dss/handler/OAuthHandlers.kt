@@ -1,40 +1,34 @@
 package dropnext.dss.handler
 
-import dropnext.dss.shopify.GraphqlClientCache
 import dropnext.dss.config.DssAppConfig
-import dropnext.dss.path.DssPaths
-import dropnext.dss.lib.auth.ShopAccessTokenCache
+import dropnext.dss.lib.monolith.ShopAccessTokenCache
 import dropnext.dss.lib.dto.UpdateStoreApiKeyRequest
-import dropnext.dss.shopify.legacyIdFromGid
 import dropnext.dss.lib.ktor.DssError
 import dropnext.dss.lib.ktor.respondTextError
 import dropnext.dss.lib.monolith.MonolithService
 import dropnext.dss.lib.monolith.StoreApiKeyResult
 import dropnext.dss.lib.monolith.logMonolithFailure
-import dropnext.dss.presentation.MonolithPersistOutcome
-import dropnext.dss.presentation.OAuthInstallPageModel
+import dropnext.dss.lib.shopify.graphql.GraphqlClientCache
+import dropnext.dss.lib.shopify.graphql.registerStandardWebhooks
+import dropnext.dss.lib.shopify.oauth.buildOAuthAuthorizeUrl
+import dropnext.dss.lib.shopify.oauth.exchangeAuthorizationCode
+import dropnext.dss.lib.shopify.oauth.isValidSignedOAuthState
+import dropnext.dss.lib.shopify.oauth.signedOAuthState
+import dropnext.dss.lib.shopify.webhook.ShopifySignatures
+import dropnext.dss.path.DssPaths
+import dropnext.dss.domain.MonolithPersistOutcome
 import dropnext.dss.presentation.renderOAuthInstallPage
-import dropnext.dss.shopify.ShopifySignatures
-import dropnext.dss.shopify.buildOAuthAuthorizeUrl
-import dropnext.dss.shopify.exchangeAuthorizationCode
-import dropnext.dss.shopify.isValidSignedOAuthState
+import dropnext.dss.shopify.legacyIdFromGid
 import dropnext.dss.shopify.normalizeShopDomain
-import dropnext.dss.shopify.registerStandardWebhooks
 import dropnext.dss.shopify.shopifySubdomainShort
-import dropnext.dss.shopify.signedOAuthState
 import dropnext.graphql.generated.ShopIdentity
 import dropnext.graphql.generated.SyncProductsPage
 import io.github.oshai.kotlinlogging.KotlinLogging
-import io.ktor.client.HttpClient
-import io.ktor.client.request.header
-import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
-import io.ktor.http.HttpStatusCode
-import io.ktor.http.Parameters
-import io.ktor.server.application.ApplicationCall
-import io.ktor.server.response.header
-import io.ktor.server.response.respondRedirect
-import io.ktor.server.response.respondText
+import io.ktor.client.*
+import io.ktor.client.request.*
+import io.ktor.http.*
+import io.ktor.server.application.*
+import io.ktor.server.response.*
 
 
 private val log = KotlinLogging.logger {}
@@ -51,8 +45,9 @@ class OAuthHandlers(
 
   suspend fun handleInstall(call: ApplicationCall) {
     val rawShop = call.requireParam("shop") ?: return
-    val shop = normalizeShopDomain(rawShop)
-      ?: return call.respondTextError(DssError.InvalidParameter("shop", "not a valid Shopify domain"))
+    val shop = normalizeShopDomain(rawShop) ?: return call.respondTextError(
+      DssError.InvalidParameter("shop", "not a valid Shopify domain")
+    )
     val state = signedOAuthState(shop = shop, clientSecret = shopifyConfig.appClientSecret)
     call.respondRedirect(buildOAuthAuthorizeUrl(shop, shopifyConfig, state))
   }
@@ -78,8 +73,8 @@ class OAuthHandlers(
       return call.respondTextError(DssError.InvalidSignature("Invalid or expired state"))
     }
 
-    val oauthResponse =
-      exchangeAuthorizationCode(httpClient, shop, code, shopifyConfig).getOrElse { e ->
+    val oauthResponse = exchangeAuthorizationCode(httpClient, shop, code, shopifyConfig)
+      .getOrElse { e ->
         log.warn { "OAuth code exchange failed for shop=$shop: ${e.message}" }
         return call.respondTextError(DssError.UpstreamFailure("OAuth failed: could not exchange authorization code"))
       }
@@ -108,16 +103,14 @@ class OAuthHandlers(
       registerStandardWebhooks(gqlClient, oauthResponse.accessToken, callbackUrl)
 
     val html = renderOAuthInstallPage(
-      OAuthInstallPageModel(
-        shop = shop,
-        shopId = shopId,
-        monolithPersist = monolithPersist,
-        productEdgeCount = edgeCount,
-        webhookCallbackUrl = callbackUrl,
-        activeSubscriptions = webhookReport.activeSubscriptions,
-        addedSubscriptions = webhookReport.addedSubscriptions,
-        failedTopics = webhookReport.failedTopics,
-      ),
+      shop = shop,
+      shopId = shopId,
+      monolithPersist = monolithPersist,
+      productEdgeCount = edgeCount,
+      webhookCallbackUrl = callbackUrl,
+      activeSubscriptions = webhookReport.activeSubscriptions,
+      addedSubscriptions = webhookReport.addedSubscriptions,
+      failedTopics = webhookReport.failedTopics,
     )
     call.response.header(HttpHeaders.CacheControl, "no-store, no-cache, must-revalidate")
     call.respondText(html, ContentType.Text.Html, HttpStatusCode.OK)
@@ -147,6 +140,7 @@ class OAuthHandlers(
         log.info { "Monolith store api-key updated storeId=${r.storeId} shop=$domain" }
         MonolithPersistOutcome.Persisted(storeId = r.storeId)
       }
+
       is StoreApiKeyResult.Error -> {
         logMonolithFailure("putStoreApiKey", r.status, r.parsed, "shop=$domain")
         MonolithPersistOutcome.Failed(httpStatus = r.status, detail = r.parsed?.message)

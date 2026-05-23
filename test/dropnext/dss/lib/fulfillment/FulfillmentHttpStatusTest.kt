@@ -1,5 +1,7 @@
 package dropnext.dss.lib.fulfillment
 
+import dropnext.dss.lib.shopify.graphql.fulfillment.FulfillmentResult
+import dropnext.dss.lib.shopify.graphql.fulfillment.toHttpStatus
 import io.ktor.http.HttpStatusCode
 import kotlin.test.Test
 
