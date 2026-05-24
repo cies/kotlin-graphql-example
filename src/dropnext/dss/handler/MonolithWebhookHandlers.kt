@@ -1,93 +1,71 @@
 package dropnext.dss.handler
 
-import dropnext.dss.lib.shopify.graphql.GraphqlClientCache
-import dropnext.dss.config.DssAppConfig
 import dropnext.dss.path.DssPaths
-import dropnext.dss.lib.monolith.ShopAccessTokenCache
-import dropnext.dss.lib.ktor.resolveShopifyAdminToken
 import dropnext.dss.lib.dto.PutShopAccessTokenRequest
 import dropnext.dss.lib.dto.PutShopAccessTokenResponse
 import dropnext.dss.lib.dto.SyncShipmentsWithFulfillmentsRequest
-import dropnext.dss.lib.dto.SyncShipmentsWithFulfillmentsResponse
 import dropnext.dss.lib.dto.TrackingUpdateRequest
-import dropnext.dss.lib.dto.TrackingUpdateResponse
 import dropnext.dss.lib.dto.UpdateStoreApiKeyRequest
-import dropnext.dss.lib.monolith.tokenOrNull
-import dropnext.dss.lib.shopify.graphql.fulfillment.DssFulfillmentService
 import dropnext.dss.lib.shopify.graphql.fulfillment.FulfillmentResult
+import dropnext.dss.lib.shopify.graphql.fulfillment.FulfillmentService
 import dropnext.dss.lib.shopify.graphql.fulfillment.RequestValidation
 import dropnext.dss.lib.shopify.graphql.fulfillment.toDssError
 import dropnext.dss.lib.shopify.graphql.fulfillment.validateSyncShipmentsRequest
 import dropnext.dss.lib.shopify.graphql.fulfillment.validateTrackingUpdateRequest
 import dropnext.dss.lib.ktor.DssError
 import dropnext.dss.lib.ktor.receiveOr400
-import dropnext.dss.lib.ktor.requireDssInternalSecret
 import dropnext.dss.lib.ktor.respondError
 import dropnext.dss.lib.monolith.MonolithService
+import dropnext.dss.lib.monolith.ShopAccessTokenCache
 import dropnext.dss.lib.monolith.StoreApiKeyResult
 import dropnext.dss.lib.monolith.logMonolithFailure
-import dropnext.dss.shopify.normalizeShopDomain
-import dropnext.dss.shopify.shopifySubdomainShort
+import dropnext.dss.lib.shopify.ShopDomain
 import io.github.oshai.kotlinlogging.KotlinLogging
-import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.respond
 
 
 private val log = KotlinLogging.logger {}
 
+/**
+ * Handlers for the DSS internal REST endpoints called by the monolith. Internal-secret
+ * verification is enforced by the [dropnext.dss.lib.ktor.plugin.requireDssInternalSecret] route guard
+ * in [dropnext.dss.routing.installDssRoutes], so these methods can focus on the business logic.
+ *
+ * Per-shop access-token resolution + Graphql wiring live inside [FulfillmentService] and the
+ * [dropnext.dss.lib.monolith.ShopifyServiceFactory] it delegates to — handlers never see those
+ * concerns directly.
+ */
 class MonolithWebhookHandlers(
-  private val shopifyApiVersion: String,
-  private val dssConfig: DssAppConfig,
-  private val gqlClientCache: GraphqlClientCache,
-  private val fulfillmentService: DssFulfillmentService,
-  private val monolithService: MonolithService? = null,
+  private val fulfillmentService: FulfillmentService,
+  private val monolithService: MonolithService,
   private val shopTokenCache: ShopAccessTokenCache,
 ) {
   suspend fun handleSyncShipments(call: ApplicationCall) {
-    if (!call.requireDssInternalSecret(dssConfig.dssInternalSecret)) return // TODO(cies): bad
     val body = call.receiveOr400<SyncShipmentsWithFulfillmentsRequest>() ?: return
     if (!call.validateOrRespond(validateSyncShipmentsRequest(body))) return
     val shop = call.normalizeShopOrRespond(body.shopifySubdomain) ?: return
-    if (dssConfig.dev.sandboxFakeShopify) { // TODO(cies): bad
-      return call.respond(
-        HttpStatusCode.OK,
-        SyncShipmentsWithFulfillmentsResponse(newFulfillmentIds = listOf(9_000_000_000_000_001L)),
-      )
-    }
-    // TODO: possibly make a token service or smth
-    val token = call.resolveShopifyAdminToken(shop, shopTokenCache, monolithService).tokenOrNull
-      ?: return call.respondError(DssError.MissingShopifyAdminToken)
-    val gqlClient = gqlClientCache.forShop(shop, shopifyApiVersion)
-    when (val result = fulfillmentService.syncShipmentsWithFulfillments(gqlClient, token, body)) {
+
+    when (val result = fulfillmentService.syncShipmentsWithFulfillments(shop, body)) {
       is FulfillmentResult.Ok -> call.respond(result.value)
       is FulfillmentResult.Err -> {
         val mapped = result.toDssError()
-        log.warn { "Failed: ${mapped.message}" }
+        log.warn { "sync-shipments failed shop=${shop.host}: ${mapped.message}" }
         call.respondError(mapped)
       }
     }
   }
 
   suspend fun handleTrackingUpdate(call: ApplicationCall) {
-    if (!call.requireDssInternalSecret(dssConfig.dssInternalSecret)) return
     val body = call.receiveOr400<TrackingUpdateRequest>() ?: return
     if (!call.validateOrRespond(validateTrackingUpdateRequest(body))) return
     val shop = call.normalizeShopOrRespond(body.shopifySubdomain) ?: return
-    if (dssConfig.dev.sandboxFakeShopify) {
-      return call.respond(
-        HttpStatusCode.OK,
-        TrackingUpdateResponse(fulfillmentEventId = 9_000_000_000_000_001L),
-      )
-    }
-    val token = call.resolveShopifyAdminToken(shop, shopTokenCache, monolithService).tokenOrNull
-      ?: return call.respondError(DssError.MissingShopifyAdminToken)
-    val gqlClient = gqlClientCache.forShop(shop, shopifyApiVersion)
-    when (val result = fulfillmentService.createTrackingEvent(gqlClient, token, body)) {
+
+    when (val result = fulfillmentService.createTrackingEvent(shop, body)) {
       is FulfillmentResult.Ok -> call.respond(result.value)
       is FulfillmentResult.Err -> {
         val mapped = result.toDssError()
-        log.warn { "Failed: ${mapped.message}" }
+        log.warn { "tracking-update failed shop=${shop.host}: ${mapped.message}" }
         call.respondError(mapped)
       }
     }
@@ -95,27 +73,25 @@ class MonolithWebhookHandlers(
 
   /** `PUT` to [DssPaths.STORES_API_KEY] — caches a Shopify Admin token and forwards it to the monolith. */
   suspend fun handlePutStoreApiKey(call: ApplicationCall) {
-    if (!call.requireDssInternalSecret(dssConfig.dssInternalSecret)) return
     val body = call.receiveOr400<PutShopAccessTokenRequest>() ?: return
     val shop = call.normalizeShopOrRespond(body.shopifySubdomain) ?: return
 
     shopTokenCache[shop] = body.apiKey
-    log.info { "PUT ${DssPaths.STORES_API_KEY}: token cached in memory for shop=$shop" }
+    log.info { "PUT ${DssPaths.STORES_API_KEY}: token cached in memory for shop=${shop.host}" }
 
-    monolithService?.let { monolith ->
-      val apiKeyReq = UpdateStoreApiKeyRequest(
-        shopifySubdomain = shopifySubdomainShort(shop),
-        shopifyShopId = body.shopifyShopId ?: 0L,
-        apiKey = body.apiKey,
-      )
-      when (val r = monolith.putStoreApiKey(apiKeyReq)) {
-        is StoreApiKeyResult.Ok -> log.info { "Monolith store api-key updated storeId=${r.storeId} shop=$shop" }
-        is StoreApiKeyResult.Error ->
-          logMonolithFailure("putStoreApiKey", r.status, r.parsed, "shop=$shop")
-      }
+    val apiKeyReq = UpdateStoreApiKeyRequest(
+      shopifySubdomain = shop.subdomainShort,
+      shopifyShopId = body.shopifyShopId ?: 0L,
+      apiKey = body.apiKey,
+    )
+    when (val r = monolithService.putStoreApiKey(apiKeyReq)) {
+      is StoreApiKeyResult.Ok ->
+        log.info { "Monolith store api-key updated storeId=${r.storeId} shop=${shop.host}" }
+      is StoreApiKeyResult.Error ->
+        logMonolithFailure("putStoreApiKey", r.status, r.parsed, "shop=${shop.host}")
     }
 
-    call.respond(PutShopAccessTokenResponse(shop = shop))
+    call.respond(PutShopAccessTokenResponse(shop = shop.host))
   }
 
   /** Returns `true` when [validation] is valid; otherwise responds 400 with the accumulated messages and returns `false`. */
@@ -128,9 +104,9 @@ class MonolithWebhookHandlers(
       }
     }
 
-  /** Normalises [rawShop] to a `*.myshopify.com` host, or responds 400 and returns `null`. */
-  private suspend fun ApplicationCall.normalizeShopOrRespond(rawShop: String): String? =
-    normalizeShopDomain(rawShop) ?: run {
+  /** Parses [rawShop] to a [ShopDomain], or responds 400 and returns `null`. */
+  private suspend fun ApplicationCall.normalizeShopOrRespond(rawShop: String): ShopDomain? =
+    ShopDomain.parse(rawShop) ?: run {
       respondError(DssError.InvalidParameter("shopify_subdomain"))
       null
     }

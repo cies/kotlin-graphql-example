@@ -1,9 +1,8 @@
-package dropnext.dss.lib.auth
+package dropnext.dss.lib.ktor
 
-import dropnext.dss.lib.ktor.constantTimeEquals
 import kotlin.test.Test
 
-class SecureCompareTest {
+class ConstantTimeEqualsTest {
 
   @Test
   fun `equal strings compare true`() {

@@ -34,7 +34,7 @@ fun Application.installJsonContentNegotiation() {
   }
 }
 
-// TODO(cies): values in lowercase start, right?
+/** Per-call attribute that stores the trace id installed by [installDssTraceId]. */
 val dssTraceIdKey = AttributeKey<String>("DssTraceId")
 
 fun Application.installDssTraceId() {

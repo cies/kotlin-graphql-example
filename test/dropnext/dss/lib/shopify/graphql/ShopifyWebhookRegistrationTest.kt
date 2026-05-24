@@ -1,7 +1,7 @@
-package dropnext.dss.shopify
+package dropnext.dss.lib.shopify.graphql
 
 import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
-import dropnext.dss.lib.shopify.graphql.registerStandardWebhooks
+import dropnext.dss.lib.shopify.ShopDomain
 import dropnext.dss.testing.fake.FakeShopifyGraphqlServer
 import dropnext.graphql.generated.GetWebhookSubscriptions
 import dropnext.graphql.generated.RegisterWebhook
@@ -25,7 +25,7 @@ class ShopifyWebhookRegistrationTest {
 
   private lateinit var fake: FakeShopifyGraphqlServer
   private lateinit var httpClient: HttpClient
-  private lateinit var gqlClient: GraphQLKtorClient
+  private lateinit var shopify: ShopifyGraphqlService
 
   @BeforeTest
   fun setUp() {
@@ -40,7 +40,8 @@ class ShopifyWebhookRegistrationTest {
       }
     }
     val url = URI("http://localhost:$port/admin/api/2026-04/graphql.json").toURL()
-    gqlClient = GraphQLKtorClient(url, httpClient)
+    val gqlClient = GraphQLKtorClient(url, httpClient)
+    shopify = ShopifyGraphqlService(ShopDomain.parse("acme.myshopify.com")!!, gqlClient, "tok")
   }
 
   @AfterTest
@@ -51,13 +52,11 @@ class ShopifyWebhookRegistrationTest {
 
   @Test
   fun `registers all five standard topics and reports added subscriptions`() = runBlocking {
-    // First fetch returns empty; after registration the second fetch returns all five.
     stubExistingSubscriptions(emptyList())
     stubRegisterOk()
 
-    val report = registerStandardWebhooks(gqlClient, "tok", "https://dss.example/webhooks/shopify")
+    val report = shopify.registerStandardWebhooks("https://dss.example/webhooks/shopify")
 
-    // Five RegisterWebhook calls — one per topic.
     val registers = fake.calls.filter { it.operationName == "RegisterWebhook" }
     assert(registers.size == 5)
     assert(report.failedTopics.isEmpty())
@@ -68,7 +67,7 @@ class ShopifyWebhookRegistrationTest {
     stubExistingSubscriptions(emptyList())
     stubRegisterOk()
 
-      registerStandardWebhooks(gqlClient, "tok", "https://dss.example/webhooks/shopify")
+    shopify.registerStandardWebhooks("https://dss.example/webhooks/shopify")
 
     val registers = fake.calls.filter { it.operationName == "RegisterWebhook" }
     val ordersCalls = registers.filter { call ->
@@ -81,14 +80,8 @@ class ShopifyWebhookRegistrationTest {
     }
     assert(ordersCalls.size == 2)
     assert(productCalls.size == 3)
-    // Orders calls include id-only fields.
-    ordersCalls.forEach { call ->
-      assert("admin_graphql_api_id" in call.rawBody)
-    }
-    // Product calls do NOT specify includeFields (null in variables).
-    productCalls.forEach { call ->
-      assert("admin_graphql_api_id" !in call.rawBody)
-    }
+    ordersCalls.forEach { call -> assert("admin_graphql_api_id" in call.rawBody) }
+    productCalls.forEach { call -> assert("admin_graphql_api_id" !in call.rawBody) }
   }
 
   @Test
@@ -105,14 +98,13 @@ class ShopifyWebhookRegistrationTest {
       RegisterWebhook.Result.serializer(),
     )
 
-    val report = registerStandardWebhooks(gqlClient, "tok", "https://dss.example/webhooks/shopify")
+    val report = shopify.registerStandardWebhooks("https://dss.example/webhooks/shopify")
     assert(report.failedTopics.size == 5)
     assert(report.failedTopics.all { "duplicate subscription" in it.second })
   }
 
   @Test
   fun `addedSubscriptions is empty when the active set already contains everything`() = runBlocking {
-    // Both fetches see the same set, so the diff (post-existing) is empty.
     val active = listOf(
       ExistingSubscription(
         id = "gid://shopify/WebhookSubscription/1",
@@ -128,7 +120,7 @@ class ShopifyWebhookRegistrationTest {
     stubExistingSubscriptions(active)
     stubRegisterOk()
 
-    val report = registerStandardWebhooks(gqlClient, "tok", "https://dss.example/webhooks/shopify")
+    val report = shopify.registerStandardWebhooks("https://dss.example/webhooks/shopify")
     assert(report.addedSubscriptions.isEmpty())
     assert(report.activeSubscriptions.size == active.size)
   }

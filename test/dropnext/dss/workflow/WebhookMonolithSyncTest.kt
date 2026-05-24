@@ -5,6 +5,8 @@ import dropnext.dss.lib.dto.CreateShopifyOrderRequest
 import dropnext.dss.lib.dto.OrderLineItem
 import dropnext.dss.lib.dto.ShippingAddress
 import dropnext.dss.lib.monolith.CreateOrderResult
+import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlService
+import dropnext.dss.lib.shopify.ShopDomain
 import dropnext.dss.testing.fake.FakeMonolithService
 import dropnext.dss.testing.fake.FakeShopifyGraphqlServer
 import dropnext.graphql.generated.GetOrderForDss
@@ -52,11 +54,11 @@ class WebhookMonolithSyncTest {
         GetOrderForDss.Result.serializer(),
       )
       val monolith = FakeMonolithService()
+      val shop = ShopDomain.parse("acme.myshopify.com")!!
+      val shopify = ShopifyGraphqlService(shop, client, "shpat_test")
       val result = runBlocking {
         syncShopifyOrderToMonolith(
-          gqlClient = client,
-          token = "shpat_test",
-          shopMyShopifyHost = "acme.myshopify.com",
+          shopify = shopify,
           monolith = monolith,
           orderGid = "gid://shopify/Order/1001",
           webhookTopic = "orders/create",
@@ -85,8 +87,9 @@ class WebhookMonolithSyncTest {
       val client = GraphQLKtorClient(URI("http://localhost:$port/admin/api/2026-04/graphql.json").toURL(), httpClient)
       gql.stubData("GetOrderForDss", GetOrderForDss.Result(order = null), GetOrderForDss.Result.serializer())
       val monolith = FakeMonolithService()
+      val shopify = ShopifyGraphqlService(ShopDomain.parse("acme.myshopify.com")!!, client, "tok")
       val result = runBlocking {
-        syncShopifyOrderToMonolith(client, "tok", "acme.myshopify.com", monolith, "gid://shopify/Order/1001", "orders/create")
+        syncShopifyOrderToMonolith(shopify, monolith, "gid://shopify/Order/1001", "orders/create")
       }
       assert(result == null)
       assert(monolith.createOrderCallCount == 0)
@@ -109,8 +112,9 @@ class WebhookMonolithSyncTest {
       val orderWithoutFOs = minimalOrder().copy(fulfillmentOrders = FulfillmentOrderConnection(edges = emptyList()))
       gql.stubData("GetOrderForDss", GetOrderForDss.Result(order = orderWithoutFOs), GetOrderForDss.Result.serializer())
       val monolith = FakeMonolithService()
+      val shopify = ShopifyGraphqlService(ShopDomain.parse("acme.myshopify.com")!!, client, "tok")
       val result = runBlocking {
-        syncShopifyOrderToMonolith(client, "tok", "acme.myshopify.com", monolith, "gid://shopify/Order/1001", "orders/create")
+        syncShopifyOrderToMonolith(shopify, monolith, "gid://shopify/Order/1001", "orders/create")
       }
       assert(result == null)
       assert(monolith.createOrderCallCount == 0)

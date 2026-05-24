@@ -1,14 +1,16 @@
 package dropnext.dss.config
 
+import dropnext.dss.path.DssPaths
 import dropnext.dss.path.MonolithPaths
 
 
 /**
- * Top-level effective configuration. Composed of per-concern groups (shopify, monolith, dev,
- * webhook) so each section owns its own [fromEnv] and tests; [DssAppConfig.fromEnv] just stitches
- * them together and validates the result.
+ * Top-level effective configuration.
+ * Composed of per-concern groups (shopify, monolith, dev, webhook),
+ * so each section owns its own [fromEnv] and tests;
+ * [Config.fromEnv] just stitches them together and validates the result.
  */
-data class DssAppConfig(
+data class Config(
   val shopify: ShopifyConfig,
   val monolith: MonolithConfig,
   val dev: DevConfig,
@@ -18,15 +20,18 @@ data class DssAppConfig(
   val dssInternalSecret: String?,
 ) {
   companion object {
-    fun fromEnv(): DssAppConfig {
+    fun fromEnv(): Config {
       val shopify = ShopifyConfig.fromEnv() ?: error(
         "Set env vars: SHOPIFY_APP_CLIENT_ID (or SHOPIFY_API_KEY), SHOPIFY_APP_CLIENT_SECRET (or SHOPIFY_API_SECRET), SHOPIFY_SCOPES, PUBLIC_BASE_URL",
       )
+      val monolith = MonolithConfig.fromEnv() ?: error(
+        "Set env var MONOLITH_BASE_URL (point it at a stub URL if you do not have a real DropNext monolith running).",
+      )
       val dev = DevConfig.fromEnv()
 
-      val dssConfig = DssAppConfig(
+      val dssConfig = Config(
         shopify = shopify,
-        monolith = MonolithConfig.fromEnv(),
+        monolith = monolith,
         dev = dev,
         webhook = WebhookConfig.fromEnv(),
         dssInternalSecret = EnvVars.optionalNormalized("DSS_INTERNAL_SECRET"),
@@ -46,7 +51,7 @@ data class DssAppConfig(
 /** Outbound monolith integration: where to reach it and how to authenticate. */
 data class MonolithConfig(
   /** HTTPS base URL for monolith outbound calls; DSS appends paths from [dropnext.dss.path.MonolithPaths]. */
-  val baseUrl: String?,
+  val baseUrl: String,
 
   /**
    * Optional path inserted after [baseUrl]: `{base}/{prefix}` + [dropnext.dss.path.MonolithPaths.STORES_API_KEY].
@@ -60,17 +65,18 @@ data class MonolithConfig(
   /** Path appended to monolith base for order creation (default [dropnext.dss.path.MonolithPaths.ORDERS]). */
   val createOrderPath: String,
 
-  /** When false (default), [baseUrl] must be `https://` (except unset). */
+  /** When false (default), [baseUrl] must be `https://`. */
   val allowInsecureUrl: Boolean,
 ) {
   companion object {
-    fun fromEnv(): MonolithConfig {
+    fun fromEnv(): MonolithConfig? {
+      val baseUrl = EnvVars.optionalNormalized("MONOLITH_BASE_URL") ?: return null
       val prefix = EnvVars.optionalNormalized("MONOLITH_API_PREFIX")
         ?.trim { it == '/' }?.takeIf { it.isNotEmpty() }
       val rawPath = EnvVars.optionalNormalized("MONOLITH_CREATE_ORDER_PATH") ?: MonolithPaths.ORDERS
       val path = if (rawPath.startsWith('/')) rawPath else "/$rawPath"
       return MonolithConfig(
-        baseUrl = EnvVars.optionalNormalized("MONOLITH_BASE_URL"),
+        baseUrl = baseUrl,
         apiPrefix = prefix,
         apiKey = EnvVars.optionalNormalized("MONOLITH_API_KEY"),
         createOrderPath = path,
@@ -82,6 +88,7 @@ data class MonolithConfig(
 
 
 /** Dev / demo / sandbox switches. Keep off in production. */
+// TODO: replace with one [APP_MODE], and remove what can be removed
 data class DevConfig(
   val enableDemoRoutes: Boolean,
 
@@ -120,7 +127,7 @@ data class WebhookConfig(
 }
 
 
-internal fun computeRuntimeConfigIssues(dssConfig: DssAppConfig): List<String> {
+internal fun computeRuntimeConfigIssues(dssConfig: Config): List<String> {
   val shopify = dssConfig.shopify
   val issues = mutableListOf<String>()
 
@@ -130,7 +137,11 @@ internal fun computeRuntimeConfigIssues(dssConfig: DssAppConfig): List<String> {
   if (isPlaceholder(shopify.appClientSecret)) {
     issues += "SHOPIFY_APP_CLIENT_SECRET (or SHOPIFY_API_SECRET) is placeholder"
   }
-  if (isPlaceholder(shopify.publicBaseUrl) || shopify.publicBaseUrl.contains("example.com", ignoreCase = true)) {
+  if (isPlaceholder(shopify.publicBaseUrl) || shopify.publicBaseUrl.contains(
+      "example.com",
+      ignoreCase = true
+    )
+  ) {
     issues += "PUBLIC_BASE_URL is placeholder"
   }
   if (!shopify.publicBaseUrl.startsWith("https://", ignoreCase = true)) {
@@ -143,9 +154,10 @@ internal fun computeRuntimeConfigIssues(dssConfig: DssAppConfig): List<String> {
     issues += "DSS_INTERNAL_SECRET should be at least 32 characters"
   }
   val monolithBaseUrl = dssConfig.monolith.baseUrl
-  if (monolithBaseUrl != null &&
-    monolithBaseUrl.startsWith("http:", ignoreCase = true) &&
-    !dssConfig.monolith.allowInsecureUrl
+  if (monolithBaseUrl.startsWith(
+      "http:",
+      ignoreCase = true
+    ) && !dssConfig.monolith.allowInsecureUrl
   ) {
     issues += "MONOLITH_BASE_URL must use https (set DSS_ALLOW_INSECURE_MONOLITH=true for local dev)"
   }
@@ -155,3 +167,60 @@ internal fun computeRuntimeConfigIssues(dssConfig: DssAppConfig): List<String> {
 
 private fun isPlaceholder(value: String): Boolean =
   value.contains("your_", ignoreCase = true) || value.contains("change_me", ignoreCase = true)
+
+
+data class ShopifyConfig(
+  val appClientId: String,
+  val appClientSecret: String,
+  val scopes: String,
+  val publicBaseUrl: String,
+  val oauthRedirectPath: String,
+  val apiVersion: String,
+  val serverPort: Int,
+) {
+  val redirectUrl: String
+    get() = publicBaseUrl.trimEnd('/') + oauthRedirectPath
+
+  companion object {
+    fun fromEnv(): ShopifyConfig? {
+      val appClientId = env("SHOPIFY_APP_CLIENT_ID") ?: env("SHOPIFY_API_KEY")
+      val appClientSecret = env("SHOPIFY_APP_CLIENT_SECRET") ?: env("SHOPIFY_API_SECRET")
+      val scopes = env("SHOPIFY_SCOPES")
+      val publicBaseUrl = env("PUBLIC_BASE_URL")
+
+      if (appClientId == null || appClientSecret == null || scopes == null || publicBaseUrl == null) return null
+
+      return ShopifyConfig(
+        appClientId = appClientId,
+        appClientSecret = appClientSecret,
+        scopes = scopes,
+        publicBaseUrl = publicBaseUrl.trimEnd('/'),
+        oauthRedirectPath = (env("OAUTH_REDIRECT_PATH")
+          ?: "").ifBlank { DssPaths.DEFAULT_OAUTH_CALLBACK },
+        apiVersion = (env("SHOPIFY_API_VERSION") ?: "").ifBlank { "2026-04" },
+        serverPort = resolveServerPort(),
+      )
+    }
+
+    /**
+     * PaaS UIs sometimes define `PORT=` (empty string), wiping Docker `ENV PORT=9999`;
+     * that makes Ktor bind 8080 while Traefik/nginx still proxies 9999 → **502 Bad Gateway**.
+     * Empty → use prod image default 9999;
+     * unset PORT → **8080** for local `./gradlew run` without env.
+     */
+    private fun resolveServerPort(): Int = resolveServerPort(
+      System.getenv("PORT"),
+      EnvVars.optionalNormalized("PORT")?.toIntOrNull()?.takeIf { it in 1..65535 },
+    )
+
+    /** Pure decision extracted for unit testing; see [resolveServerPort] for the env-bound caller. */
+    internal fun resolveServerPort(raw: String?, parsed: Int?): Int = when {
+      parsed != null -> parsed
+      raw == null -> 8080
+      raw.isBlank() -> 9999
+      else -> 8080
+    }
+
+    private fun env(name: String): String? = EnvVars.optionalNormalized(name)
+  }
+}

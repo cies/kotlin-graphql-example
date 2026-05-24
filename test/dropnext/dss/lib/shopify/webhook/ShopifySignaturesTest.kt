@@ -1,4 +1,4 @@
-package dropnext.dss.shopify
+package dropnext.dss.lib.shopify.webhook
 
 import dropnext.dss.lib.shopify.webhook.ShopifySignatures
 import io.ktor.http.parametersOf

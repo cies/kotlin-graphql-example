@@ -151,6 +151,7 @@ dependencies {
   implementation(libs.ktorServerStatusPages)
   implementation(libs.ktorServerContentNegotiation)
   implementation(libs.ktorServerCallLogging)
+  implementation(libs.ktorServerAuth)
 
   // HTML rendering for the OAuth install success page (no reflection).
   implementation(libs.kotlinxHtml)

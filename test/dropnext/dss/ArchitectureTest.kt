@@ -22,32 +22,29 @@ class ArchitectureTest {
       val routing = Layer("routing", "dropnext.dss.routing..")
       val workflow = Layer("workflow", "dropnext.dss.workflow..")
       val presentation = Layer("presentation", "dropnext.dss.presentation..")
-      val libFulfillment = Layer("lib/fulfillment", "dropnext.dss.lib.fulfillment..")
+      val libShopify = Layer("lib/shopify", "dropnext.dss.lib.shopify..")
       val libMonolith = Layer("lib/monolith", "dropnext.dss.lib.monolith..")
       val libJson = Layer("lib/json", "dropnext.dss.lib.json..")
       val libKtor = Layer("lib/ktor", "dropnext.dss.lib.ktor..")
-      val libAuth = Layer("lib/auth", "dropnext.dss.lib.auth..")
 
       // Define architecture assertions.
       // Note: `lib/dto` (generated OpenAPI DTOs) is intentionally not a layer here — virtually
       // every layer depends on it, so layer rules against `dropnext.dss.lib.dto..` would always
       // fail. Keeping it out is exactly what justifies splitting the old `lib/dss` package.
-      config.doesNotDependOn(handler, routing, workflow, presentation, libFulfillment, libMonolith)
-      // (allowed: config can depend on shopify for `normalizeShopDomain` — a shared helper)
-      libMonolith.doesNotDependOn(handler, routing, workflow, presentation, libFulfillment, libAuth, shopify)
-      libFulfillment.doesNotDependOn(handler, routing, workflow, presentation)
+      config.doesNotDependOn(handler, routing, workflow, presentation, libShopify, libMonolith)
+      // (allowed: config can depend on shopify for `ShopDomain` — a shared helper)
+      libMonolith.doesNotDependOn(handler, routing, workflow, presentation, libShopify)
+      libShopify.doesNotDependOn(handler, routing, workflow, presentation)
       // Generic infrastructure libs must not depend on any application layer.
-      libJson.doesNotDependOn(handler, routing, workflow, presentation, libFulfillment, libMonolith, libAuth, shopify, config)
-      // libKtor may depend on libAuth (e.g. `requireDssInternalSecret` uses `constantTimeEquals`).
-      libKtor.doesNotDependOn(handler, routing, workflow, presentation, libFulfillment, libMonolith, shopify, config)
-      // Auth helpers live above libMonolith (token fallback uses GetStore) and shopify (uses
-      // shopifySubdomainShort). They never see HTTP / handlers / workflows directly.
-      libAuth.doesNotDependOn(handler, routing, workflow, presentation, libFulfillment, libJson, libKtor, config)
-      shopify.doesNotDependOn(handler, routing, workflow, presentation, libMonolith, libAuth)
+      libJson.doesNotDependOn(handler, routing, workflow, presentation, libShopify, libMonolith, shopify, config)
+      libKtor.doesNotDependOn(handler, routing, workflow, presentation, libShopify, libMonolith, shopify, config)
+      shopify.doesNotDependOn(handler, routing, workflow, presentation, libShopify, libMonolith)
       workflow.doesNotDependOn(handler, routing, presentation) // workflows must not depend on HTTP/view layers
       routing.doesNotDependOn(workflow, presentation)          // routing wires handlers, not views directly
       // presentation is a pure view layer: data in, HTML string out. No HTTP, no orchestration.
-      presentation.doesNotDependOn(handler, routing, workflow, libFulfillment, libMonolith)
+      // (lib/shopify is allowed because WebhookSubscriptionStatus / WebhookRegistrationReport
+      //  are plain data classes consumed by the install page renderer.)
+      presentation.doesNotDependOn(handler, routing, workflow, libMonolith)
     }
   }
 
@@ -190,6 +187,45 @@ class ArchitectureTest {
     "/dropnext/dss/lib/json/",
   )
 
+  /**
+   * Files allowed to import from `dropnext.graphql.generated.*`. The intent is that every Graphql
+   * operation invocation lives inside `lib/shopify` (the `ShopifyService` named methods); other
+   * files either call those methods (response types flow back through type inference) or are
+   * explicit mappers/views that translate generated types into DTOs / HTML. Add to this list
+   * only when introducing another translation boundary.
+   */
+  private val graphqlGeneratedAllowList = listOf(
+    // The single place that constructs and runs Graphql operations.
+    "/dropnext/dss/lib/shopify/",
+    // Maps the GetOrderForDss result into the monolith CreateShopifyOrderRequest DTO.
+    "/dropnext/dss/workflow/MonolithOrderMapper.kt",
+    // Maps GetProductById result (Product / variants / media) into monolith UpsertVariants DTOs.
+    "/dropnext/dss/shopify/ProductMapper.kt",
+    // Renders WebhookSubscriptionTopic.name into HTML on the install confirmation page.
+    "/dropnext/dss/presentation/renderOAuthInstallPage.kt",
+  )
+
+  @Test
+  fun `forbid dropnext-graphql-generated imports outside lib_shopify and mappers`() {
+    Konsist.scopeFromDirectory("src")
+      .files
+      .filterNot { file -> graphqlGeneratedAllowList.any { allowed -> allowed in file.path } }
+      .assertFalse { file ->
+        val offending = file.imports
+          .map { it.name }
+          .filter { it.startsWith("dropnext.graphql.generated.") }
+        if (offending.isNotEmpty()) {
+          println(
+            "ERROR: File ${file.path} imports Graphql-generated types: $offending. " +
+              "Route Graphql calls through ShopifyService methods so handlers/workflows stay decoupled " +
+              "from the Shopify Admin schema. If the file is a translation boundary (mapper/view), " +
+              "add it to graphqlGeneratedAllowList with a one-line comment justifying it."
+          )
+        }
+        offending.isNotEmpty()
+      }
+  }
+
   @Test
   fun `forbid ad-hoc Json instance construction outside lib_json`() {
     val jsonConstructor = Regex("""\bJson\s*\{""")
@@ -285,6 +321,15 @@ class ArchitectureTest {
     // Webhook-flavored variant of ShopDomainsTest — covers shop-domain handling on the inbound
     // webhook path specifically, with no single matching shopify/ source file.
     "/test/dropnext/dss/shopify/ShopDomainsWebhookTest.kt",
+    // Tests the trace-id MDC interceptor that lives inside `lib/ktor/plugins.kt` alongside the
+    // other Ktor plugin installers — no dedicated `Tracing.kt` source file.
+    "/test/dropnext/dss/lib/ktor/TracingTest.kt",
+    // Tests the install confirmation view rendered by `presentation/renderOAuthInstallPage.kt`;
+    // the test predates a rename of the source file (was `OAuthInstallView.kt`).
+    "/test/dropnext/dss/presentation/OAuthInstallViewTest.kt",
+    // ShopifyConfig now lives inline in `config/DssAppConfig.kt` alongside the other config
+    // groups (MonolithConfig, DevConfig, WebhookConfig). The test keeps its name for clarity.
+    "/test/dropnext/dss/config/ShopifyConfigTest.kt",
   )
 
   /**

@@ -62,6 +62,7 @@ ktorServerCio = { group = "io.ktor", name = "ktor-server-cio", version.ref = "kt
 ktorServerStatusPages = { group = "io.ktor", name = "ktor-server-status-pages", version.ref = "ktorVersion" }
 ktorServerContentNegotiation = { group = "io.ktor", name = "ktor-server-content-negotiation", version.ref = "ktorVersion" }
 ktorServerCallLogging = { group = "io.ktor", name = "ktor-server-call-logging", version.ref = "ktorVersion" }
+ktorServerAuth = { group = "io.ktor", name = "ktor-server-auth", version.ref = "ktorVersion" }
 
 # HTML rendering (compile-time-generated builder DSL; no reflection).
 kotlinxHtml = { group = "org.jetbrains.kotlinx", name = "kotlinx-html-jvm", version.ref = "kotlinxHtmlVersion" }

@@ -68,24 +68,6 @@ fun renderOAuthInstallPage(
 
 private fun FlowContent.renderMonolithPersistBlock(outcome: MonolithPersistOutcome) {
   when (outcome) {
-    is MonolithPersistOutcome.MonolithNotConfigured -> {
-      p {
-        style = "color:#b45309"
-        strong { +"Monolith not configured:" }
-        +" "
-        code { +"MONOLITH_BASE_URL" }
-        +" is unset, so we did not "
-        code { +"PUT …${MonolithPaths.STORES_API_KEY}" }
-        +". The Shopify Admin token is cached in this server’s memory only."
-      }
-      p {
-        +"Set "
-        code { +"MONOLITH_BASE_URL" }
-        +" (and normally "
-        code { +"MONOLITH_API_KEY" }
-        +" for Bearer auth to the monolith) in prod and dev if installs should persist the token DropNext-wide."
-      }
-    }
     is MonolithPersistOutcome.Persisted -> p {
       style = "color:green"
       strong { +"Shopify token saved via monolith" }

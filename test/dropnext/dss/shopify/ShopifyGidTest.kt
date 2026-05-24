@@ -1,5 +1,10 @@
 package dropnext.dss.shopify
 
+import dropnext.dss.lib.shopify.fulfillmentGid
+import dropnext.dss.lib.shopify.fulfillmentOrderGid
+import dropnext.dss.lib.shopify.legacyIdFromGid
+import dropnext.dss.lib.shopify.orderGid
+import dropnext.dss.lib.shopify.shopifyShopIdFromShopGid
 import kotlin.test.Test
 
 class ShopifyGidTest {

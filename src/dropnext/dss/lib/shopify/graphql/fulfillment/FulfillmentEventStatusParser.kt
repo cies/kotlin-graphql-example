@@ -2,8 +2,13 @@ package dropnext.dss.lib.shopify.graphql.fulfillment
 
 import dropnext.graphql.generated.enums.FulfillmentEventStatus
 
-/** Maps monolith / AfterShip style strings (e.g. `in_transit`) to [FulfillmentEventStatus]. */
-// TODO(cies): explain why you made this type...
+
+/**
+ * Maps monolith / AfterShip style status strings (e.g. `in_transit`, `In Transit`, `IN-TRANSIT`)
+ * to Shopify's [FulfillmentEventStatus]. The [Known] / [Unknown] split exists so the handler
+ * can return `400 invalid request` for an unsupported status instead of a `500` from a
+ * mid-flight enum throw — the parser is the boundary that absorbs upstream string variation.
+ */
 sealed interface ParsedFulfillmentStatus {
   data class Known(val value: FulfillmentEventStatus) : ParsedFulfillmentStatus
 
@@ -12,7 +17,8 @@ sealed interface ParsedFulfillmentStatus {
 
   companion object {
     fun parseFulfillmentEventStatus(raw: String): ParsedFulfillmentStatus {
-      // TODO(cies): why do we need normalization?
+      // Upstream callers send `in-transit`, `in_transit`, `IN TRANSIT` interchangeably; normalise
+      // to Shopify's `UPPER_SNAKE_CASE` enum form before lookup so the matcher stays one-liner.
       val normalized = raw.trim().uppercase().replace('-', '_').replace(' ', '_')
       val mapped = FulfillmentEventStatus.entries.find { it.name == normalized }
         ?: when (normalized) {

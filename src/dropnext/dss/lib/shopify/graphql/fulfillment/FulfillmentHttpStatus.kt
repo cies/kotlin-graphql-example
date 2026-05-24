@@ -9,6 +9,7 @@ fun FulfillmentResult.Err.toDssError(): DssError = when (this) {
   is FulfillmentResult.Err.UserError -> DssError.InvalidRequest(messages.joinToString("; "))
   is FulfillmentResult.Err.GraphqlError -> DssError.UpstreamFailure(raw)
   is FulfillmentResult.Err.Network -> DssError.UpstreamFailure(message)
+  FulfillmentResult.Err.MissingToken -> DssError.MissingShopifyAdminToken
 }
 
 /** Kept for callers that already work with [HttpStatusCode]; new code should map via [toDssError]. */
@@ -18,4 +19,5 @@ fun FulfillmentResult.Err.toHttpStatus(): HttpStatusCode = when (this) {
   is FulfillmentResult.Err.GraphqlError,
   is FulfillmentResult.Err.Network,
   -> HttpStatusCode.BadGateway
+  FulfillmentResult.Err.MissingToken -> HttpStatusCode.Unauthorized
 }

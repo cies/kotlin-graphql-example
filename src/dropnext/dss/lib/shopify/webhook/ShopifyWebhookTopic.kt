@@ -1,8 +1,12 @@
 package dropnext.dss.lib.shopify.webhook
 
 
-/** Inbound webhook topics this service routes on. [Other] captures any unhandled topic header. */
-// TODO(cies): Why not an enum that's nullable?
+/**
+ * Inbound webhook topics this service routes on. [Other] captures any unhandled topic header,
+ * preserving the raw string so monitoring can flag unexpected topics by name. A nullable enum
+ * would collapse "unknown topic 'foo/bar'" and "missing header" into the same `null` and lose
+ * that signal.
+ */
 sealed interface ShopifyWebhookTopic {
   val raw: String
 

@@ -1,12 +1,11 @@
 package dropnext.dss.handler
 
-import dropnext.dss.config.DssAppConfig
+import dropnext.dss.config.Config
 import dropnext.dss.path.DssPaths
 import dropnext.dss.lib.monolith.ShopAccessTokenCache
 import dropnext.dss.lib.ktor.DssError
 import dropnext.dss.lib.ktor.respondError
-import dropnext.dss.lib.ktor.shopifyAccessTokenFromHeader
-import dropnext.dss.shopify.normalizeShopDomain
+import dropnext.dss.lib.shopify.ShopDomain
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -19,7 +18,7 @@ import kotlinx.serialization.Serializable
  * Handlers for the diagnostic/health endpoints (`/`, `/health`, `/api`, `/api/check`, …).
  */
 class DiagnosticsHandlers(
-  private val dssConfig: DssAppConfig,
+  private val dssConfig: Config,
   private val shopTokens: ShopAccessTokenCache,
 ) {
   private val shopifyConfig = dssConfig.shopify
@@ -77,25 +76,22 @@ class DiagnosticsHandlers(
     val rawShop = call.request.queryParameters["shop"]
       ?: return call.respondError(DssError.MissingParameter("shop"))
 
-    val normalizedShop = normalizeShopDomain(rawShop)
+    val shop = ShopDomain.parse(rawShop)
       ?: return call.respondError(DssError.InvalidParameter("shop", "not a valid Shopify domain"))
 
-    val headerToken = call.request.shopifyAccessTokenFromHeader()
-    val hasHeaderToken = !headerToken.isNullOrBlank()
-    val hasMappedToken = shopTokens[normalizedShop]?.isNotBlank() == true
-    if (!hasHeaderToken && !hasMappedToken) {
+    val hasMappedToken = shopTokens[shop]?.isNotBlank() == true
+    if (!hasMappedToken) {
       return call.respondError(DssError.MissingShopifyAdminToken)
     }
 
     call.respond(
       ApiCheckResponse(
-        shop = normalizedShop,
+        shop = shop.host,
         checks = ApiCheckDetails(
-          hasHeaderToken = hasHeaderToken,
           hasTokenMappedForShop = hasMappedToken,
           demoRoutesEnabled = dssConfig.dev.enableDemoRoutes,
           testHarnessEnabled = dssConfig.dev.enableTestHarness,
-          monolithConfigured = !dssConfig.monolith.baseUrl.isNullOrBlank(),
+          monolithConfigured = true,
         ),
       ),
     )
@@ -130,7 +126,6 @@ private data class ApiCheckResponse(
 
 @Serializable
 private data class ApiCheckDetails(
-  val hasHeaderToken: Boolean,
   val hasTokenMappedForShop: Boolean,
   val demoRoutesEnabled: Boolean,
   val testHarnessEnabled: Boolean,

@@ -1,81 +1,83 @@
 package dropnext.dss.shopify
 
+import dropnext.dss.lib.shopify.ShopDomain
 import kotlin.test.Test
 
 class ShopDomainsTest {
 
   @Test
-  fun `normalizes full myshopify host`() {
-    assert(normalizeShopDomain("acme.myshopify.com") == "acme.myshopify.com")
+  fun `normalises full myshopify host`() {
+    assert(ShopDomain.parse("acme.myshopify.com")?.host == "acme.myshopify.com")
   }
 
   @Test
-  fun `normalizes uppercase host`() {
-    assert(normalizeShopDomain("ACME.MYSHOPIFY.COM") == "acme.myshopify.com")
+  fun `normalises uppercase host`() {
+    assert(ShopDomain.parse("ACME.MYSHOPIFY.COM")?.host == "acme.myshopify.com")
   }
 
   @Test
   fun `strips scheme from https url`() {
-    assert(normalizeShopDomain("https://acme.myshopify.com") == "acme.myshopify.com")
+    assert(ShopDomain.parse("https://acme.myshopify.com")?.host == "acme.myshopify.com")
   }
 
   @Test
   fun `strips scheme from http url`() {
-    assert(normalizeShopDomain("http://acme.myshopify.com") == "acme.myshopify.com")
+    assert(ShopDomain.parse("http://acme.myshopify.com")?.host == "acme.myshopify.com")
   }
 
   @Test
   fun `strips trailing path from full url`() {
-    assert(normalizeShopDomain("https://acme.myshopify.com/admin/orders") == "acme.myshopify.com")
+    assert(ShopDomain.parse("https://acme.myshopify.com/admin/orders")?.host == "acme.myshopify.com")
   }
 
   @Test
   fun `expands short handle to myshopify host`() {
-    assert(normalizeShopDomain("my-store") == "my-store.myshopify.com")
+    assert(ShopDomain.parse("my-store")?.host == "my-store.myshopify.com")
   }
 
   @Test
   fun `expands single-character handle`() {
-    assert(normalizeShopDomain("a") == "a.myshopify.com")
+    assert(ShopDomain.parse("a")?.host == "a.myshopify.com")
   }
 
   @Test
   fun `trims whitespace before normalising`() {
-    assert(normalizeShopDomain("  acme.myshopify.com  ") == "acme.myshopify.com")
-    assert(normalizeShopDomain("  my-store  ") == "my-store.myshopify.com")
+    assert(ShopDomain.parse("  acme.myshopify.com  ")?.host == "acme.myshopify.com")
+    assert(ShopDomain.parse("  my-store  ")?.host == "my-store.myshopify.com")
   }
 
   @Test
   fun `returns null for bare other-host names`() {
-    assert(normalizeShopDomain("example.com") == null)
-    assert(normalizeShopDomain("myshopify.com") == null)
+    assert(ShopDomain.parse("example.com") == null)
+    assert(ShopDomain.parse("myshopify.com") == null)
   }
 
   @Test
   fun `returns null for invalid handle shapes`() {
-    assert(normalizeShopDomain("-leading-hyphen") == null)
-    assert(normalizeShopDomain("trailing-") == null)
-    assert(normalizeShopDomain("with space") == null)
-    assert(normalizeShopDomain("") == null)
+    assert(ShopDomain.parse("-leading-hyphen") == null)
+    assert(ShopDomain.parse("trailing-") == null)
+    assert(ShopDomain.parse("with space") == null)
+    assert(ShopDomain.parse("") == null)
   }
 
   @Test
   fun `lowercases uppercase short handle`() {
-    assert(normalizeShopDomain("UPPER") == "upper.myshopify.com")
+    assert(ShopDomain.parse("UPPER")?.host == "upper.myshopify.com")
   }
 
   @Test
-  fun `adminGraphqlJsonUrl composes the per-shop endpoint`() {
-    assert(adminGraphqlJsonUrl("acme.myshopify.com", "2026-04") == "https://acme.myshopify.com/admin/api/2026-04/graphql.json")
+  fun `adminGraphqlUrl composes the per-shop endpoint`() {
+    val url = ShopDomain.parse("acme.myshopify.com")!!.adminGraphqlUrl("2026-04")
+    assert(url == "https://acme.myshopify.com/admin/api/2026-04/graphql.json")
   }
 
   @Test
-  fun `shopifySubdomainShort strips the myshopify suffix`() {
-    assert(shopifySubdomainShort("acme.myshopify.com") == "acme")
+  fun `subdomainShort strips the myshopify suffix`() {
+    assert(ShopDomain.parse("acme.myshopify.com")!!.subdomainShort == "acme")
   }
 
   @Test
-  fun `shopifySubdomainShort returns input when no suffix`() {
-    assert(shopifySubdomainShort("acme") == "acme")
+  fun `subdomainShort returns short handle for short input`() {
+    assert(ShopDomain.parse("acme")!!.subdomainShort == "acme")
   }
 }

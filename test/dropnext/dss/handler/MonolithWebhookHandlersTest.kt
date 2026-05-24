@@ -1,8 +1,7 @@
 package dropnext.dss.handler
 
-import dropnext.dss.lib.shopify.graphql.GraphqlClientCache
-import dropnext.dss.lib.ktor.createSharedHttpClient
 import dropnext.dss.path.DssPaths
+import dropnext.dss.lib.monolith.MonolithService
 import dropnext.dss.lib.monolith.ShopAccessTokenCache
 import dropnext.dss.lib.dto.PutShopAccessTokenRequest
 import dropnext.dss.lib.dto.PutShopAccessTokenResponse
@@ -12,13 +11,15 @@ import dropnext.dss.lib.dto.SyncShipmentsWithFulfillmentsRequest
 import dropnext.dss.lib.dto.SyncShipmentsWithFulfillmentsResponse
 import dropnext.dss.lib.dto.TrackingUpdateRequest
 import dropnext.dss.lib.dto.TrackingUpdateResponse
-import dropnext.dss.lib.shopify.graphql.fulfillment.DssFulfillmentService
+import dropnext.dss.lib.shopify.graphql.fulfillment.FulfillmentResult
+import dropnext.dss.lib.shopify.graphql.fulfillment.FulfillmentService
+import dropnext.dss.lib.shopify.graphql.fulfillment.SandboxFulfillmentService
 import dropnext.dss.lib.json.AppJson
+import dropnext.dss.lib.ktor.plugin.installDssInternalSecretAuth
 import dropnext.dss.lib.ktor.installJsonContentNegotiation
 import dropnext.dss.routing.installDssRoutes
+import dropnext.dss.lib.shopify.ShopDomain
 import dropnext.dss.testing.fake.FakeMonolithService
-import dropnext.dss.testing.fake.testDssAppConfig
-import dropnext.dss.testing.fake.testShopifyConfig
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation as ClientContentNegotiation
@@ -35,14 +36,17 @@ import io.ktor.server.application.Application
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
-import java.util.concurrent.ConcurrentHashMap
 import kotlin.test.Test
+
+
+private val acmeShop = ShopDomain.parse("acme.myshopify.com")!!
+
 
 class MonolithShopifyWebhookHandlersTest {
 
   @Test
   fun `sync-shipments returns 401 when internal secret is required and not provided`() =
-    runDssApp(handlers(internalSecret = "y".repeat(32))) { client ->
+    runDssApp(handlers(), secret = "y".repeat(32)) { client ->
       val r = client.post(DssPaths.SYNC_SHIPMENTS_WITH_FULFILLMENTS) {
         contentType(ContentType.Application.Json)
         setBody(validSyncRequest())
@@ -52,15 +56,17 @@ class MonolithShopifyWebhookHandlersTest {
     }
 
   @Test
-  fun `sync-shipments accepts when internal secret matches`() =
-    runDssApp(handlers(internalSecret = "y".repeat(32), sandboxFakeShopify = true)) { client ->
+  fun `sync-shipments accepts when internal secret matches`() {
+    val secret = "y".repeat(32)
+    runDssApp(handlers(), secret = secret) { client ->
       val r = client.post(DssPaths.SYNC_SHIPMENTS_WITH_FULFILLMENTS) {
-        header("X-DSS-Internal-Secret", "y".repeat(32))
+        header("X-DSS-Internal-Secret", secret)
         contentType(ContentType.Application.Json)
         setBody(validSyncRequest())
       }
       assert(r.status == HttpStatusCode.OK)
     }
+  }
 
   // ---------- validation ----------
 
@@ -97,34 +103,45 @@ class MonolithShopifyWebhookHandlersTest {
   // ---------- sandbox short-circuit ----------
 
   @Test
-  fun `sync-shipments returns stub response when sandboxFakeShopify is true`() =
-    runDssApp(handlers(sandboxFakeShopify = true)) { client ->
+  fun `sync-shipments returns stub response when sandbox FulfillmentService is wired`() =
+    runDssApp(handlers()) { client ->
       val r = client.post(DssPaths.SYNC_SHIPMENTS_WITH_FULFILLMENTS) {
         contentType(ContentType.Application.Json)
         setBody(validSyncRequest())
       }
       assert(r.status == HttpStatusCode.OK)
       val resp = r.body<SyncShipmentsWithFulfillmentsResponse>()
-      assert(resp.newFulfillmentIds.single() == 9_000_000_000_000_001L)
+      assert(resp.newFulfillmentIds.single() == SandboxFulfillmentService.SANDBOX_FULFILLMENT_ID)
     }
 
   @Test
-  fun `tracking-update returns stub response when sandboxFakeShopify is true`() =
-    runDssApp(handlers(sandboxFakeShopify = true)) { client ->
+  fun `tracking-update returns stub response when sandbox FulfillmentService is wired`() =
+    runDssApp(handlers()) { client ->
       val r = client.post(DssPaths.TRACKING_UPDATE) {
         contentType(ContentType.Application.Json)
         setBody(validTrackingRequest())
       }
       assert(r.status == HttpStatusCode.OK)
       val resp = r.body<TrackingUpdateResponse>()
-      assert(resp.fulfillmentEventId == 9_000_000_000_000_001L)
+      assert(resp.fulfillmentEventId == SandboxFulfillmentService.SANDBOX_FULFILLMENT_ID)
     }
 
   // ---------- missing token ----------
 
   @Test
-  fun `sync-shipments returns 401 when no token in header or env`() =
-    runDssApp(handlers(shopAccessTokens = ConcurrentHashMap())) { client ->
+  fun `sync-shipments returns 401 when FulfillmentService reports missing token`() {
+    val missingTokenService = object : FulfillmentService {
+      override suspend fun syncShipmentsWithFulfillments(
+        shop: ShopDomain,
+        payload: SyncShipmentsWithFulfillmentsRequest,
+      ) = FulfillmentResult.Err.MissingToken
+
+      override suspend fun createTrackingEvent(
+        shop: ShopDomain,
+        payload: TrackingUpdateRequest,
+      ) = FulfillmentResult.Err.MissingToken
+    }
+    runDssApp(handlers(fulfillmentService = missingTokenService)) { client ->
       val r = client.post(DssPaths.SYNC_SHIPMENTS_WITH_FULFILLMENTS) {
         contentType(ContentType.Application.Json)
         setBody(validSyncRequest())
@@ -132,6 +149,7 @@ class MonolithShopifyWebhookHandlersTest {
       assert(r.status == HttpStatusCode.Unauthorized)
       assert("missing Shopify Admin token" in r.bodyAsText())
     }
+  }
 
   // ---------- handlePutStoreApiKey ----------
 
@@ -152,7 +170,7 @@ class MonolithShopifyWebhookHandlersTest {
       assert(r.status == HttpStatusCode.OK)
       val resp = r.body<PutShopAccessTokenResponse>()
       assert(resp.shop == "acme.myshopify.com")
-      assert(tokens["acme.myshopify.com"] == "shpat_new_token")
+      assert(tokens[acmeShop] == "shpat_new_token")
     }
   }
 
@@ -172,32 +190,13 @@ class MonolithShopifyWebhookHandlersTest {
         )
       }
       assert(r.status == HttpStatusCode.OK)
-      assert(tokens["acme.myshopify.com"] == "shpat_new")
+      assert(tokens[acmeShop] == "shpat_new")
       assert(fake.putStoreApiKeyCallCount == 1)
       val forwarded = fake.lastPutStoreApiKey
       assert(forwarded != null)
       assert(forwarded!!.shopifySubdomain == "acme")
       assert(forwarded.shopifyShopId == 99L)
       assert(forwarded.apiKey == "shpat_new")
-    }
-  }
-
-  @Test
-  fun `PUT stores api-key does not call monolith when none is configured`() {
-    val tokens = ShopAccessTokenCache()
-    runDssApp(handlers(shopTokens = tokens, monolith = null)) { client ->
-      val r = client.put(DssPaths.STORES_API_KEY) {
-        contentType(ContentType.Application.Json)
-        setBody(
-          PutShopAccessTokenRequest(
-            shopifySubdomain = "acme",
-            apiKey = "shpat_local",
-            shopifyShopId = null,
-          ),
-        )
-      }
-      assert(r.status == HttpStatusCode.OK)
-      assert(tokens["acme.myshopify.com"] == "shpat_local")
     }
   }
 
@@ -217,7 +216,7 @@ class MonolithShopifyWebhookHandlersTest {
         )
       }
       assert(r.status == HttpStatusCode.OK)
-      assert(tokens["acme.myshopify.com"] == "shpat_x")
+      assert(tokens[acmeShop] == "shpat_x")
       assert(fake.putStoreApiKeyCallCount == 1)
     }
   }
@@ -240,7 +239,7 @@ class MonolithShopifyWebhookHandlersTest {
 
   @Test
   fun `PUT stores api-key requires internal secret when configured`() =
-    runDssApp(handlers(internalSecret = "z".repeat(32))) { client ->
+    runDssApp(handlers(), secret = "z".repeat(32)) { client ->
       val r = client.put(DssPaths.STORES_API_KEY) {
         contentType(ContentType.Application.Json)
         setBody(
@@ -257,55 +256,38 @@ class MonolithShopifyWebhookHandlersTest {
   // ---------- helpers ----------
 
   /**
-   * Mounts production [installDssRoutes] + [installJsonContentNegotiation] inside ktor's in-memory
-   * test engine and exposes a content-negotiating client to [block]. No sockets, no random ports.
-   * Routes, plugin order, and serialization come from shipping code — only the [MonolithWebhookHandlers]
-   * instance is swapped per test.
+   * Mounts production routing + auth + content-negotiation inside Ktor's in-memory test engine.
+   * When [secret] is non-blank, every DSS-internal route requires `X-DSS-Internal-Secret` to match.
    */
   private fun runDssApp(
-      handlers: MonolithWebhookHandlers,
-      block: suspend ApplicationTestBuilder.(HttpClient) -> Unit,
+    handlers: MonolithWebhookHandlers,
+    secret: String? = null,
+    block: suspend ApplicationTestBuilder.(HttpClient) -> Unit,
   ) = testApplication {
-    application { dssRoutesOnly(handlers) }
+    application { dssRoutesOnly(handlers, secret) }
     val client = createClient {
       install(ClientContentNegotiation) { json(AppJson) }
     }
     block(client)
   }
 
-  /** Mounts plugins + [installDssRoutes] only — sister flows (OAuth, webhooks, demo) stay out so tests are fast. */
-  private fun Application.dssRoutesOnly(handlers: MonolithWebhookHandlers) {
+  private fun Application.dssRoutesOnly(handlers: MonolithWebhookHandlers, secret: String?) {
     installJsonContentNegotiation()
+    installDssInternalSecretAuth(secret)
     routing { installDssRoutes(handlers) }
   }
 
+  /** Default handlers — [SandboxFulfillmentService] means tests don't need a real Graphql server. */
   private fun handlers(
-    internalSecret: String? = null,
-    sandboxFakeShopify: Boolean = false,
-    shopAccessTokens: MutableMap<String, String> = ConcurrentHashMap<String, String>().apply {
-      put("acme.myshopify.com", "shpat_env_token")
-    },
-    monolith: FakeMonolithService? = null,
-    shopTokens: ShopAccessTokenCache = ShopAccessTokenCache(shopAccessTokens),
-  ): MonolithWebhookHandlers {
-    val shopify = testShopifyConfig()
-    val dssConfig = testDssAppConfig(
-      shopify = shopify,
-      dssInternalSecret = internalSecret,
-      sandboxFakeShopify = sandboxFakeShopify,
-    )
-    // The cache is never queried in these tests (sandbox short-circuits, or missing-token returns 401
-    // before any GraphQL call), so reusing the production shared client keeps us off the ad-hoc
-    // HttpClient() construction that ArchitectureTest forbids in src/.
-    return MonolithWebhookHandlers(
-      shopifyApiVersion = shopify.apiVersion,
-      dssConfig = dssConfig,
-      gqlClientCache = GraphqlClientCache(createSharedHttpClient()),
-      fulfillmentService = DssFulfillmentService,
+    monolith: MonolithService = FakeMonolithService(),
+    shopTokens: ShopAccessTokenCache = ShopAccessTokenCache(mapOf(acmeShop to "shpat_env_token")),
+    fulfillmentService: FulfillmentService = SandboxFulfillmentService(),
+  ): MonolithWebhookHandlers =
+    MonolithWebhookHandlers(
+      fulfillmentService = fulfillmentService,
       monolithService = monolith,
       shopTokenCache = shopTokens,
     )
-  }
 
   private fun validSyncRequest(): SyncShipmentsWithFulfillmentsRequest =
     SyncShipmentsWithFulfillmentsRequest(

@@ -1,4 +1,4 @@
-package dropnext.dss.shopify
+package dropnext.dss.lib.shopify.webhook
 
 import dropnext.dss.lib.shopify.webhook.shopDomainFromWebhookBody
 import kotlin.test.Test

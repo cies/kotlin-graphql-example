@@ -1,13 +1,15 @@
 package dropnext.dss.handler
 
+import dropnext.dss.lib.monolith.MonolithService
 import dropnext.dss.lib.monolith.ShopAccessTokenCache
-import dropnext.dss.lib.shopify.graphql.GraphqlClientCache
 import dropnext.dss.path.DssPaths
+import dropnext.dss.lib.shopify.ShopDomain
 import dropnext.dss.testing.fake.FakeMonolithService
 import dropnext.dss.testing.fake.FakeShopifyGraphqlServer
 import dropnext.dss.testing.fake.shopifyRewritingHttpClient
 import dropnext.dss.testing.fake.testDssAppConfig
 import dropnext.dss.testing.fake.testShopifyConfig
+import dropnext.dss.testing.fake.testShopifyServiceFactory
 import dropnext.dss.workflow.minimalOrder
 import dropnext.graphql.generated.GetOrderForDss
 import io.ktor.client.HttpClient
@@ -26,7 +28,6 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import java.nio.charset.StandardCharsets
 import java.util.Base64
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
@@ -101,7 +102,7 @@ class ShopifyWebhookHandlersTest {
     val fake = FakeMonolithService()
     currentHandlers = handlers(
       monolith = fake,
-      tokens = ConcurrentHashMap<String, String>().apply { put("acme.myshopify.com", "shpat_env") },
+      tokens = mapOf(ShopDomain.parse("acme.myshopify.com")!! to "shpat_env"),
     )
     val r = httpClient.post("$baseUrl${DssPaths.WEBHOOKS_SHOPIFY}") {
       header("X-Shopify-Topic", "orders/create")
@@ -144,8 +145,8 @@ class ShopifyWebhookHandlersTest {
 
   @Test
   fun `returns 200 without Graphql when no token is available for the shop`() = runBlocking {
-    val fake = FakeMonolithService()
-    currentHandlers = handlers(monolith = null, tokens = ConcurrentHashMap())
+    val fake = FakeMonolithService().apply { getStoreReturnsNotFound = true }
+    currentHandlers = handlers(monolith = fake, tokens = emptyMap())
     val body = """{"id":1,"domain":"acme.myshopify.com"}"""
     val r = httpClient.post("$baseUrl${DssPaths.WEBHOOKS_SHOPIFY}") {
       header("X-Shopify-Topic", "products/create")
@@ -165,7 +166,7 @@ class ShopifyWebhookHandlersTest {
     val monolith = FakeMonolithService()
     currentHandlers = handlersWith(
       monolith = monolith,
-      tokens = ConcurrentHashMap<String, String>().apply { put("acme.myshopify.com", "shpat_env") },
+      tokens = mapOf(ShopDomain.parse("acme.myshopify.com")!! to "shpat_env"),
       httpClient = rewriter,
     )
     try {
@@ -204,7 +205,7 @@ class ShopifyWebhookHandlersTest {
     val monolith = FakeMonolithService()
     currentHandlers = handlersWith(
       monolith = monolith,
-      tokens = ConcurrentHashMap<String, String>().apply { put("acme.myshopify.com", "shpat_env") },
+      tokens = mapOf(ShopDomain.parse("acme.myshopify.com")!! to "shpat_env"),
       httpClient = rewriter,
       syncOnUpdated = true,
     )
@@ -238,7 +239,7 @@ class ShopifyWebhookHandlersTest {
     val monolith = FakeMonolithService()
     currentHandlers = handlersWith(
       monolith = monolith,
-      tokens = ConcurrentHashMap<String, String>().apply { put("acme.myshopify.com", "shpat_env") },
+      tokens = mapOf(ShopDomain.parse("acme.myshopify.com")!! to "shpat_env"),
       httpClient = rewriter,
       syncOnUpdated = false,
     )
@@ -263,14 +264,14 @@ class ShopifyWebhookHandlersTest {
   // ---------- factory helpers ----------
 
   private fun handlers(
-    monolith: FakeMonolithService? = null,
-    tokens: MutableMap<String, String> = ConcurrentHashMap(),
+    monolith: MonolithService = FakeMonolithService(),
+    tokens: Map<ShopDomain, String> = emptyMap(),
     syncOnUpdated: Boolean = false,
   ): ShopifyWebhookHandlers = handlersWith(monolith, tokens, httpClient, syncOnUpdated)
 
   private fun handlersWith(
-    monolith: FakeMonolithService?,
-    tokens: MutableMap<String, String>,
+    monolith: MonolithService,
+    tokens: Map<ShopDomain, String>,
     httpClient: HttpClient,
     syncOnUpdated: Boolean = false,
   ): ShopifyWebhookHandlers {
@@ -278,8 +279,14 @@ class ShopifyWebhookHandlersTest {
       shopify = testShopifyConfig(appClientSecret = secret),
       syncOrderOnUpdated = syncOnUpdated,
     )
-    val cache = GraphqlClientCache(httpClient)
-    return ShopifyWebhookHandlers(dssConfig, cache, monolith, ShopAccessTokenCache(tokens))
+    val shopTokens = ShopAccessTokenCache(tokens)
+    val factory = testShopifyServiceFactory(
+      httpClient = httpClient,
+      monolith = monolith,
+      tokens = shopTokens,
+      apiVersion = dssConfig.shopify.apiVersion,
+    )
+    return ShopifyWebhookHandlers(dssConfig, factory, monolith)
   }
 
   private fun base64HmacSha256(secret: String, body: ByteArray): String {

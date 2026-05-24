@@ -1,25 +1,15 @@
 package dropnext.dss.handler
 
-import dropnext.dss.lib.shopify.graphql.GraphqlClientCache
-import dropnext.dss.config.DssAppConfig
-import dropnext.dss.path.DssPaths
-import dropnext.dss.lib.monolith.ShopAccessTokenCache
-import dropnext.dss.lib.ktor.clientErrorMessage
+import dropnext.dss.config.Config
 import dropnext.dss.lib.dto.ErrorResponse
-import dropnext.dss.lib.monolith.shopifyAdminTokenWithMonolithFallback
-import dropnext.dss.lib.monolith.tokenOrNull
-import dropnext.dss.lib.monolith.MonolithService
+import dropnext.dss.lib.ktor.clientErrorMessage
+import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlService
+import dropnext.dss.lib.monolith.ShopifyServiceFactory
+import dropnext.dss.path.DssPaths
 import dropnext.dss.shopify.FulfillmentCreateDemoBody
 import dropnext.dss.shopify.FulfillmentTrackingUpdateDemoBody
-import dropnext.dss.shopify.normalizeShopDomain
-import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
-import dropnext.graphql.generated.FulfillmentCreateWithTracking
-import dropnext.graphql.generated.FulfillmentTrackingInfoUpdateMutation
-import dropnext.graphql.generated.GetOrderById
-import dropnext.graphql.generated.SyncProductsPage
-import dropnext.graphql.generated.inputs.FulfillmentTrackingInput
+import dropnext.dss.lib.shopify.ShopDomain
 import io.github.oshai.kotlinlogging.KotlinLogging
-import io.ktor.client.request.header
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -40,13 +30,9 @@ private const val MISSING_TOKEN_HINT =
  * or guard them with a reverse-proxy ACL.
  */
 class DemoHandlers(
-  private val dssConfig: DssAppConfig,
-  private val gqlClientCache: GraphqlClientCache,
-  private val httpMonolithClient: MonolithService?,
-  private val shopTokens: ShopAccessTokenCache,
+  private val dssConfig: Config,
+  private val shopifyServiceFactory: ShopifyServiceFactory,
 ) {
-  private val config = dssConfig.shopify
-
   suspend fun handleListProducts(call: ApplicationCall) {
     val ctx = prepareDemo(call, call.request.queryParameters["shop"], "GET ${DssPaths.DEMO_PRODUCTS}") ?: return
     if (dssConfig.dev.sandboxFakeShopify) {
@@ -61,11 +47,9 @@ class DemoHandlers(
     val first = call.request.queryParameters["first"]?.toIntOrNull()?.coerceIn(1, 50) ?: 10
     val after = call.request.queryParameters["after"]
     runDemo(call, ctx) {
-      val result = ctx.gqlClient.execute(
-        SyncProductsPage(SyncProductsPage.Variables(first = first, after = after)),
-      ) { header("X-Shopify-Access-Token", ctx.token) }
+      val result = ctx.shopify.syncProductsPage(first, after)
       if (!result.errors.isNullOrEmpty()) {
-        log.warn { "[demo] ${ctx.routeLabel} — graphql_errors shop=${ctx.shop} errors=${result.errors}" }
+        log.warn { "[demo] ${ctx.routeLabel} — graphql_errors shop=${ctx.shopify.shop.host} errors=${result.errors}" }
         call.respond(
           HttpStatusCode.BadRequest,
           ErrorResponse(error = result.errors.orEmpty().joinToString { it.message }.take(1_200)),
@@ -96,22 +80,20 @@ class DemoHandlers(
     val ctx = prepareDemo(call, call.request.queryParameters["shop"], "GET ${DssPaths.DEMO_ORDER}") ?: return
     if (dssConfig.dev.sandboxFakeShopify) {
       return call.respondText(
-        "Order (DSS_SANDBOX_FAKE_SHOPIFY — no HTTP to Shopify):\nOrder #1001 id=$idParam shop=${ctx.shop}",
+        "Order (DSS_SANDBOX_FAKE_SHOPIFY — no HTTP to Shopify):\nOrder #1001 id=$idParam shop=${ctx.shopify.shop.host}",
         ContentType.Text.Plain,
         HttpStatusCode.OK,
       )
     }
     val orderGid = orderGidFromParam(idParam) ?: run {
-      log.warn { "[demo] ${ctx.routeLabel} — invalid_id shop=${ctx.shop} id=$idParam" }
+      log.warn { "[demo] ${ctx.routeLabel} — invalid_id shop=${ctx.shopify.shop.host} id=$idParam" }
       return call.respondText("Invalid id", status = HttpStatusCode.BadRequest)
     }
     runDemo(call, ctx) {
-      val result = ctx.gqlClient.execute(GetOrderById(GetOrderById.Variables(orderGid))) {
-        header("X-Shopify-Access-Token", ctx.token)
-      }
+      val result = ctx.shopify.getOrderById(orderGid)
       val order = result.data?.order
       if (order == null) {
-        log.warn { "[demo] ${ctx.routeLabel} — order_null shop=${ctx.shop} orderGid=$orderGid errors=${result.errors}" }
+        log.warn { "[demo] ${ctx.routeLabel} — order_null shop=${ctx.shopify.shop.host} orderGid=$orderGid errors=${result.errors}" }
         return@runDemo call.respondText("Order not found or error: ${result.errors}", status = HttpStatusCode.NotFound)
       }
       val fos = order.fulfillmentOrders.edges.joinToString { e -> "${e.node.id} status=${e.node.status}" }
@@ -135,18 +117,16 @@ class DemoHandlers(
       )
     }
     runDemo(call, ctx) {
-      val r = ctx.gqlClient.execute(
-        FulfillmentCreateWithTracking(
-          FulfillmentCreateWithTracking.Variables(
-            fulfillmentOrderId = body.fulfillmentOrderId,
-            tracking = body.toTrackingInput(),
-            notifyCustomer = body.notifyCustomer,
-          ),
-        ),
-      ) { header("X-Shopify-Access-Token", ctx.token) }
+      val r = ctx.shopify.demoCreateFulfillmentWithTracking(
+        fulfillmentOrderId = body.fulfillmentOrderId,
+        company = body.company,
+        trackingNumber = body.trackingNumber,
+        trackingUrl = body.trackingUrl,
+        notifyCustomer = body.notifyCustomer,
+      )
       val userErrs = r.data?.fulfillmentCreate?.userErrors.orEmpty().joinToString { "${it.field}:${it.message}" }
       if (userErrs.isNotEmpty() || !r.errors.isNullOrEmpty()) {
-        log.warn { "[demo] ${ctx.routeLabel} — user_or_graphql_errors shop=${ctx.shop} userErrors=$userErrs graphql=${r.errors}" }
+        log.warn { "[demo] ${ctx.routeLabel} — user_or_graphql_errors shop=${ctx.shopify.shop.host} userErrors=$userErrs graphql=${r.errors}" }
         call.respondText("Errors: $userErrs graphql=${r.errors}", status = HttpStatusCode.BadRequest)
       } else {
         call.respondText("Fulfillment created id=${r.data?.fulfillmentCreate?.fulfillment?.id}")
@@ -165,19 +145,17 @@ class DemoHandlers(
       )
     }
     runDemo(call, ctx) {
-      val r = ctx.gqlClient.execute(
-        FulfillmentTrackingInfoUpdateMutation(
-          FulfillmentTrackingInfoUpdateMutation.Variables(
-            fulfillmentId = body.fulfillmentId,
-            trackingInfoInput = body.toTrackingInput(),
-            notifyCustomer = body.notifyCustomer,
-          ),
-        ),
-      ) { header("X-Shopify-Access-Token", ctx.token) }
+      val r = ctx.shopify.demoUpdateFulfillmentTracking(
+        fulfillmentId = body.fulfillmentId,
+        company = body.company,
+        trackingNumber = body.trackingNumber,
+        trackingUrl = body.trackingUrl,
+        notifyCustomer = body.notifyCustomer,
+      )
       val userErrs = r.data?.fulfillmentTrackingInfoUpdate?.userErrors.orEmpty()
         .joinToString { "${it.field}:${it.message}" }
       if (userErrs.isNotEmpty() || !r.errors.isNullOrEmpty()) {
-        log.warn { "[demo] ${ctx.routeLabel} — user_or_graphql_errors shop=${ctx.shop} userErrors=$userErrs graphql=${r.errors}" }
+        log.warn { "[demo] ${ctx.routeLabel} — user_or_graphql_errors shop=${ctx.shopify.shop.host} userErrors=$userErrs graphql=${r.errors}" }
         call.respondText("Errors: $userErrs graphql=${r.errors}", status = HttpStatusCode.BadRequest)
       } else {
         call.respondText("Tracking updated id=${r.data?.fulfillmentTrackingInfoUpdate?.fulfillment?.id}")
@@ -185,17 +163,15 @@ class DemoHandlers(
     }
   }
 
-  /** Inputs every demo handler needs after shop validation, token lookup, and Graphql client selection. */
+  /** Per-call context after shop validation + token resolution; pre-built [ShopifyGraphqlService] for the demo flow. */
   private data class DemoContext(
-    val shop: String,
-    val token: String,
-    val gqlClient: GraphQLKtorClient,
+    val shopify: ShopifyGraphqlService,
     val routeLabel: String,
   )
 
   /**
-   * Validates `?shop=` / body shop, resolves a Shopify Admin token (cache → optional monolith fallback),
-   * and returns a [DemoContext] ready for a Graphql call. Returns `null` after responding with 400/401
+   * Validates `?shop=` / body shop, builds a [ShopifyGraphqlService] (cache → monolith fallback), and
+   * returns a [DemoContext] ready for a Graphql call. Returns `null` after responding with 400/401
    * so the caller short-circuits with `?: return`.
    */
   private suspend fun prepareDemo(
@@ -208,17 +184,17 @@ class DemoHandlers(
       call.respondText("Pass ?shop=your-store.myshopify.com", status = HttpStatusCode.BadRequest)
       return null
     }
-    val shop = normalizeShopDomain(rawShop) ?: run {
+    val shop = ShopDomain.parse(rawShop) ?: run {
       log.warn { "[demo] $routeLabel — invalid_shop rawShop=$rawShop" }
       call.respondText("Invalid shop", status = HttpStatusCode.BadRequest)
       return null
     }
-    val token = shopifyAdminTokenWithMonolithFallback(shop, shopTokens, httpMonolithClient).tokenOrNull ?: run {
-      log.warn { "[demo] $routeLabel — no_admin_token shop=$shop" }
+    val shopify = shopifyServiceFactory.forShop(shop) ?: run {
+      log.warn { "[demo] $routeLabel — no_admin_token shop=${shop.host}" }
       call.respondText(MISSING_TOKEN_HINT, status = HttpStatusCode.Unauthorized)
       return null
     }
-    return DemoContext(shop, token, gqlClientCache.forShop(shop, config.apiVersion), routeLabel)
+    return DemoContext(shopify, routeLabel)
   }
 
   /** Wraps the per-handler Graphql block with the shared try/catch → 400 ErrorResponse handler. */
@@ -231,7 +207,7 @@ class DemoHandlers(
       block()
     } catch (e: Throwable) {
       val msg = clientErrorMessage(e)
-      log.error(e) { "[demo] ${ctx.routeLabel} failed shop=${ctx.shop}: $msg" }
+      log.error(e) { "[demo] ${ctx.routeLabel} failed shop=${ctx.shopify.shop.host}: $msg" }
       call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = msg))
     }
   }
@@ -242,10 +218,3 @@ class DemoHandlers(
     return "gid://shopify/Order/$n"
   }
 }
-
-
-private fun FulfillmentCreateDemoBody.toTrackingInput(): FulfillmentTrackingInput =
-  FulfillmentTrackingInput(company = company, number = trackingNumber, url = trackingUrl)
-
-private fun FulfillmentTrackingUpdateDemoBody.toTrackingInput(): FulfillmentTrackingInput =
-  FulfillmentTrackingInput(company = company, number = trackingNumber, url = trackingUrl)

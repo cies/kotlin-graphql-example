@@ -2,7 +2,7 @@ package dropnext.dss.config
 
 import kotlin.test.Test
 
-class DssAppConfigTest {
+class ConfigTest {
 
   private fun shopify(
     appClientId: String = "good-id",
@@ -22,10 +22,10 @@ class DssAppConfigTest {
   private fun appConfig(
     shopify: ShopifyConfig = shopify(),
     dssInternalSecret: String? = null,
-    monolithBaseUrl: String? = null,
+    monolithBaseUrl: String = "https://monolith.example.org",
     allowInsecureMonolithUrl: Boolean = false,
-  ): DssAppConfig =
-    DssAppConfig(
+  ): Config =
+    Config(
       shopify = shopify,
       monolith = MonolithConfig(
         baseUrl = monolithBaseUrl,
@@ -107,12 +107,6 @@ class DssAppConfigTest {
   @Test
   fun `https monolith URL is accepted`() {
     val issues = computeRuntimeConfigIssues(appConfig(monolithBaseUrl = "https://monolith.example.org"))
-    assert(issues.none { "MONOLITH_BASE_URL" in it })
-  }
-
-  @Test
-  fun `null monolith URL is accepted`() {
-    val issues = computeRuntimeConfigIssues(appConfig(monolithBaseUrl = null))
     assert(issues.none { "MONOLITH_BASE_URL" in it })
   }
 

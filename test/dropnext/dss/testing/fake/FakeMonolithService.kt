@@ -33,6 +33,9 @@ class FakeMonolithService : MonolithService {
   var putStoreApiKeyStatus: Int = 200
   var putStoreApiKeyStoreId: Long = 1L
 
+  /** When true, [getStore] returns [GetStoreResult.NotFound] — for testing missing-token paths. */
+  var getStoreReturnsNotFound: Boolean = false
+
   override suspend fun postCreateOrder(request: CreateShopifyOrderRequest): CreateOrderResult {
     createOrderCallCount++
     lastCreateOrder = request
@@ -61,7 +64,8 @@ class FakeMonolithService : MonolithService {
   }
 
   override suspend fun getStore(shopifySubdomain: String): GetStoreResult =
-    GetStoreResult.Ok(storeId = 1L, shopifyShopId = 99L, apiKey = "shpat_fake")
+    if (getStoreReturnsNotFound) GetStoreResult.NotFound(shopifySubdomain)
+    else GetStoreResult.Ok(storeId = 1L, shopifyShopId = 99L, apiKey = "shpat_fake")
 
   override suspend fun upsertProductVariants(request: UpsertProductVariantsRequest): UpsertVariantsResult =
     UpsertVariantsResult.Ok(upserted = request.productVariants.size)
@@ -81,5 +85,6 @@ class FakeMonolithService : MonolithService {
     putStoreApiKeyCallCount = 0
     putStoreApiKeyStatus = 200
     putStoreApiKeyStoreId = 1L
+    getStoreReturnsNotFound = false
   }
 }

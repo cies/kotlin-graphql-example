@@ -7,14 +7,14 @@ import kotlin.test.Test
 
 class OAuthInstallViewTest {
 
-  private fun baseModel(
+  private fun renderBase(
     shop: String = "acme.myshopify.com",
-    monolithPersist: MonolithPersistOutcome = MonolithPersistOutcome.MonolithNotConfigured,
+    monolithPersist: MonolithPersistOutcome = MonolithPersistOutcome.Persisted(storeId = 1L),
     activeSubscriptions: List<WebhookSubscriptionStatus> = emptyList(),
     addedSubscriptions: List<WebhookSubscriptionStatus> = emptyList(),
     failedTopics: List<Pair<WebhookSubscriptionTopic, String>> = emptyList(),
-  ): OAuthInstallPageModel =
-    OAuthInstallPageModel(
+  ): String =
+    renderOAuthInstallPage(
       shop = shop,
       shopId = 9988L,
       monolithPersist = monolithPersist,
@@ -27,7 +27,7 @@ class OAuthInstallViewTest {
 
   @Test
   fun `renders a complete html document with App installed heading`() {
-    val html = renderOAuthInstallPage(baseModel())
+    val html = renderBase()
     assert(html.startsWith("<!DOCTYPE html>"))
     assert("<h1>App installed</h1>" in html)
     assert("Shop: acme.myshopify.com (id 9988)" in html)
@@ -36,18 +36,16 @@ class OAuthInstallViewTest {
   @Test
   fun `escapes html-significant characters in shop`() {
     val malicious = "evil<script>alert(1)</script>.myshopify.com"
-    val html = renderOAuthInstallPage(baseModel(shop = malicious))
+    val html = renderBase(shop = malicious)
     assert("<script>alert(1)</script>" !in html)
     assert("&lt;script&gt;alert(1)&lt;/script&gt;" in html)
   }
 
   @Test
   fun `escapes html-significant characters in failure error messages`() {
-    val html = renderOAuthInstallPage(
-      baseModel(
-        failedTopics = listOf(
-          WebhookSubscriptionTopic.PRODUCTS_CREATE to "<img src=x onerror=alert(1)>",
-        ),
+    val html = renderBase(
+      failedTopics = listOf(
+        WebhookSubscriptionTopic.PRODUCTS_CREATE to "<img src=x onerror=alert(1)>",
       ),
     )
     assert("<img src=x onerror=alert(1)>" !in html)
@@ -55,25 +53,16 @@ class OAuthInstallViewTest {
   }
 
   @Test
-  fun `monolith not configured renders the configuration notice`() {
-    val html = renderOAuthInstallPage(baseModel(monolithPersist = MonolithPersistOutcome.MonolithNotConfigured))
-    assert("Monolith not configured" in html)
-    assert("MONOLITH_BASE_URL" in html)
-  }
-
-  @Test
   fun `monolith persisted renders the success notice with storeId`() {
-    val html = renderOAuthInstallPage(baseModel(monolithPersist = MonolithPersistOutcome.Persisted(storeId = 42L)))
+    val html = renderBase(monolithPersist = MonolithPersistOutcome.Persisted(storeId = 42L))
     assert("Shopify token saved via monolith" in html)
     assert("store_id=42" in html)
   }
 
   @Test
   fun `monolith failed renders status and detail`() {
-    val html = renderOAuthInstallPage(
-      baseModel(
-        monolithPersist = MonolithPersistOutcome.Failed(httpStatus = 503, detail = "upstream timeout"),
-      ),
+    val html = renderBase(
+      monolithPersist = MonolithPersistOutcome.Failed(httpStatus = 503, detail = "upstream timeout"),
     )
     assert("HTTP status 503" in html)
     assert("upstream timeout" in html)
@@ -82,8 +71,8 @@ class OAuthInstallViewTest {
   @Test
   fun `monolith failed truncates very long detail`() {
     val detail = "x".repeat(800)
-    val html = renderOAuthInstallPage(
-      baseModel(monolithPersist = MonolithPersistOutcome.Failed(httpStatus = 500, detail = detail)),
+    val html = renderBase(
+      monolithPersist = MonolithPersistOutcome.Failed(httpStatus = 500, detail = detail),
     )
     assert("x".repeat(400) in html)
     assert("x".repeat(401) !in html)
@@ -91,7 +80,7 @@ class OAuthInstallViewTest {
 
   @Test
   fun `empty subscription lists render a None bullet`() {
-    val html = renderOAuthInstallPage(baseModel())
+    val html = renderBase()
     // Two empty lists → at least two "None" bullets.
     assert(html.count { it == '\n' } >= 0)
     val noneCount = "<li>None</li>".toRegex().findAll(html).count()
@@ -112,7 +101,7 @@ class OAuthInstallViewTest {
         uri = "https://dss.example.com/webhooks/shopify",
       ),
     )
-    val html = renderOAuthInstallPage(baseModel(activeSubscriptions = subs))
+    val html = renderBase(activeSubscriptions = subs)
     assert("PRODUCTS_CREATE" in html)
     assert("ORDERS_CREATE" in html)
     assert("gid://shopify/WebhookSubscription/1" in html)
@@ -121,18 +110,16 @@ class OAuthInstallViewTest {
 
   @Test
   fun `no failure block when failedTopics is empty`() {
-    val html = renderOAuthInstallPage(baseModel(failedTopics = emptyList()))
+    val html = renderBase(failedTopics = emptyList())
     assert("Webhook registrations that failed" !in html)
   }
 
   @Test
   fun `failure block lists each failed topic`() {
-    val html = renderOAuthInstallPage(
-      baseModel(
-        failedTopics = listOf(
-          WebhookSubscriptionTopic.PRODUCTS_CREATE to "permission denied",
-          WebhookSubscriptionTopic.ORDERS_UPDATED to "scope missing",
-        ),
+    val html = renderBase(
+      failedTopics = listOf(
+        WebhookSubscriptionTopic.PRODUCTS_CREATE to "permission denied",
+        WebhookSubscriptionTopic.ORDERS_UPDATED to "scope missing",
       ),
     )
     assert("Webhook registrations that failed" in html)
@@ -145,14 +132,14 @@ class OAuthInstallViewTest {
 
   @Test
   fun `demo links include shop query parameter`() {
-    val html = renderOAuthInstallPage(baseModel(shop = "acme.myshopify.com"))
+    val html = renderBase(shop = "acme.myshopify.com")
     assert("/demo/products?shop=acme.myshopify.com" in html)
     assert("/demo/order?shop=acme.myshopify.com" in html)
   }
 
   @Test
   fun `robots meta is set to noindex nofollow`() {
-    val html = renderOAuthInstallPage(baseModel())
+    val html = renderBase()
     assert("robots" in html)
     assert("noindex" in html)
     assert("nofollow" in html)

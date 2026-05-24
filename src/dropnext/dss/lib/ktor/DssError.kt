@@ -1,9 +1,10 @@
 package dropnext.dss.lib.ktor
 
 import dropnext.dss.lib.dto.ErrorResponse
-import io.ktor.http.*
-import io.ktor.server.application.*
-import io.ktor.server.response.*
+import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.ApplicationCall
+import io.ktor.server.response.respond
+import io.ktor.server.response.respondText
 
 
 /**

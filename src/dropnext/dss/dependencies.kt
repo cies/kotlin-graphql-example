@@ -1,19 +1,22 @@
 package dropnext.dss
 
-import dropnext.dss.config.DssAppConfig
+import dropnext.dss.config.Config
 import dropnext.dss.config.shopAccessTokensFromEnv
 import dropnext.dss.handler.DemoHandlers
 import dropnext.dss.handler.DiagnosticsHandlers
 import dropnext.dss.handler.MonolithWebhookHandlers
 import dropnext.dss.handler.OAuthHandlers
 import dropnext.dss.handler.ShopifyWebhookHandlers
-import dropnext.dss.lib.monolith.ShopAccessTokenCache
-import dropnext.dss.lib.shopify.graphql.fulfillment.DssFulfillmentService
 import dropnext.dss.lib.ktor.createMonolithHttpClient
 import dropnext.dss.lib.ktor.createSharedHttpClient
 import dropnext.dss.lib.monolith.HttpMonolithService
 import dropnext.dss.lib.monolith.MonolithService
-import dropnext.dss.lib.shopify.graphql.GraphqlClientCache
+import dropnext.dss.lib.monolith.ShopAccessTokenCache
+import dropnext.dss.lib.monolith.ShopifyServiceFactory
+import dropnext.dss.lib.shopify.graphql.fulfillment.FulfillmentService
+import dropnext.dss.lib.shopify.graphql.fulfillment.SandboxFulfillmentService
+import dropnext.dss.lib.shopify.graphql.fulfillment.ShopifyFulfillmentService
+import dropnext.dss.lib.shopify.oauth.ShopifyOAuthClient
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.client.HttpClient
 
@@ -21,17 +24,15 @@ import io.ktor.client.HttpClient
 private val log = KotlinLogging.logger {}
 
 /**
- * Every collaborator the running app needs, wired once. This is to be passsed to [dssModule].
- * Tests assemble the same shape (with fakes substituted) so the Ktor module mounted
- * in production runs unchanged under `testApplication`.
+ * Every collaborator the running app needs, wired once. This is passed to [dssModule].
+ * Tests assemble the same shape (with fakes substituted) so the Ktor module mounted in
+ * production runs unchanged under `testApplication`.
  */
 data class DssDependencies(
-  val config: DssAppConfig,
+  val config: Config,
   val httpClient: HttpClient,
   val monolithHttpClient: HttpClient,
-  val monolithService: MonolithService?,
-  val gqlClientCache: GraphqlClientCache,
-  val shopTokens: ShopAccessTokenCache,
+  val monolithService: MonolithService,
   val diagnosticsHandlers: DiagnosticsHandlers,
   val oauthHandlers: OAuthHandlers,
   val shopifyWebhookHandlers: ShopifyWebhookHandlers,
@@ -48,44 +49,41 @@ data class DssDependencies(
 }
 
 /** Builds the production [DssDependencies] graph from [config]. */
-fun dssDependencies(config: DssAppConfig): DssDependencies {
+fun dssDependencies(config: Config): DssDependencies {
   val httpClient = createSharedHttpClient()
   val monolithHttpClient = createMonolithHttpClient(httpClient)
-  val monolithService = monolithServiceFor(config, monolithHttpClient)
-  val gqlClientCache = GraphqlClientCache(httpClient)
+  val monolithService: MonolithService = HttpMonolithService(
+    httpClient = monolithHttpClient,
+    baseUrl = config.monolith.baseUrl,
+    apiPathPrefix = config.monolith.apiPrefix,
+    apiKey = config.monolith.apiKey,
+    createOrderPath = config.monolith.createOrderPath,
+  )
   val shopTokens = ShopAccessTokenCache(
     shopAccessTokensFromEnv(enableTestHarness = config.dev.enableTestHarness),
   )
+  val shopifyServiceFactory = ShopifyServiceFactory(
+    httpClient = httpClient,
+    tokens = shopTokens,
+    monolith = monolithService,
+    apiVersion = config.shopify.apiVersion,
+  )
+  val oauthClient = ShopifyOAuthClient(httpClient, config.shopify)
+  val fulfillmentService: FulfillmentService = if (config.dev.sandboxFakeShopify) {
+    SandboxFulfillmentService()
+  } else {
+    ShopifyFulfillmentService(shopifyServiceFactory)
+  }
 
   return DssDependencies(
     config = config,
     httpClient = httpClient,
     monolithHttpClient = monolithHttpClient,
     monolithService = monolithService,
-    gqlClientCache = gqlClientCache,
-    shopTokens = shopTokens,
     diagnosticsHandlers = DiagnosticsHandlers(config, shopTokens),
-    oauthHandlers = OAuthHandlers(config, httpClient, gqlClientCache, monolithService, shopTokens),
-    shopifyWebhookHandlers = ShopifyWebhookHandlers(config, gqlClientCache, monolithService, shopTokens),
-    demoHandlers = DemoHandlers(config, gqlClientCache, monolithService, shopTokens),
-    dssHandlers = MonolithWebhookHandlers(
-      shopifyApiVersion = config.shopify.apiVersion,
-      dssConfig = config,
-      gqlClientCache = gqlClientCache,
-      fulfillmentService = DssFulfillmentService,
-      monolithService = monolithService,
-      shopTokenCache = shopTokens,
-    ),
-  )
-}
-
-private fun monolithServiceFor(config: DssAppConfig, client: HttpClient): MonolithService? {
-  val monolithConfig = config.monolith
-  return HttpMonolithService(
-    httpClient = client,
-    baseUrl = monolithConfig.baseUrl ?: return null,
-    apiPathPrefix = monolithConfig.apiPrefix,
-    apiKey = monolithConfig.apiKey,
-    createOrderPath = monolithConfig.createOrderPath,
+    oauthHandlers = OAuthHandlers(config, oauthClient, shopifyServiceFactory, monolithService, shopTokens),
+    shopifyWebhookHandlers = ShopifyWebhookHandlers(config, shopifyServiceFactory, monolithService),
+    demoHandlers = DemoHandlers(config, shopifyServiceFactory),
+    dssHandlers = MonolithWebhookHandlers(fulfillmentService, monolithService, shopTokens),
   )
 }

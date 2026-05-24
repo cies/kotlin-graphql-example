@@ -1,32 +1,29 @@
 package dropnext.dss.lib.monolith
 
+import dropnext.dss.lib.shopify.ShopDomain
 import java.util.concurrent.ConcurrentHashMap
 
+
 /**
- * In-memory cache of `shop.myshopify.com` → Shopify Admin access token.
+ * In-memory cache of [ShopDomain] → Shopify Admin access token.
  *
  * The DSS has no server-side database; tokens come from env (`DSS_SHOP_ACCESS_TOKENS`),
  * the OAuth callback after installation, or a fallback fetch from the monolith.
  * Whichever path fills the cache, every subsequent webhook / DSS REST call reads from here.
  *
- * Backed by a [java.util.concurrent.ConcurrentHashMap] so OAuth callbacks, webhook handlers, and the monolith
- * fallback resolver can write concurrently without data races. Keys are normalized to
- * full `*.myshopify.com` host strings (lowercase).
+ * Backed by a [ConcurrentHashMap] so OAuth callbacks, webhook handlers, and the monolith
+ * fallback resolver can write concurrently without data races. Keys are canonical [ShopDomain]
+ * values, so case-insensitive lookups are unnecessary.
  */
-// TODO(cies): Why not standardize on lowercased keys? why not fold this into the monolith service?
-class ShopAccessTokenCache(initial: Map<String, String> = emptyMap()) {
-  private val tokens: ConcurrentHashMap<String, String> = ConcurrentHashMap(initial)
+class ShopAccessTokenCache(initial: Map<ShopDomain, String> = emptyMap()) {
+  private val tokens: ConcurrentHashMap<ShopDomain, String> = ConcurrentHashMap(initial)
 
-  operator fun get(myShopifyHost: String): String? {
-    val direct = tokens[myShopifyHost]
-    if (direct != null) return direct
-    return tokens.entries.firstOrNull { (key, _) -> key.equals(myShopifyHost, ignoreCase = true) }?.value
-  }
+  operator fun get(shop: ShopDomain): String? = tokens[shop]
 
-  operator fun set(myShopifyHost: String, token: String) {
-    tokens[myShopifyHost] = token
+  operator fun set(shop: ShopDomain, token: String) {
+    tokens[shop] = token
   }
 
   /** Snapshot, primarily for diagnostics. */
-  fun snapshot(): Map<String, String> = tokens.toMap()
+  fun snapshot(): Map<ShopDomain, String> = tokens.toMap()
 }

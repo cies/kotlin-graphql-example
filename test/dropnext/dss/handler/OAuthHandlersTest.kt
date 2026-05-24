@@ -1,14 +1,15 @@
 package dropnext.dss.handler
 
 import dropnext.dss.lib.monolith.ShopAccessTokenCache
-import dropnext.dss.lib.shopify.graphql.GraphqlClientCache
+import dropnext.dss.lib.shopify.oauth.ShopifyOAuthClient
 import dropnext.dss.path.DssPaths
-import dropnext.dss.lib.shopify.oauth.signedOAuthState
+import dropnext.dss.lib.shopify.ShopDomain
 import dropnext.dss.testing.fake.FakeMonolithService
 import dropnext.dss.testing.fake.FakeShopifyGraphqlServer
 import dropnext.dss.testing.fake.shopifyRewritingHttpClient
 import dropnext.dss.testing.fake.testDssAppConfig
 import dropnext.dss.testing.fake.testShopifyConfig
+import dropnext.dss.testing.fake.testShopifyServiceFactory
 import dropnext.graphql.generated.GetWebhookSubscriptions
 import dropnext.graphql.generated.ShopIdentity
 import dropnext.graphql.generated.SyncProductsPage
@@ -208,10 +209,17 @@ class OAuthHandlersTest {
       val fakeMonolith = FakeMonolithService()
       val shopifyConfig = testShopifyConfig(appClientSecret = secret)
       val dssConfig = testDssAppConfig(shopify = shopifyConfig)
-      val cache = GraphqlClientCache(rewritingClient)
-      current = OAuthHandlers(dssConfig, rewritingClient, cache, httpMonolithClient = fakeMonolith, shopTokens = tokens)
+      val factory = testShopifyServiceFactory(
+        httpClient = rewritingClient,
+        monolith = fakeMonolith,
+        tokens = tokens,
+        apiVersion = shopifyConfig.apiVersion,
+      )
+      val oauthClient = ShopifyOAuthClient(rewritingClient, shopifyConfig)
+      current = OAuthHandlers(dssConfig, oauthClient, factory, fakeMonolith, tokens)
 
-      val state = signedOAuthState(shop, secret)
+      val shopDomain = ShopDomain.parse(shop)!!
+      val state = oauthClient.signedState(shopDomain)
       val code = "abc-code"
       val query = Parameters.build {
         append("shop", shop)
@@ -231,7 +239,7 @@ class OAuthHandlersTest {
       val r = client.get(callbackUrl)
       assert(r.status == HttpStatusCode.OK)
       assert("App installed" in r.bodyAsText())
-      assert(tokens[shop] == "shpat_fake_admin_token")
+      assert(tokens[shopDomain] == "shpat_fake_admin_token")
       assert(fakeMonolith.putStoreApiKeyCallCount == 1)
       val forwarded = fakeMonolith.lastPutStoreApiKey
       assert(forwarded != null)
@@ -251,14 +259,16 @@ class OAuthHandlersTest {
   private fun handlers(): OAuthHandlers {
     val shopifyConfig = testShopifyConfig(appClientSecret = "oauth-test-secret")
     val dssConfig = testDssAppConfig(shopify = shopifyConfig)
-    val cache = GraphqlClientCache(client)
-    return OAuthHandlers(
-      dssConfig,
-      client,
-      cache,
-      httpMonolithClient = null,
-      shopTokens = ShopAccessTokenCache(),
+    val tokens = ShopAccessTokenCache()
+    val monolith = FakeMonolithService()
+    val factory = testShopifyServiceFactory(
+      httpClient = client,
+      monolith = monolith,
+      tokens = tokens,
+      apiVersion = shopifyConfig.apiVersion,
     )
+    val oauthClient = ShopifyOAuthClient(client, shopifyConfig)
+    return OAuthHandlers(dssConfig, oauthClient, factory, monolith, tokens)
   }
 
   private fun hexHmac(secret: String, message: String): String {
