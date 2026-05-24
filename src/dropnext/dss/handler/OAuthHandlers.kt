@@ -1,7 +1,7 @@
 package dropnext.dss.handler
 
 import dropnext.dss.domain.MonolithPersistOutcome
-import dropnext.dss.lib.dto.UpdateStoreApiKeyRequest
+import dropnext.dss.lib.monolith.dto.generated.UpdateStoreApiKeyRequest
 import dropnext.dss.lib.ktor.DssError
 import dropnext.dss.lib.ktor.respondTextError
 import dropnext.dss.lib.monolith.MonolithService

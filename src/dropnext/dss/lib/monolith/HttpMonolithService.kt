@@ -1,15 +1,15 @@
 package dropnext.dss.lib.monolith
 
 import dropnext.dss.lib.json.MonolithJson
-import dropnext.dss.lib.dto.CreateShopifyOrderRequest
-import dropnext.dss.lib.dto.DeleteProductVariantsRequest
-import dropnext.dss.lib.dto.DeleteProductVariantsResponse
-import dropnext.dss.lib.dto.StoreResponse
-import dropnext.dss.lib.dto.UpdateStoreApiKeyRequest
-import dropnext.dss.lib.dto.UpdateStoreApiKeyResponse
-import dropnext.dss.lib.dto.UpsertProductVariantsRequest
-import dropnext.dss.lib.dto.UpsertProductVariantsResponse
-import dropnext.dss.lib.dto.VariantIdsResponse
+import dropnext.dss.lib.monolith.dto.generated.CreateShopifyOrderRequest
+import dropnext.dss.lib.monolith.dto.generated.DeleteProductVariantsRequest
+import dropnext.dss.lib.monolith.dto.generated.DeleteProductVariantsResponse
+import dropnext.dss.lib.monolith.dto.generated.StoreResponse
+import dropnext.dss.lib.monolith.dto.generated.UpdateStoreApiKeyRequest
+import dropnext.dss.lib.monolith.dto.generated.UpdateStoreApiKeyResponse
+import dropnext.dss.lib.monolith.dto.generated.UpsertProductVariantsRequest
+import dropnext.dss.lib.monolith.dto.generated.UpsertProductVariantsResponse
+import dropnext.dss.lib.monolith.dto.generated.VariantIdsResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.delete

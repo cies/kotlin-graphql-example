@@ -1,8 +1,8 @@
 package dropnext.dss.workflow
 
 import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
-import dropnext.dss.lib.dto.TrackingUpdateRequest
-import dropnext.dss.lib.dto.TrackingUpdateResponse
+import dropnext.dss.lib.monolith.dto.generated.TrackingUpdateRequest
+import dropnext.dss.lib.monolith.dto.generated.TrackingUpdateResponse
 import dropnext.dss.lib.shopify.ShopDomain
 import dropnext.dss.lib.shopify.graphql.HttpShopifyGraphqlService
 import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlService

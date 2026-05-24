@@ -1,8 +1,8 @@
 package dropnext.dss.workflow
 
-import dropnext.dss.lib.dto.Shipment
-import dropnext.dss.lib.dto.SyncShipmentsWithFulfillmentsRequest
-import dropnext.dss.lib.dto.SyncShipmentsWithFulfillmentsResponse
+import dropnext.dss.lib.monolith.dto.generated.Shipment
+import dropnext.dss.lib.monolith.dto.generated.SyncShipmentsWithFulfillmentsRequest
+import dropnext.dss.lib.monolith.dto.generated.SyncShipmentsWithFulfillmentsResponse
 import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlService
 import dropnext.dss.lib.shopify.graphql.fulfillment.FulfillmentResult
 import dropnext.dss.lib.shopify.graphql.fulfillment.ShipmentMatchResult

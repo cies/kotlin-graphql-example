@@ -1,7 +1,7 @@
 package dropnext.dss.workflow
 
-import dropnext.dss.lib.dto.TrackingUpdateRequest
-import dropnext.dss.lib.dto.TrackingUpdateResponse
+import dropnext.dss.lib.monolith.dto.generated.TrackingUpdateRequest
+import dropnext.dss.lib.monolith.dto.generated.TrackingUpdateResponse
 import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlService
 import dropnext.dss.lib.shopify.graphql.fulfillment.FulfillmentResult
 import dropnext.dss.lib.shopify.graphql.fulfillment.ParsedFulfillmentStatus

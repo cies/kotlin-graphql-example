@@ -13,7 +13,7 @@ import io.ktor.server.routing.put
  * Every route mounted here sits inside [requireMonolithWebhookAuthHeader], so handlers never have to
  * call an auth helper themselves — a missing/invalid `X-DSS-Internal-Secret` short-circuits with
  * a `401 unauthorized` before the handler runs. The matching auth provider is installed in
- * `app.kt` via [dropnext.dss.lib.ktor.plugin.installMonolithWebhookAuthSecret].
+ * `app.kt` via [dropnext.dss.lib.ktor.plugin.installMonolithWebhookAuth].
  *
  * Paths match their request bodies:
  * - **`SyncShipmentsWithFulfillmentsRequest`** is POSTed to **[Paths.syncShipmentsWithFulfillments]**;

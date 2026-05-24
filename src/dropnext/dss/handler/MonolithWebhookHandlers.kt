@@ -1,11 +1,11 @@
 package dropnext.dss.handler
 
 import dropnext.dss.path.Paths
-import dropnext.dss.lib.dto.PutShopAccessTokenRequest
-import dropnext.dss.lib.dto.PutShopAccessTokenResponse
-import dropnext.dss.lib.dto.SyncShipmentsWithFulfillmentsRequest
-import dropnext.dss.lib.dto.TrackingUpdateRequest
-import dropnext.dss.lib.dto.UpdateStoreApiKeyRequest
+import dropnext.dss.lib.monolith.dto.generated.PutShopAccessTokenRequest
+import dropnext.dss.lib.monolith.dto.generated.PutShopAccessTokenResponse
+import dropnext.dss.lib.monolith.dto.generated.SyncShipmentsWithFulfillmentsRequest
+import dropnext.dss.lib.monolith.dto.generated.TrackingUpdateRequest
+import dropnext.dss.lib.monolith.dto.generated.UpdateStoreApiKeyRequest
 import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlService
 import dropnext.dss.lib.shopify.graphql.fulfillment.FulfillmentResult
 import dropnext.dss.lib.shopify.graphql.fulfillment.RequestValidation

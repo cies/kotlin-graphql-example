@@ -1,7 +1,7 @@
 package dropnext.dss.handler
 
-import dropnext.dss.lib.dto.DeleteProductVariantsRequest
-import dropnext.dss.lib.dto.UpsertProductVariantsRequest
+import dropnext.dss.lib.monolith.dto.generated.DeleteProductVariantsRequest
+import dropnext.dss.lib.monolith.dto.generated.UpsertProductVariantsRequest
 import dropnext.dss.lib.monolith.DeleteVariantsResult
 import dropnext.dss.lib.monolith.MonolithService
 import dropnext.dss.lib.monolith.ShopifyGraphqlServiceFactory

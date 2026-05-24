@@ -183,6 +183,8 @@ jacoco {
   toolVersion = "0.8.14"
 }
 
+val monolithServiceGeneratedDtoPath = "dropnext/dss/lib/monolith/dto/generated"
+
 tasks.named<JacocoReport>("jacocoTestReport") {
   // So `./gradlew jacocoTestReport` runs the tests too; otherwise it would silently report on stale exec data.
   dependsOn(tasks.named("test"))
@@ -196,7 +198,7 @@ tasks.named<JacocoReport>("jacocoTestReport") {
       classDirectories.files.map { dir ->
         fileTree(dir) {
           // Exclude generated OpenAPI DTOs (not authored by us).
-          exclude("dropnext/dss/lib/dto/**")
+          exclude("$monolithServiceGeneratedDtoPath/**")
         }
       }
     )
@@ -250,7 +252,7 @@ openApiGenerate {
   inputSpec.set(openApiSpecFile.toURI().toString())
   skipValidateSpec.set(false)
   outputDir.set("${layout.buildDirectory.get()}/generated/openapi")
-  modelPackage.set("dropnext.dss.lib.dto")
+  modelPackage.set(monolithServiceGeneratedDtoPath.replace('/', '.'))
   generateApiTests.set(false)
   generateModelTests.set(false)
   globalProperties.set(mapOf(

@@ -1,7 +1,7 @@
 package dropnext.dss.handler
 
 import dropnext.dss.config.Config
-import dropnext.dss.lib.dto.ErrorResponse
+import dropnext.dss.lib.monolith.dto.generated.ErrorResponse
 import dropnext.dss.lib.ktor.clientErrorMessage
 import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlService
 import dropnext.dss.lib.monolith.ShopifyGraphqlServiceFactory

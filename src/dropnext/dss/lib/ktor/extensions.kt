@@ -13,7 +13,7 @@ suspend fun ApplicationCall.respondErrorText(text: String) =
   respondText(text, status = HttpStatusCode.InternalServerError)
 
 /**
- * Decodes the request body as [A], or responds 400 with a JSON [dropnext.dss.lib.dto.ErrorResponse]
+ * Decodes the request body as [A], or responds 400 with a JSON [dropnext.dss.lib.monolith.dto.generated.ErrorResponse]
  * and returns `null`. Catches the two failure modes kotlinx.serialization surfaces through ktor:
  * [BadRequestException] (top-level parse failure) and [SerializationException] (field-level —
  * missing required, wrong type). Without this helper, both would escape to `StatusPages` and

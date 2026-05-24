@@ -1,6 +1,6 @@
 package dropnext.dss.shopify
 
-import dropnext.dss.lib.dto.ProductStatus as DtoProductStatus
+import dropnext.dss.lib.monolith.dto.generated.ProductStatus as DtoProductStatus
 import dropnext.graphql.generated.enums.ProductStatus as GraphqlProductStatus
 import dropnext.graphql.generated.getproductbyid.ExternalVideo
 import dropnext.graphql.generated.getproductbyid.Image

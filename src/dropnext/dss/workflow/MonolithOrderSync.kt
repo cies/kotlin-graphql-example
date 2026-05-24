@@ -1,6 +1,6 @@
 package dropnext.dss.workflow
 
-import dropnext.dss.lib.dto.CreateShopifyOrderRequest
+import dropnext.dss.lib.monolith.dto.generated.CreateShopifyOrderRequest
 import dropnext.dss.lib.monolith.CreateOrderResult
 import dropnext.dss.lib.monolith.MonolithService
 import dropnext.dss.lib.monolith.logMonolithFailure

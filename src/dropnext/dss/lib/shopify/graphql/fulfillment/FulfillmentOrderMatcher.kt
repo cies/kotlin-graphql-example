@@ -4,8 +4,8 @@ import dropnext.graphql.generated.enums.FulfillmentOrderStatus
 import dropnext.graphql.generated.getorderfordss.FulfillmentOrder
 import dropnext.graphql.generated.getorderfordss.Order
 import dropnext.graphql.generated.inputs.FulfillmentOrderLineItemInput
-import dropnext.dss.lib.dto.Shipment
-import dropnext.dss.lib.dto.ShipmentLineItem
+import dropnext.dss.lib.monolith.dto.generated.Shipment
+import dropnext.dss.lib.monolith.dto.generated.ShipmentLineItem
 
 /** Result of matching a monolith [Shipment] to open Shopify fulfillment order line items. */
 sealed interface ShipmentMatchResult {

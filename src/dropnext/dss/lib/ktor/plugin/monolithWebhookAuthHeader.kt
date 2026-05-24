@@ -1,6 +1,6 @@
 package dropnext.dss.lib.ktor.plugin
 
-import dropnext.dss.lib.dto.ErrorResponse
+import dropnext.dss.lib.monolith.dto.generated.ErrorResponse
 import dropnext.dss.lib.ktor.constantTimeEquals
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
@@ -38,7 +38,7 @@ fun Route.requireMonolithWebhookAuthHeader(build: Route.() -> Unit) {
  * Handlers never have to call an auth helper themselves:
  * a missing/invalid header short-circuits with `401 unauthorized` JSON before the route handler runs.
  */
-fun Application.installMonolithWebhookAuthSecret(secret: String?) {
+fun Application.installMonolithWebhookAuth(secret: String?) {
   install(Authentication) {
     monolithWebhookAuthSecret(secret)
   }

@@ -4,14 +4,14 @@ import dropnext.dss.path.Paths
 import dropnext.dss.lib.monolith.MonolithService
 import dropnext.dss.lib.monolith.ShopAccessTokenCache
 import dropnext.dss.lib.monolith.ShopifyGraphqlServiceFactory
-import dropnext.dss.lib.dto.PutShopAccessTokenRequest
-import dropnext.dss.lib.dto.PutShopAccessTokenResponse
-import dropnext.dss.lib.dto.Shipment
-import dropnext.dss.lib.dto.ShipmentLineItem
-import dropnext.dss.lib.dto.SyncShipmentsWithFulfillmentsRequest
-import dropnext.dss.lib.dto.TrackingUpdateRequest
+import dropnext.dss.lib.monolith.dto.generated.PutShopAccessTokenRequest
+import dropnext.dss.lib.monolith.dto.generated.PutShopAccessTokenResponse
+import dropnext.dss.lib.monolith.dto.generated.Shipment
+import dropnext.dss.lib.monolith.dto.generated.ShipmentLineItem
+import dropnext.dss.lib.monolith.dto.generated.SyncShipmentsWithFulfillmentsRequest
+import dropnext.dss.lib.monolith.dto.generated.TrackingUpdateRequest
 import dropnext.dss.lib.json.AppJson
-import dropnext.dss.lib.ktor.plugin.installMonolithWebhookAuthSecret
+import dropnext.dss.lib.ktor.plugin.installMonolithWebhookAuth
 import dropnext.dss.lib.ktor.installJsonContentNegotiation
 import dropnext.dss.routing.installMonolithWebhookRoutes
 import dropnext.dss.lib.shopify.ShopDomain
@@ -251,7 +251,7 @@ class MonolithWebhookHandlersTest {
 
   private fun Application.dssRoutesOnly(handlers: MonolithWebhookHandlers, secret: String?) {
     installJsonContentNegotiation()
-    installMonolithWebhookAuthSecret(secret)
+    installMonolithWebhookAuth(secret)
     routing { installMonolithWebhookRoutes(handlers) }
   }
 

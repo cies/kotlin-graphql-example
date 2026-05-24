@@ -1,9 +1,9 @@
 package dropnext.dss.testing.fake
 
-import dropnext.dss.lib.dto.CreateShopifyOrderRequest
-import dropnext.dss.lib.dto.DeleteProductVariantsRequest
-import dropnext.dss.lib.dto.UpdateStoreApiKeyRequest
-import dropnext.dss.lib.dto.UpsertProductVariantsRequest
+import dropnext.dss.lib.monolith.dto.generated.CreateShopifyOrderRequest
+import dropnext.dss.lib.monolith.dto.generated.DeleteProductVariantsRequest
+import dropnext.dss.lib.monolith.dto.generated.UpdateStoreApiKeyRequest
+import dropnext.dss.lib.monolith.dto.generated.UpsertProductVariantsRequest
 import dropnext.dss.lib.monolith.CreateOrderResult
 import dropnext.dss.lib.monolith.DeleteVariantsResult
 import dropnext.dss.lib.monolith.GetStoreResult

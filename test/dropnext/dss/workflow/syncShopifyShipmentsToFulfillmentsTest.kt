@@ -1,10 +1,10 @@
 package dropnext.dss.workflow
 
 import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
-import dropnext.dss.lib.dto.Shipment
-import dropnext.dss.lib.dto.ShipmentLineItem
-import dropnext.dss.lib.dto.SyncShipmentsWithFulfillmentsRequest
-import dropnext.dss.lib.dto.SyncShipmentsWithFulfillmentsResponse
+import dropnext.dss.lib.monolith.dto.generated.Shipment
+import dropnext.dss.lib.monolith.dto.generated.ShipmentLineItem
+import dropnext.dss.lib.monolith.dto.generated.SyncShipmentsWithFulfillmentsRequest
+import dropnext.dss.lib.monolith.dto.generated.SyncShipmentsWithFulfillmentsResponse
 import dropnext.dss.lib.shopify.ShopDomain
 import dropnext.dss.lib.shopify.graphql.HttpShopifyGraphqlService
 import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlService

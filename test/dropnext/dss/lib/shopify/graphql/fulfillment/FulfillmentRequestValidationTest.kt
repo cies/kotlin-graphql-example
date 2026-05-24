@@ -1,9 +1,9 @@
 package dropnext.dss.lib.shopify.graphql.fulfillment
 
-import dropnext.dss.lib.dto.Shipment
-import dropnext.dss.lib.dto.ShipmentLineItem
-import dropnext.dss.lib.dto.SyncShipmentsWithFulfillmentsRequest
-import dropnext.dss.lib.dto.TrackingUpdateRequest
+import dropnext.dss.lib.monolith.dto.generated.Shipment
+import dropnext.dss.lib.monolith.dto.generated.ShipmentLineItem
+import dropnext.dss.lib.monolith.dto.generated.SyncShipmentsWithFulfillmentsRequest
+import dropnext.dss.lib.monolith.dto.generated.TrackingUpdateRequest
 import dropnext.dss.lib.shopify.graphql.fulfillment.RequestValidation
 import dropnext.dss.lib.shopify.graphql.fulfillment.validateSyncShipmentsRequest
 import dropnext.dss.lib.shopify.graphql.fulfillment.validateTrackingUpdateRequest

@@ -1,7 +1,7 @@
 package dropnext.dss
 
 import dropnext.dss.config.Config
-import dropnext.dss.lib.ktor.plugin.installMonolithWebhookAuthSecret
+import dropnext.dss.lib.ktor.plugin.installMonolithWebhookAuth
 import dropnext.dss.lib.ktor.installStatusPages
 import dropnext.dss.lib.ktor.installTraceId
 import dropnext.dss.lib.ktor.installJsonContentNegotiation
@@ -27,7 +27,7 @@ fun main() {
     installTraceId()
     installStatusPages()
     installJsonContentNegotiation()
-    installMonolithWebhookAuthSecret(deps.config.monolithWebhookAuthSecret)
+    installMonolithWebhookAuth(deps.config.monolithWebhookAuthSecret)
 
     routing {
       installDiagnosticsRoutes(handlers = deps.diagnosticsHandlers)

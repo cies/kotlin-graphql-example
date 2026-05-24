@@ -9,8 +9,8 @@ import dropnext.graphql.generated.getorderfordss.FulfillmentOrderLineItemConnect
 import dropnext.graphql.generated.getorderfordss.FulfillmentOrderLineItemEdge
 import dropnext.graphql.generated.getorderfordss.Order
 import dropnext.graphql.generated.getorderfordss.ProductVariant
-import dropnext.dss.lib.dto.Shipment
-import dropnext.dss.lib.dto.ShipmentLineItem
+import dropnext.dss.lib.monolith.dto.generated.Shipment
+import dropnext.dss.lib.monolith.dto.generated.ShipmentLineItem
 import dropnext.dss.lib.shopify.graphql.fulfillment.ShipmentMatchResult
 import dropnext.dss.lib.shopify.graphql.fulfillment.isOpenForFulfillment
 import dropnext.dss.lib.shopify.graphql.fulfillment.matchShipmentToFulfillmentOrders

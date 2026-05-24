@@ -28,9 +28,12 @@ class ArchitectureTest {
       val libKtor = Layer("lib/ktor", "dropnext.dss.lib.ktor..")
 
       // Define architecture assertions.
-      // Note: `lib/dto` (generated OpenAPI DTOs) is intentionally not a layer here — virtually
-      // every layer depends on it, so layer rules against `dropnext.dss.lib.dto..` would always
-      // fail. Keeping it out is exactly what justifies splitting the old `lib/dss` package.
+      // Note: generated OpenAPI DTOs live under `dropnext.dss.lib.monolith.dto.generated..`, which
+      // means any layer rule that forbids depending on `libMonolith` also forbids depending on the
+      // generated DTOs — which is impractical, because virtually every layer needs them. As a
+      // result, `libKtor` and `shopify` are allowed to depend on `libMonolith` (in practice they
+      // only touch the generated DTOs: `ErrorResponse`, `ProductStatus`, `ProductVariantItem`,
+      // `SelectedOption`). Stricter layers (`libJson`, `config`) still ban the dependency.
       // config + libMonolith may depend on lib/shopify for the `ShopDomain` value class (a
       // shared primitive). The rule above is intentionally less strict than for libJson/libKtor:
       // those are generic infra and have no business knowing about shops.
@@ -39,8 +42,8 @@ class ArchitectureTest {
       libShopify.doesNotDependOn(handler, routing, workflow, presentation)
       // Generic infrastructure libs must not depend on any application layer.
       libJson.doesNotDependOn(handler, routing, workflow, presentation, libShopify, libMonolith, shopify, config)
-      libKtor.doesNotDependOn(handler, routing, workflow, presentation, libShopify, libMonolith, shopify, config)
-      shopify.doesNotDependOn(handler, routing, workflow, presentation, libShopify, libMonolith)
+      libKtor.doesNotDependOn(handler, routing, workflow, presentation, libShopify, shopify, config)
+      shopify.doesNotDependOn(handler, routing, workflow, presentation, libShopify)
       workflow.doesNotDependOn(handler, routing, presentation) // workflows must not depend on HTTP/view layers
       routing.doesNotDependOn(workflow, presentation)          // routing wires handlers, not views directly
       // presentation is a pure view layer: data in, HTML string out. No HTTP, no orchestration.
