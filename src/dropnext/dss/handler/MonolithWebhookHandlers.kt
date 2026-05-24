@@ -7,7 +7,6 @@ import dropnext.dss.lib.dto.SyncShipmentsWithFulfillmentsRequest
 import dropnext.dss.lib.dto.TrackingUpdateRequest
 import dropnext.dss.lib.dto.UpdateStoreApiKeyRequest
 import dropnext.dss.lib.shopify.graphql.fulfillment.FulfillmentResult
-import dropnext.dss.lib.shopify.graphql.fulfillment.FulfillmentService
 import dropnext.dss.lib.shopify.graphql.fulfillment.RequestValidation
 import dropnext.dss.lib.shopify.graphql.fulfillment.toDssError
 import dropnext.dss.lib.shopify.graphql.fulfillment.validateSyncShipmentsRequest
@@ -17,6 +16,7 @@ import dropnext.dss.lib.ktor.receiveOr400
 import dropnext.dss.lib.ktor.respondError
 import dropnext.dss.lib.monolith.MonolithService
 import dropnext.dss.lib.monolith.ShopAccessTokenCache
+import dropnext.dss.lib.monolith.ShopifyServiceFactory
 import dropnext.dss.lib.monolith.StoreApiKeyResult
 import dropnext.dss.lib.monolith.logMonolithFailure
 import dropnext.dss.lib.shopify.ShopDomain
@@ -32,12 +32,12 @@ private val log = KotlinLogging.logger {}
  * verification is enforced by the [dropnext.dss.lib.ktor.plugin.requireDssInternalSecret] route guard
  * in [dropnext.dss.routing.installDssRoutes], so these methods can focus on the business logic.
  *
- * Per-shop access-token resolution + Graphql wiring live inside [FulfillmentService] and the
- * [dropnext.dss.lib.monolith.ShopifyServiceFactory] it delegates to — handlers never see those
- * concerns directly.
+ * Per-shop access-token resolution + Graphql wiring live inside [ShopifyServiceFactory]; handlers
+ * call [ShopifyServiceFactory.forShop] and respond with [DssError.MissingShopifyAdminToken] when
+ * no Admin token is available.
  */
 class MonolithWebhookHandlers(
-  private val fulfillmentService: FulfillmentService,
+  private val shopifyServiceFactory: ShopifyServiceFactory,
   private val monolithService: MonolithService,
   private val shopTokenCache: ShopAccessTokenCache,
 ) {
@@ -45,8 +45,12 @@ class MonolithWebhookHandlers(
     val body = call.receiveOr400<SyncShipmentsWithFulfillmentsRequest>() ?: return
     if (!call.validateOrRespond(validateSyncShipmentsRequest(body))) return
     val shop = call.normalizeShopOrRespond(body.shopifySubdomain) ?: return
+    val shopify = shopifyServiceFactory.forShop(shop) ?: run {
+      call.respondError(DssError.MissingShopifyAdminToken)
+      return
+    }
 
-    when (val result = fulfillmentService.syncShipmentsWithFulfillments(shop, body)) {
+    when (val result = shopify.syncShipmentsWithFulfillments(body)) {
       is FulfillmentResult.Ok -> call.respond(result.value)
       is FulfillmentResult.Err -> {
         val mapped = result.toDssError()
@@ -60,8 +64,12 @@ class MonolithWebhookHandlers(
     val body = call.receiveOr400<TrackingUpdateRequest>() ?: return
     if (!call.validateOrRespond(validateTrackingUpdateRequest(body))) return
     val shop = call.normalizeShopOrRespond(body.shopifySubdomain) ?: return
+    val shopify = shopifyServiceFactory.forShop(shop) ?: run {
+      call.respondError(DssError.MissingShopifyAdminToken)
+      return
+    }
 
-    when (val result = fulfillmentService.createTrackingEvent(shop, body)) {
+    when (val result = shopify.createTrackingEvent(body)) {
       is FulfillmentResult.Ok -> call.respond(result.value)
       is FulfillmentResult.Err -> {
         val mapped = result.toDssError()

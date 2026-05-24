@@ -5,11 +5,8 @@ import dropnext.dss.config.Config
 import dropnext.dss.config.MonolithConfig
 import dropnext.dss.config.ShopifyConfig
 import dropnext.dss.config.WebhookConfig
-import dropnext.dss.lib.monolith.MonolithService
 import dropnext.dss.lib.monolith.ShopAccessTokenCache
-import dropnext.dss.lib.monolith.ShopifyServiceFactory
 import dropnext.dss.lib.shopify.ShopDomain
-import io.ktor.client.HttpClient
 
 fun testShopifyConfig(
   appClientSecret: String = "test-secret",
@@ -68,21 +65,3 @@ fun testDssAppConfig(
 
 fun testShopTokens(initial: Map<ShopDomain, String> = emptyMap()): ShopAccessTokenCache =
   ShopAccessTokenCache(initial)
-
-/**
- * Single test-side construction point for [ShopifyServiceFactory]. Tests should not reach into
- * the factory's private collaborators (the internal `GraphqlClientCache`, etc.) — when the
- * factory's ctor shape changes, only this helper needs an update.
- */
-fun testShopifyServiceFactory(
-  httpClient: HttpClient,
-  monolith: MonolithService = FakeMonolithService(),
-  tokens: ShopAccessTokenCache = ShopAccessTokenCache(),
-  apiVersion: String = "2026-04",
-): ShopifyServiceFactory =
-  ShopifyServiceFactory(
-    httpClient = httpClient,
-    tokens = tokens,
-    monolith = monolith,
-    apiVersion = apiVersion,
-  )

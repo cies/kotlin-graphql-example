@@ -3,7 +3,7 @@ package dropnext.dss.lib.monolith
 import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
 import dropnext.dss.lib.shopify.ShopDomain
 import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlService
-import io.ktor.client.*
+import io.ktor.client.HttpClient
 import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
 

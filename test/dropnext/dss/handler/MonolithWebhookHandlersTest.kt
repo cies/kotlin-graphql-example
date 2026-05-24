@@ -3,17 +3,13 @@ package dropnext.dss.handler
 import dropnext.dss.path.DssPaths
 import dropnext.dss.lib.monolith.MonolithService
 import dropnext.dss.lib.monolith.ShopAccessTokenCache
+import dropnext.dss.lib.monolith.ShopifyServiceFactory
 import dropnext.dss.lib.dto.PutShopAccessTokenRequest
 import dropnext.dss.lib.dto.PutShopAccessTokenResponse
 import dropnext.dss.lib.dto.Shipment
 import dropnext.dss.lib.dto.ShipmentLineItem
 import dropnext.dss.lib.dto.SyncShipmentsWithFulfillmentsRequest
-import dropnext.dss.lib.dto.SyncShipmentsWithFulfillmentsResponse
 import dropnext.dss.lib.dto.TrackingUpdateRequest
-import dropnext.dss.lib.dto.TrackingUpdateResponse
-import dropnext.dss.lib.shopify.graphql.fulfillment.FulfillmentResult
-import dropnext.dss.lib.shopify.graphql.fulfillment.FulfillmentService
-import dropnext.dss.lib.shopify.graphql.fulfillment.SandboxFulfillmentService
 import dropnext.dss.lib.json.AppJson
 import dropnext.dss.lib.ktor.plugin.installDssInternalSecretAuth
 import dropnext.dss.lib.ktor.installJsonContentNegotiation
@@ -22,6 +18,7 @@ import dropnext.dss.lib.shopify.ShopDomain
 import dropnext.dss.testing.fake.FakeMonolithService
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation as ClientContentNegotiation
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -37,16 +34,40 @@ import io.ktor.server.routing.routing
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import kotlin.test.Test
+import org.junit.jupiter.api.AfterAll
+import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.TestInstance
 
 
 private val acmeShop = ShopDomain.parse("acme.myshopify.com")!!
 
 
-class MonolithShopifyWebhookHandlersTest {
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+class MonolithWebhookHandlersTest {
+
+  /**
+   * Single shared HTTP client passed into [ShopifyServiceFactory]. None of these tests actually
+   * hit Shopify (the factory short-circuits to `null` on missing token), so the client is just
+   * a structural dependency.
+   */
+  private lateinit var httpClient: HttpClient
+
+  @BeforeAll
+  fun setUp() {
+    httpClient = HttpClient(OkHttp)
+  }
+
+  @AfterAll
+  fun tearDown() {
+    httpClient.close()
+  }
+
+  // ---------- internal-secret gate ----------
 
   @Test
-  fun `sync-shipments returns 401 when internal secret is required and not provided`() =
-    runDssApp(handlers(), secret = "y".repeat(32)) { client ->
+  fun `sync-shipments returns 401 when internal secret is required and not provided`() {
+    val secret = "y".repeat(32)
+    runDssApp(handlers(), secret = secret) { client ->
       val r = client.post(DssPaths.SYNC_SHIPMENTS_WITH_FULFILLMENTS) {
         contentType(ContentType.Application.Json)
         setBody(validSyncRequest())
@@ -54,9 +75,15 @@ class MonolithShopifyWebhookHandlersTest {
       assert(r.status == HttpStatusCode.Unauthorized)
       assert("unauthorized" in r.bodyAsText())
     }
+  }
 
+  /**
+   * Verifies the gate passes when the secret matches: the response is still 401, but with the
+   * downstream missing-token reason — proving the request reached the handler. If the gate had
+   * failed, the body would say "unauthorized" instead.
+   */
   @Test
-  fun `sync-shipments accepts when internal secret matches`() {
+  fun `sync-shipments reaches handler when internal secret matches`() {
     val secret = "y".repeat(32)
     runDssApp(handlers(), secret = secret) { client ->
       val r = client.post(DssPaths.SYNC_SHIPMENTS_WITH_FULFILLMENTS) {
@@ -64,7 +91,8 @@ class MonolithShopifyWebhookHandlersTest {
         contentType(ContentType.Application.Json)
         setBody(validSyncRequest())
       }
-      assert(r.status == HttpStatusCode.OK)
+      assert(r.status == HttpStatusCode.Unauthorized)
+      assert("missing Shopify Admin token" in r.bodyAsText())
     }
   }
 
@@ -100,55 +128,26 @@ class MonolithShopifyWebhookHandlersTest {
     assert("invalid request body" in r.bodyAsText())
   }
 
-  // ---------- sandbox short-circuit ----------
-
-  @Test
-  fun `sync-shipments returns stub response when sandbox FulfillmentService is wired`() =
-    runDssApp(handlers()) { client ->
-      val r = client.post(DssPaths.SYNC_SHIPMENTS_WITH_FULFILLMENTS) {
-        contentType(ContentType.Application.Json)
-        setBody(validSyncRequest())
-      }
-      assert(r.status == HttpStatusCode.OK)
-      val resp = r.body<SyncShipmentsWithFulfillmentsResponse>()
-      assert(resp.newFulfillmentIds.single() == SandboxFulfillmentService.SANDBOX_FULFILLMENT_ID)
-    }
-
-  @Test
-  fun `tracking-update returns stub response when sandbox FulfillmentService is wired`() =
-    runDssApp(handlers()) { client ->
-      val r = client.post(DssPaths.TRACKING_UPDATE) {
-        contentType(ContentType.Application.Json)
-        setBody(validTrackingRequest())
-      }
-      assert(r.status == HttpStatusCode.OK)
-      val resp = r.body<TrackingUpdateResponse>()
-      assert(resp.fulfillmentEventId == SandboxFulfillmentService.SANDBOX_FULFILLMENT_ID)
-    }
-
   // ---------- missing token ----------
 
   @Test
-  fun `sync-shipments returns 401 when FulfillmentService reports missing token`() {
-    val missingTokenService = object : FulfillmentService {
-      override suspend fun syncShipmentsWithFulfillments(
-        shop: ShopDomain,
-        payload: SyncShipmentsWithFulfillmentsRequest,
-      ) = FulfillmentResult.Err.MissingToken
+  fun `sync-shipments returns 401 when shop has no Admin token`() = runDssApp(handlers()) { client ->
+    val r = client.post(DssPaths.SYNC_SHIPMENTS_WITH_FULFILLMENTS) {
+      contentType(ContentType.Application.Json)
+      setBody(validSyncRequest())
+    }
+    assert(r.status == HttpStatusCode.Unauthorized)
+    assert("missing Shopify Admin token" in r.bodyAsText())
+  }
 
-      override suspend fun createTrackingEvent(
-        shop: ShopDomain,
-        payload: TrackingUpdateRequest,
-      ) = FulfillmentResult.Err.MissingToken
+  @Test
+  fun `tracking-update returns 401 when shop has no Admin token`() = runDssApp(handlers()) { client ->
+    val r = client.post(DssPaths.TRACKING_UPDATE) {
+      contentType(ContentType.Application.Json)
+      setBody(validTrackingRequest())
     }
-    runDssApp(handlers(fulfillmentService = missingTokenService)) { client ->
-      val r = client.post(DssPaths.SYNC_SHIPMENTS_WITH_FULFILLMENTS) {
-        contentType(ContentType.Application.Json)
-        setBody(validSyncRequest())
-      }
-      assert(r.status == HttpStatusCode.Unauthorized)
-      assert("missing Shopify Admin token" in r.bodyAsText())
-    }
+    assert(r.status == HttpStatusCode.Unauthorized)
+    assert("missing Shopify Admin token" in r.bodyAsText())
   }
 
   // ---------- handlePutStoreApiKey ----------
@@ -277,14 +276,22 @@ class MonolithShopifyWebhookHandlersTest {
     routing { installDssRoutes(handlers) }
   }
 
-  /** Default handlers — [SandboxFulfillmentService] means tests don't need a real Graphql server. */
+  /**
+   * Default handlers: empty token cache + monolith that 404s on `getStore`. Any
+   * `forShop` call therefore returns `null`, mapping to a 401 "missing Shopify Admin token".
+   * Tests that need a different shape pass their own [monolith] / [shopTokens].
+   */
   private fun handlers(
-    monolith: MonolithService = FakeMonolithService(),
-    shopTokens: ShopAccessTokenCache = ShopAccessTokenCache(mapOf(acmeShop to "shpat_env_token")),
-    fulfillmentService: FulfillmentService = SandboxFulfillmentService(),
+    monolith: MonolithService = FakeMonolithService().apply { getStoreReturnsNotFound = true },
+    shopTokens: ShopAccessTokenCache = ShopAccessTokenCache(),
   ): MonolithWebhookHandlers =
     MonolithWebhookHandlers(
-      fulfillmentService = fulfillmentService,
+      shopifyServiceFactory = ShopifyServiceFactory(
+        httpClient = httpClient,
+        tokens = shopTokens,
+        monolith = monolith,
+        apiVersion = "2026-04",
+      ),
       monolithService = monolith,
       shopTokenCache = shopTokens,
     )

@@ -69,15 +69,6 @@ See also [`docs/openapi/dss-api.yaml`](openapi/dss-api.yaml).
 2. Expect **HTTP 200** and `fulfillment_event_id`.
 3. Shopify fulfillment timeline shows the event (e.g. in transit).
 
-## Local sandbox (no real Shopify)
-
-```powershell
-$env:DSS_SANDBOX_FAKE_SHOPIFY="true"
-.\gradlew.bat run
-```
-
-POST `/sync-shipments-with-fulfillments` with the step B JSON → fake `new_fulfillment_ids`. POST `/tracking-update` with step C JSON → fake `fulfillment_event_id`.
-
 ## Operational notes
 
 - Each shipment sync **cancels all existing fulfillments** on the order, then recreates from the payload (destructive resync by design).

@@ -1,7 +1,8 @@
 package dropnext.dss.handler
 
+import dropnext.dss.dssDependencies
 import dropnext.dss.lib.monolith.ShopAccessTokenCache
-import dropnext.dss.lib.shopify.oauth.ShopifyOAuthClient
+import dropnext.dss.lib.shopify.oauth.ShopifyOAuthService
 import dropnext.dss.path.DssPaths
 import dropnext.dss.lib.shopify.ShopDomain
 import dropnext.dss.testing.fake.FakeMonolithService
@@ -9,7 +10,6 @@ import dropnext.dss.testing.fake.FakeShopifyGraphqlServer
 import dropnext.dss.testing.fake.shopifyRewritingHttpClient
 import dropnext.dss.testing.fake.testDssAppConfig
 import dropnext.dss.testing.fake.testShopifyConfig
-import dropnext.dss.testing.fake.testShopifyServiceFactory
 import dropnext.graphql.generated.GetWebhookSubscriptions
 import dropnext.graphql.generated.ShopIdentity
 import dropnext.graphql.generated.SyncProductsPage
@@ -209,17 +209,18 @@ class OAuthHandlersTest {
       val fakeMonolith = FakeMonolithService()
       val shopifyConfig = testShopifyConfig(appClientSecret = secret)
       val dssConfig = testDssAppConfig(shopify = shopifyConfig)
-      val factory = testShopifyServiceFactory(
+      current = dssDependencies(
+        config = dssConfig,
         httpClient = rewritingClient,
-        monolith = fakeMonolith,
-        tokens = tokens,
-        apiVersion = shopifyConfig.apiVersion,
-      )
-      val oauthClient = ShopifyOAuthClient(rewritingClient, shopifyConfig)
-      current = OAuthHandlers(dssConfig, oauthClient, factory, fakeMonolith, tokens)
+        monolithService = fakeMonolith,
+        shopTokens = tokens,
+      ).oauthHandlers
 
+      // The test signs a state with the same secret the handler will verify against, so it
+      // builds its own [ShopifyOAuthClient] from the same config (one extra line is cheaper
+      // than exposing the handler's internal collaborator).
       val shopDomain = ShopDomain.parse(shop)!!
-      val state = oauthClient.signedState(shopDomain)
+      val state = ShopifyOAuthService(rewritingClient, shopifyConfig).signedState(shopDomain)
       val code = "abc-code"
       val query = Parameters.build {
         append("shop", shop)
@@ -256,20 +257,11 @@ class OAuthHandlersTest {
 
   // ---------- helpers ----------
 
-  private fun handlers(): OAuthHandlers {
-    val shopifyConfig = testShopifyConfig(appClientSecret = "oauth-test-secret")
-    val dssConfig = testDssAppConfig(shopify = shopifyConfig)
-    val tokens = ShopAccessTokenCache()
-    val monolith = FakeMonolithService()
-    val factory = testShopifyServiceFactory(
-      httpClient = client,
-      monolith = monolith,
-      tokens = tokens,
-      apiVersion = shopifyConfig.apiVersion,
-    )
-    val oauthClient = ShopifyOAuthClient(client, shopifyConfig)
-    return OAuthHandlers(dssConfig, oauthClient, factory, monolith, tokens)
-  }
+  private fun handlers(): OAuthHandlers = dssDependencies(
+    config = testDssAppConfig(shopify = testShopifyConfig(appClientSecret = "oauth-test-secret")),
+    httpClient = client,
+    monolithService = FakeMonolithService(),
+  ).oauthHandlers
 
   private fun hexHmac(secret: String, message: String): String {
     val mac = Mac.getInstance("HmacSHA256")

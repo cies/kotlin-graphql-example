@@ -8,6 +8,7 @@ import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
 
+// TODO(cies): Make this a proper service class like the others that takes the clientSecret in the ctor.
 object ShopifySignatures {
   fun verifyOAuthCallback(params: Parameters, clientSecret: String, hmacHex: String): Boolean {
     // Shopify: remove hmac/signature, sort by key, join with "&" as in query string (see OAuth docs).
@@ -41,8 +42,7 @@ object ShopifySignatures {
   private fun hmacSha256Hex(secret: String, message: String): String {
     val mac = Mac.getInstance("HmacSHA256")
     mac.init(SecretKeySpec(secret.toByteArray(StandardCharsets.UTF_8), "HmacSHA256"))
-    return mac.doFinal(message.toByteArray(StandardCharsets.UTF_8)).joinToString("") { b ->
-      "%02x".format(b)
-    }
+    return mac.doFinal(message.toByteArray(StandardCharsets.UTF_8))
+      .joinToString("") { b -> "%02x".format(b) }
   }
 }

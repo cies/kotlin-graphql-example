@@ -10,7 +10,7 @@ import dropnext.dss.lib.monolith.ShopAccessTokenCache
 import dropnext.dss.lib.monolith.StoreApiKeyResult
 import dropnext.dss.lib.monolith.logMonolithFailure
 import dropnext.dss.lib.monolith.ShopifyServiceFactory
-import dropnext.dss.lib.shopify.oauth.ShopifyOAuthClient
+import dropnext.dss.lib.shopify.oauth.ShopifyOAuthService
 import dropnext.dss.lib.shopify.webhook.ShopifySignatures
 import dropnext.dss.path.DssPaths
 import dropnext.dss.presentation.renderOAuthInstallPage
@@ -32,7 +32,7 @@ private val log = KotlinLogging.logger {}
 /** Handlers for the Shopify install / OAuth-callback flow. */
 class OAuthHandlers(
   private val dssConfig: Config,
-  private val oauthClient: ShopifyOAuthClient,
+  private val oauthClient: ShopifyOAuthService,
   private val shopifyServiceFactory: ShopifyServiceFactory,
   private val monolithService: MonolithService,
   private val shopTokens: ShopAccessTokenCache,

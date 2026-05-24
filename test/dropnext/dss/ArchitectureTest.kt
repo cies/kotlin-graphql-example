@@ -31,9 +31,11 @@ class ArchitectureTest {
       // Note: `lib/dto` (generated OpenAPI DTOs) is intentionally not a layer here — virtually
       // every layer depends on it, so layer rules against `dropnext.dss.lib.dto..` would always
       // fail. Keeping it out is exactly what justifies splitting the old `lib/dss` package.
-      config.doesNotDependOn(handler, routing, workflow, presentation, libShopify, libMonolith)
-      // (allowed: config can depend on shopify for `ShopDomain` — a shared helper)
-      libMonolith.doesNotDependOn(handler, routing, workflow, presentation, libShopify)
+      // config + libMonolith may depend on lib/shopify for the `ShopDomain` value class (a
+      // shared primitive). The rule above is intentionally less strict than for libJson/libKtor:
+      // those are generic infra and have no business knowing about shops.
+      config.doesNotDependOn(handler, routing, workflow, presentation, libMonolith)
+      libMonolith.doesNotDependOn(handler, routing, workflow, presentation)
       libShopify.doesNotDependOn(handler, routing, workflow, presentation)
       // Generic infrastructure libs must not depend on any application layer.
       libJson.doesNotDependOn(handler, routing, workflow, presentation, libShopify, libMonolith, shopify, config)
@@ -319,8 +321,8 @@ class ArchitectureTest {
     // coverage of MonolithOrderSync.kt would live in a separate MonolithOrderSyncTest.kt.
     "/test/dropnext/dss/workflow/WebhookMonolithSyncTest.kt",
     // Webhook-flavored variant of ShopDomainsTest — covers shop-domain handling on the inbound
-    // webhook path specifically, with no single matching shopify/ source file.
-    "/test/dropnext/dss/shopify/ShopDomainsWebhookTest.kt",
+    // webhook path specifically, with no single matching lib/shopify/ source file.
+    "/test/dropnext/dss/lib/shopify/ShopDomainsWebhookTest.kt",
     // Tests the trace-id MDC interceptor that lives inside `lib/ktor/plugins.kt` alongside the
     // other Ktor plugin installers — no dedicated `Tracing.kt` source file.
     "/test/dropnext/dss/lib/ktor/TracingTest.kt",

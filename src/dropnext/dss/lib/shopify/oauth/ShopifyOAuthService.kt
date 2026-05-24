@@ -21,14 +21,8 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 
-@Serializable
-data class OAuthAccessTokenResponse(
-  @SerialName("access_token")
-  val accessToken: String,
-
-  @SerialName("scope")
-  val scope: String,
-)
+/** TTL for the OAuth `state` parameter. Five minutes is plenty for a single installation round-trip. */
+private const val OAUTH_STATE_TTL_SECONDS = 300L
 
 /**
  * Per-app Shopify OAuth client. Encapsulates the three pre-token OAuth operations the install
@@ -43,7 +37,7 @@ data class OAuthAccessTokenResponse(
  * Stateless aside from the injected [HttpClient] and [ShopifyConfig], so a single instance is
  * safe to share across requests.
  */
-class ShopifyOAuthClient(
+class ShopifyOAuthService(
   private val httpClient: HttpClient,
   private val config: ShopifyConfig,
 ) {
@@ -125,10 +119,9 @@ class ShopifyOAuthClient(
   }
 
   companion object {
-    /** TTL for the OAuth `state` parameter. Five minutes is plenty for a single install round-trip. */
-    const val OAUTH_STATE_TTL_SECONDS = 300L
 
     /** Returns 32 hex characters for use as the legacy unsigned OAuth `state` parameter (tests only). */
+    // TODO: move this to a fake? (create an OAuthService interface that this class implements first)
     fun randomState(): String {
       val bytes = ByteArray(16)
       SecureRandom().nextBytes(bytes)
@@ -147,4 +140,13 @@ private data class OAuthAccessTokenRequest(
 
   @SerialName("code")
   val code: String,
+)
+
+@Serializable
+data class OAuthAccessTokenResponse(
+  @SerialName("access_token")
+  val accessToken: String,
+
+  @SerialName("scope")
+  val scope: String,
 )

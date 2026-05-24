@@ -1,5 +1,6 @@
 package dropnext.dss.handler
 
+import dropnext.dss.dssDependencies
 import dropnext.dss.lib.monolith.MonolithService
 import dropnext.dss.lib.monolith.ShopAccessTokenCache
 import dropnext.dss.path.DssPaths
@@ -9,7 +10,6 @@ import dropnext.dss.testing.fake.FakeShopifyGraphqlServer
 import dropnext.dss.testing.fake.shopifyRewritingHttpClient
 import dropnext.dss.testing.fake.testDssAppConfig
 import dropnext.dss.testing.fake.testShopifyConfig
-import dropnext.dss.testing.fake.testShopifyServiceFactory
 import dropnext.dss.workflow.minimalOrder
 import dropnext.graphql.generated.GetOrderForDss
 import io.ktor.client.HttpClient
@@ -274,20 +274,15 @@ class ShopifyWebhookHandlersTest {
     tokens: Map<ShopDomain, String>,
     httpClient: HttpClient,
     syncOnUpdated: Boolean = false,
-  ): ShopifyWebhookHandlers {
-    val dssConfig = testDssAppConfig(
+  ): ShopifyWebhookHandlers = dssDependencies(
+    config = testDssAppConfig(
       shopify = testShopifyConfig(appClientSecret = secret),
       syncOrderOnUpdated = syncOnUpdated,
-    )
-    val shopTokens = ShopAccessTokenCache(tokens)
-    val factory = testShopifyServiceFactory(
-      httpClient = httpClient,
-      monolith = monolith,
-      tokens = shopTokens,
-      apiVersion = dssConfig.shopify.apiVersion,
-    )
-    return ShopifyWebhookHandlers(dssConfig, factory, monolith)
-  }
+    ),
+    httpClient = httpClient,
+    monolithService = monolith,
+    shopTokens = ShopAccessTokenCache(tokens),
+  ).shopifyWebhookHandlers
 
   private fun base64HmacSha256(secret: String, body: ByteArray): String {
     val mac = Mac.getInstance("HmacSHA256")

@@ -86,7 +86,7 @@ See [docs/setup-intellij-idea.md](./docs/setup-intellij-idea.md) for IntelliJ ID
    ```
 
 4. Point your browser to `http://localhost:{PORT}/install?shop=your-dev-store.myshopify.com` to start the OAuth flow.
-5. Optional: set `ENABLE_TEST_HARNESS=true` and open `/dev/test-harness` for an interactive page that hits DSS/Demo routes against a sandbox shop (no real Shopify calls when `DSS_SANDBOX_FAKE_SHOPIFY=true`).
+5. Optional: set `ENABLE_TEST_HARNESS=true` and open `/dev/test-harness` for an interactive page that hits DSS/Demo routes against a sandbox shop (the `/demo/*` routes skip real Shopify HTTP when `DSS_SANDBOX_FAKE_SHOPIFY=true`).
 
 
 ### Build deployable containers
@@ -231,7 +231,7 @@ Unhandled server errors return a generic message; details stay in server logs on
 | `ENABLE_TEST_HARNESS` | no | Set `true` for `/dev/test-harness` and **/demo/* routes**. With harness on, a default fake token is merged for `SANDBOX_SHOP` unless `SANDBOX_ACCESS_TOKEN` is set. |
 | `SANDBOX_SHOP` | no | Short handle merged into the token map when the harness is on (default `harness-sandbox`). |
 | `SANDBOX_ACCESS_TOKEN` | no | Optional real dev-store Admin token for that sandbox shop; if unset with harness on, a **non-production placeholder** is used. |
-| `DSS_SANDBOX_FAKE_SHOPIFY` | no | Only with **`ENABLE_TEST_HARNESS=true`**. If `true`, sync/tracking/demo **skip real Shopify HTTP** and return stub **200** JSON/text so the test page does not hit 500/Graphql throws. Use for local UI checks; never in production. |
+| `DSS_SANDBOX_FAKE_SHOPIFY` | no | Only with **`ENABLE_TEST_HARNESS=true`**. If `true`, the `/demo/*` routes **skip real Shopify HTTP** and return stub **200** JSON/text so the test page does not hit 500/Graphql throws. Use for local UI checks; never in production. |
 
 Legacy compatibility: `SHOPIFY_API_KEY` and `SHOPIFY_API_SECRET` are still accepted as fallbacks when the new `SHOPIFY_APP_CLIENT_ID` / `SHOPIFY_APP_CLIENT_SECRET` vars are not set.
 

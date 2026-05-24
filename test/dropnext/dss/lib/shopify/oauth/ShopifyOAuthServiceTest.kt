@@ -21,10 +21,10 @@ private val testConfig = ShopifyConfig(
 private val shop = ShopDomain.parse("acme.myshopify.com")!!
 private val now = Instant.parse("2026-05-22T12:00:00Z")
 
-class ShopifyOAuthClientTest {
+class ShopifyOAuthServiceTest {
 
   private val httpClient = HttpClient(OkHttp)
-  private val client = ShopifyOAuthClient(httpClient, testConfig)
+  private val client = ShopifyOAuthService(httpClient, testConfig)
 
   // ---------- authorizeUrl ----------
 
@@ -46,14 +46,14 @@ class ShopifyOAuthClientTest {
 
   @Test
   fun `randomState returns 32 hex chars`() {
-    val state = ShopifyOAuthClient.randomState()
+    val state = ShopifyOAuthService.randomState()
     assert(state.length == 32)
     assert(state.all { it in '0'..'9' || it in 'a'..'f' })
   }
 
   @Test
   fun `randomState returns different values across calls`() {
-    assert(ShopifyOAuthClient.randomState() != ShopifyOAuthClient.randomState())
+    assert(ShopifyOAuthService.randomState() != ShopifyOAuthService.randomState())
   }
 
   // ---------- signed state ----------
@@ -87,7 +87,7 @@ class ShopifyOAuthClientTest {
   fun `signedState rejects wrong secret`() {
     val state = client.signedState(shop, now)
     val otherConfig = testConfig.copy(appClientSecret = "different-secret")
-    val otherClient = ShopifyOAuthClient(httpClient, otherConfig)
+    val otherClient = ShopifyOAuthService(httpClient, otherConfig)
     assert(!otherClient.isSignedStateValid(state, shop, now))
   }
 
