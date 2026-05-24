@@ -1,7 +1,7 @@
 package dropnext.dss.handler
 
 import dropnext.dss.config.Config
-import dropnext.dss.path.DssPaths
+import dropnext.dss.path.Paths
 import dropnext.dss.lib.monolith.ShopAccessTokenCache
 import dropnext.dss.lib.ktor.DssError
 import dropnext.dss.lib.ktor.respondError
@@ -31,30 +31,30 @@ class DiagnosticsHandlers(
       API is running.
 
       --- Infrastructure / diagnostics ---
-        GET  ${DssPaths.INDEX.padEnd(26)}This index
-        GET  ${DssPaths.HEALTH.padEnd(26)}Liveness probe — returns "ok"
-        GET  ${DssPaths.API.padEnd(26)}JSON diagnostic info (config, URLs, issues)
-        GET  ${DssPaths.API_CHECK.padEnd(20)}?shop=  Readiness for a specific shop (token + feature flags)
-        GET  ${DssPaths.API_REDIRECT_URL.padEnd(26)}Full OAuth redirect URL
+        GET  ${Paths.INDEX.padEnd(26)}This index
+        GET  ${Paths.HEALTH.padEnd(26)}Liveness probe — returns "ok"
+        GET  ${Paths.API.padEnd(26)}JSON diagnostic info (config, URLs, issues)
+        GET  ${Paths.API_CHECK.padEnd(20)}?shop=  Readiness for a specific shop (token + feature flags)
+        GET  ${Paths.API_REDIRECT_URL.padEnd(26)}Full OAuth redirect URL
 
       --- Shopify OAuth ---
-        GET  ${DssPaths.INSTALL.padEnd(20)}?shop=  Start OAuth — redirects to Shopify authorize URL
+        GET  ${Paths.INSTALL.padEnd(20)}?shop=  Start OAuth — redirects to Shopify authorize URL
         GET  ${shopifyConfig.oauthRedirectPath.padEnd(26)}OAuth callback — code exchange, saves token, registers webhooks
 
       --- Webhooks ---
-        POST ${DssPaths.WEBHOOKS_SHOPIFY.padEnd(26)}Shopify webhook receiver (products/*, orders/*)
+        POST ${Paths.WEBHOOKS_SHOPIFY.padEnd(26)}Shopify webhook receiver (products/*, orders/*)
 
       --- DSS Internal API (X-DSS-Internal-Secret header required if configured) ---
-        PUT  ${DssPaths.STORES_API_KEY.padEnd(40)} Set Shopify Admin token (see repo openapi.json)
-        POST ${DssPaths.TRACKING_UPDATE.padEnd(40)} Monolith webhook: SyncShipmentsWithFulfillmentsRequest → sync Shopify fulfillments
-        POST ${DssPaths.SYNC_SHIPMENTS_WITH_FULFILLMENTS.padEnd(40)} Monolith webhook: TrackingUpdateRequest → Shopify FulfillmentEvent
-        POST ${DssPaths.TRACKING_UPDATES.padEnd(40)} Same TrackingUpdate body as .../sync-shipments-with-fulfillments (compat)
+        PUT  ${Paths.STORES_API_KEY.padEnd(40)} Set Shopify Admin token (see repo openapi.json)
+        POST ${Paths.TRACKING_UPDATE.padEnd(40)} Monolith webhook: SyncShipmentsWithFulfillmentsRequest → sync Shopify fulfillments
+        POST ${Paths.SYNC_SHIPMENTS_WITH_FULFILLMENTS.padEnd(40)} Monolith webhook: TrackingUpdateRequest → Shopify FulfillmentEvent
+        POST ${Paths.TRACKING_UPDATES.padEnd(40)} Same TrackingUpdate body as .../sync-shipments-with-fulfillments (compat)
 
       --- Demo routes$demoNote ---
-        GET  ${DssPaths.DEMO_PRODUCTS.padEnd(28)}?shop=     List products via Shopify Graphql
-        GET  ${DssPaths.DEMO_ORDER.padEnd(28)}?shop=&id=  Load a single order by GID or numeric ID
-        POST ${DssPaths.DEMO_FULFILLMENT_CREATE.padEnd(40)} Create a fulfillment with tracking
-        POST ${DssPaths.DEMO_FULFILLMENT_TRACKING.padEnd(40)} Update fulfillment tracking info
+        GET  ${Paths.DEMO_PRODUCTS.padEnd(28)}?shop=     List products via Shopify Graphql
+        GET  ${Paths.DEMO_ORDER.padEnd(28)}?shop=&id=  Load a single order by GID or numeric ID
+        POST ${Paths.DEMO_FULFILLMENT_CREATE.padEnd(40)} Create a fulfillment with tracking
+        POST ${Paths.DEMO_FULFILLMENT_TRACKING.padEnd(40)} Update fulfillment tracking info
       """.trimIndent(),
       ContentType.Text.Plain,
       HttpStatusCode.OK,

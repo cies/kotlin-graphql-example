@@ -5,7 +5,7 @@ package dropnext.dss.path
  * Outbound paths the DSS calls on Shopify (per-shop host, not the Graphql proxy).
  * Each helper builds a fully-qualified `https://{shop}/…` URL.
  */
-object ShopifyPaths {
+object OutBoundShopifyPaths {
   const val ADMIN_OAUTH_AUTHORIZE = "/admin/oauth/authorize"
   const val ADMIN_OAUTH_ACCESS_TOKEN = "/admin/oauth/access_token"
 

@@ -1,17 +1,16 @@
 package dropnext.dss
 
 import dropnext.dss.config.Config
-import dropnext.dss.lib.ktor.plugin.installDssInternalSecretAuth
-import dropnext.dss.lib.ktor.installDssStatusPages
-import dropnext.dss.lib.ktor.installDssTraceId
+import dropnext.dss.lib.ktor.plugin.installMonolithWebhookAuthSecret
+import dropnext.dss.lib.ktor.installStatusPages
+import dropnext.dss.lib.ktor.installTraceId
 import dropnext.dss.lib.ktor.installJsonContentNegotiation
 import dropnext.dss.routing.installDemoRoutes
 import dropnext.dss.routing.installDiagnosticsRoutes
-import dropnext.dss.routing.installDssRoutes
+import dropnext.dss.routing.installMonolithWebhookRoutes
 import dropnext.dss.routing.installOAuthRoutes
-import dropnext.dss.routing.installWebhookRoutes
+import dropnext.dss.routing.installShopifyWebhookRoutes
 import io.github.oshai.kotlinlogging.KotlinLogging
-import io.ktor.server.application.Application
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.routing.routing
@@ -21,11 +20,25 @@ private val log = KotlinLogging.logger {}
 
 fun main() {
   val config = Config.fromEnv()
-  logStartupSummary(config)
+  logConfigSummary(config)
 
   val deps = dssDependencies(config)
   val server = embeddedServer(CIO, port = config.shopify.serverPort, host = "0.0.0.0") {
-    dssModule(deps)
+    installTraceId()
+    installStatusPages()
+    installJsonContentNegotiation()
+    installMonolithWebhookAuthSecret(deps.config.monolithWebhookAuthSecret)
+
+    routing {
+      installDiagnosticsRoutes(handlers = deps.diagnosticsHandlers)
+      installOAuthRoutes(
+        handlers = deps.oauthHandlers,
+        oauthCallbackPath = deps.config.shopify.oauthRedirectPath,
+      )
+      installShopifyWebhookRoutes(handlers = deps.shopifyWebhookHandlers)
+      if (deps.config.dev.enableDemoRoutes) installDemoRoutes(handlers = deps.demoHandlers)
+      installMonolithWebhookRoutes(handlers = deps.monolithWebhookHandlers)
+    }
   }
 
   Runtime.getRuntime().addShutdownHook(Thread {
@@ -40,31 +53,10 @@ fun main() {
 }
 
 /**
- * The Ktor module — installs cross-cutting plugins then wires the route trees onto the [deps] graph.
- * Lives outside `main()` so production and test (`testApplication`) share one routing path.
- */
-fun Application.dssModule(deps: DssDependencies) {
-  installDssTraceId()
-  installDssStatusPages()
-  installJsonContentNegotiation()
-  installDssInternalSecretAuth(deps.config.dssInternalSecret)
-  routing {
-    installDiagnosticsRoutes(handlers = deps.diagnosticsHandlers)
-    installOAuthRoutes(
-      handlers = deps.oauthHandlers,
-      oauthCallbackPath = deps.config.shopify.oauthRedirectPath,
-    )
-    installWebhookRoutes(handlers = deps.shopifyWebhookHandlers)
-    if (deps.config.dev.enableDemoRoutes) installDemoRoutes(handlers = deps.demoHandlers)
-    installDssRoutes(handlers = deps.dssHandlers)
-  }
-}
-
-/**
  * Emits a compact summary of the effective runtime configuration at startup so operators can
  * verify env, container, and reverse-proxy expectations without diving into the code.
  */
-private fun logStartupSummary(config: Config) {
+private fun logConfigSummary(config: Config) {
   val shopify = config.shopify
   log.info {
     "[http] Listening on 0.0.0.0:${shopify.serverPort}; PUBLIC_BASE_URL=${shopify.publicBaseUrl} — " +

@@ -3,20 +3,18 @@ package dropnext.dss.handler
 import dropnext.dss.dssDependencies
 import dropnext.dss.lib.monolith.ShopAccessTokenCache
 import dropnext.dss.lib.shopify.oauth.ShopifyOAuthService
-import dropnext.dss.path.DssPaths
+import dropnext.dss.path.Paths
 import dropnext.dss.lib.shopify.ShopDomain
 import dropnext.dss.testing.fake.FakeMonolithService
 import dropnext.dss.testing.fake.FakeShopifyGraphqlServer
+import dropnext.dss.testing.fake.FakeShopifyGraphqlService
+import dropnext.dss.testing.fake.FakeShopifyGraphqlServiceFactory
+import dropnext.dss.testing.fake.okResponse
 import dropnext.dss.testing.fake.shopifyRewritingHttpClient
 import dropnext.dss.testing.fake.testDssAppConfig
 import dropnext.dss.testing.fake.testShopifyConfig
-import dropnext.graphql.generated.GetWebhookSubscriptions
 import dropnext.graphql.generated.ShopIdentity
-import dropnext.graphql.generated.SyncProductsPage
-import dropnext.graphql.generated.getwebhooksubscriptions.WebhookSubscriptionConnection
-import dropnext.graphql.generated.shopidentity.Shop
-import dropnext.graphql.generated.syncproductspage.PageInfo
-import dropnext.graphql.generated.syncproductspage.ProductConnection
+import dropnext.graphql.generated.shopidentity.Shop as ShopIdentityShop
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
@@ -57,12 +55,12 @@ class OAuthHandlersTest {
   fun startServer() {
     server = embeddedServer(CIO, port = 0) {
       routing {
-        get(DssPaths.INSTALL) {
+        get(Paths.INSTALL) {
           val h = current
           if (h == null) call.respondText("no handlers set", status = HttpStatusCode.InternalServerError)
           else h.handleInstall(call)
         }
-        get(DssPaths.DEFAULT_OAUTH_CALLBACK) {
+        get(Paths.DEFAULT_OAUTH_CALLBACK) {
           val h = current
           if (h == null) call.respondText("no handlers set", status = HttpStatusCode.InternalServerError)
           else h.handleOAuthCallback(call)
@@ -99,7 +97,7 @@ class OAuthHandlersTest {
   @Test
   fun `install returns 400 when shop query param is missing`() = runBlocking {
     current = handlers()
-    val r = client.get("$baseUrl${DssPaths.INSTALL}")
+    val r = client.get("$baseUrl${Paths.INSTALL}")
     assert(r.status == HttpStatusCode.BadRequest)
     assert("Missing shop" in r.bodyAsText())
   }
@@ -107,7 +105,7 @@ class OAuthHandlersTest {
   @Test
   fun `install returns 400 when shop is malformed`() = runBlocking {
     current = handlers()
-    val r = client.get("$baseUrl${DssPaths.INSTALL}?shop=!!invalid!!")
+    val r = client.get("$baseUrl${Paths.INSTALL}?shop=!!invalid!!")
     assert(r.status == HttpStatusCode.BadRequest)
     assert("Invalid shop" in r.bodyAsText())
   }
@@ -115,7 +113,7 @@ class OAuthHandlersTest {
   @Test
   fun `install redirects to Shopify authorize url for valid shop`() = runBlocking {
     current = handlers()
-    val r = client.get("$baseUrl${DssPaths.INSTALL}?shop=acme.myshopify.com")
+    val r = client.get("$baseUrl${Paths.INSTALL}?shop=acme.myshopify.com")
     assert(r.status == HttpStatusCode.Found)
     val location = r.headers["Location"]
     assert(location != null && location.startsWith("https://acme.myshopify.com/admin/oauth/authorize?"))
@@ -125,7 +123,7 @@ class OAuthHandlersTest {
   @Test
   fun `oauth callback returns 400 when hmac is missing`() = runBlocking {
     current = handlers()
-    val r = client.get("$baseUrl${DssPaths.DEFAULT_OAUTH_CALLBACK}?shop=acme.myshopify.com&code=c&state=s")
+    val r = client.get("$baseUrl${Paths.DEFAULT_OAUTH_CALLBACK}?shop=acme.myshopify.com&code=c&state=s")
     assert(r.status == HttpStatusCode.BadRequest)
     assert("Missing hmac" in r.bodyAsText())
   }
@@ -133,7 +131,7 @@ class OAuthHandlersTest {
   @Test
   fun `oauth callback returns 400 when shop is missing`() = runBlocking {
     current = handlers()
-    val r = client.get("$baseUrl${DssPaths.DEFAULT_OAUTH_CALLBACK}?hmac=x&code=c&state=s")
+    val r = client.get("$baseUrl${Paths.DEFAULT_OAUTH_CALLBACK}?hmac=x&code=c&state=s")
     assert(r.status == HttpStatusCode.BadRequest)
     assert("Missing shop" in r.bodyAsText())
   }
@@ -141,7 +139,7 @@ class OAuthHandlersTest {
   @Test
   fun `oauth callback returns 400 when shop is invalid`() = runBlocking {
     current = handlers()
-    val r = client.get("$baseUrl${DssPaths.DEFAULT_OAUTH_CALLBACK}?hmac=x&shop=!bad!&code=c&state=s")
+    val r = client.get("$baseUrl${Paths.DEFAULT_OAUTH_CALLBACK}?hmac=x&shop=!bad!&code=c&state=s")
     assert(r.status == HttpStatusCode.BadRequest)
     assert("Invalid shop" in r.bodyAsText())
   }
@@ -149,7 +147,7 @@ class OAuthHandlersTest {
   @Test
   fun `oauth callback returns 400 when state is missing`() = runBlocking {
     current = handlers()
-    val r = client.get("$baseUrl${DssPaths.DEFAULT_OAUTH_CALLBACK}?hmac=x&shop=acme.myshopify.com&code=c")
+    val r = client.get("$baseUrl${Paths.DEFAULT_OAUTH_CALLBACK}?hmac=x&shop=acme.myshopify.com&code=c")
     assert(r.status == HttpStatusCode.BadRequest)
     assert("Missing state" in r.bodyAsText())
   }
@@ -157,7 +155,7 @@ class OAuthHandlersTest {
   @Test
   fun `oauth callback returns 400 when code is missing`() = runBlocking {
     current = handlers()
-    val r = client.get("$baseUrl${DssPaths.DEFAULT_OAUTH_CALLBACK}?hmac=x&shop=acme.myshopify.com&state=s")
+    val r = client.get("$baseUrl${Paths.DEFAULT_OAUTH_CALLBACK}?hmac=x&shop=acme.myshopify.com&state=s")
     assert(r.status == HttpStatusCode.BadRequest)
     assert("Missing code" in r.bodyAsText())
   }
@@ -166,7 +164,7 @@ class OAuthHandlersTest {
   fun `oauth callback returns 403 when hmac is wrong`() = runBlocking {
     current = handlers()
     val r = client.get(
-      "$baseUrl${DssPaths.DEFAULT_OAUTH_CALLBACK}?hmac=0000&shop=acme.myshopify.com&code=c&state=s",
+      "$baseUrl${Paths.DEFAULT_OAUTH_CALLBACK}?hmac=0000&shop=acme.myshopify.com&code=c&state=s",
     )
     assert(r.status == HttpStatusCode.Forbidden)
     assert("Invalid HMAC" in r.bodyAsText())
@@ -176,37 +174,26 @@ class OAuthHandlersTest {
   fun `oauth callback happy path caches token and persists to monolith`() = runBlocking {
     val secret = "oauth-test-secret"
     val shop = "acme.myshopify.com"
-    val shopify = FakeShopifyGraphqlServer()
-    val shopifyPort = shopify.start()
-    val rewritingClient = shopifyRewritingHttpClient(shopifyPort)
+    val shopDomain = ShopDomain.parse(shop)!!
+    // [FakeShopifyGraphqlServer] is retained only to back the OAuth code-exchange POST
+    // (`ShopifyOAuthService` hits real HTTP). The post-OAuth Graphql traffic
+    // (`shopIdentity` / `syncProductsPage` / `registerStandardWebhooks`) goes through the
+    // in-memory [FakeShopifyGraphqlService] below — no more stubData(...) plumbing.
+    val oauthServer = FakeShopifyGraphqlServer()
+    val oauthPort = oauthServer.start()
+    val rewritingClient = shopifyRewritingHttpClient(oauthPort)
     try {
-      shopify.stubData(
-        "ShopIdentity",
-        ShopIdentity.Result(shop = Shop(id = "gid://shopify/Shop/9988", myshopifyDomain = shop)),
-        ShopIdentity.Result.serializer(),
-      )
-      shopify.stubData(
-        "SyncProductsPage",
-        SyncProductsPage.Result(
-          products = ProductConnection(
-            pageInfo = PageInfo(hasNextPage = false, endCursor = null),
-            edges = emptyList(),
-          ),
-        ),
-        SyncProductsPage.Result.serializer(),
-      )
-      shopify.stubData(
-        "GetWebhookSubscriptions",
-        GetWebhookSubscriptions.Result(webhookSubscriptions = WebhookSubscriptionConnection(nodes = emptyList())),
-        GetWebhookSubscriptions.Result.serializer(),
-      )
-      shopify.stubRaw(
-        "RegisterWebhook",
-        """{"data":{"webhookSubscriptionCreate":{"userErrors":[],"webhookSubscription":null}}}""",
-      )
-
       val tokens = ShopAccessTokenCache()
       val fakeMonolith = FakeMonolithService()
+      val fakeShopify = FakeShopifyGraphqlService(shopDomain).apply {
+        shopIdentityResponse = okResponse(
+          ShopIdentity.Result(
+            shop = ShopIdentityShop(id = "gid://shopify/Shop/9988", myshopifyDomain = shop),
+          ),
+        )
+        // syncProductsPageResponse default (empty page) and registerStandardWebhooksResult
+        // default (empty report) are fine here — the assertions don't touch them.
+      }
       val shopifyConfig = testShopifyConfig(appClientSecret = secret)
       val dssConfig = testDssAppConfig(shopify = shopifyConfig)
       current = dssDependencies(
@@ -214,12 +201,12 @@ class OAuthHandlersTest {
         httpClient = rewritingClient,
         monolithService = fakeMonolith,
         shopTokens = tokens,
+        shopifyGraphqlServiceFactory = FakeShopifyGraphqlServiceFactory(fakeShopify),
       ).oauthHandlers
 
       // The test signs a state with the same secret the handler will verify against, so it
-      // builds its own [ShopifyOAuthClient] from the same config (one extra line is cheaper
+      // builds its own [ShopifyOAuthService] from the same config (one extra line is cheaper
       // than exposing the handler's internal collaborator).
-      val shopDomain = ShopDomain.parse(shop)!!
       val state = ShopifyOAuthService(rewritingClient, shopifyConfig).signedState(shopDomain)
       val code = "abc-code"
       val query = Parameters.build {
@@ -233,7 +220,7 @@ class OAuthHandlersTest {
       val hmac = hexHmac(secret, canonical)
 
       val callbackUrl =
-        "$baseUrl${DssPaths.DEFAULT_OAUTH_CALLBACK}?${Parameters.build {
+        "$baseUrl${Paths.DEFAULT_OAUTH_CALLBACK}?${Parameters.build {
           appendAll(query)
           append("hmac", hmac)
         }.formUrlEncode()}"
@@ -247,11 +234,13 @@ class OAuthHandlersTest {
       assert(forwarded!!.shopifySubdomain == "acme")
       assert(forwarded.shopifyShopId == 9988L)
       assert(forwarded.apiKey == "shpat_fake_admin_token")
-      assert(shopify.oauthCalls.size == 1)
-      assert("\"code\":\"$code\"" in shopify.oauthCalls.single())
+      assert(oauthServer.oauthCalls.size == 1)
+      assert("\"code\":\"$code\"" in oauthServer.oauthCalls.single())
+      assert(fakeShopify.shopIdentityCallCount == 1)
+      assert(fakeShopify.registerStandardWebhooksCalls.size == 1)
     } finally {
       rewritingClient.close()
-      shopify.stop()
+      oauthServer.stop()
     }
   }
 

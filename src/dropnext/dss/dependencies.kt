@@ -10,10 +10,12 @@ import dropnext.dss.handler.ShopifyWebhookHandlers
 import dropnext.dss.lib.ktor.createMonolithHttpClient
 import dropnext.dss.lib.ktor.createSharedHttpClient
 import dropnext.dss.lib.monolith.HttpMonolithService
+import dropnext.dss.lib.monolith.HttpShopifyGraphqlServiceFactory
 import dropnext.dss.lib.monolith.MonolithService
 import dropnext.dss.lib.monolith.ShopAccessTokenCache
-import dropnext.dss.lib.monolith.ShopifyServiceFactory
+import dropnext.dss.lib.monolith.ShopifyGraphqlServiceFactory
 import dropnext.dss.lib.shopify.oauth.ShopifyOAuthService
+import dropnext.dss.lib.shopify.webhook.ShopifyHmacVerifierService
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.client.HttpClient
 
@@ -34,7 +36,7 @@ data class DssDependencies(
   val oauthHandlers: OAuthHandlers,
   val shopifyWebhookHandlers: ShopifyWebhookHandlers,
   val demoHandlers: DemoHandlers,
-  val dssHandlers: MonolithWebhookHandlers,
+  val monolithWebhookHandlers: MonolithWebhookHandlers,
 ) {
   /** Closes both HTTP clients with [runCatching] so a single failure doesn't skip the others. */
   fun close() {
@@ -50,7 +52,7 @@ data class DssDependencies(
  * production default; tests swap in fakes by overriding the corresponding parameter. Defaults
  * are evaluated lazily and can reference earlier parameters, so overriding [httpClient] (for
  * example, the rewriting client that pins Shopify calls to a fake server) flows through to the
- * [shopifyServiceFactory] and [oauthClient] defaults automatically.
+ * [shopifyGraphqlServiceFactory] and [oauthClient] defaults automatically.
  *
  * Example test setup:
  * ```
@@ -76,27 +78,38 @@ fun dssDependencies(
     apiKey = config.monolith.apiKey,
     createOrderPath = config.monolith.createOrderPath,
   ),
-  shopifyServiceFactory: ShopifyServiceFactory = ShopifyServiceFactory(
+  shopifyGraphqlServiceFactory: ShopifyGraphqlServiceFactory = HttpShopifyGraphqlServiceFactory(
     httpClient = httpClient,
     tokens = shopTokens,
     monolith = monolithService,
     apiVersion = config.shopify.apiVersion,
   ),
   oauthClient: ShopifyOAuthService = ShopifyOAuthService(httpClient, config.shopify),
+  shopifyHmacVerifierService: ShopifyHmacVerifierService = ShopifyHmacVerifierService(config.shopify.appClientSecret),
 ): DssDependencies = DssDependencies(
   config = config,
   httpClient = httpClient,
   monolithHttpClient = monolithHttpClient,
   monolithService = monolithService,
   diagnosticsHandlers = DiagnosticsHandlers(config, shopTokens),
+  demoHandlers = DemoHandlers(config, shopifyGraphqlServiceFactory),
   oauthHandlers = OAuthHandlers(
-    config,
+    config.shopify.publicBaseUrl,
     oauthClient,
-    shopifyServiceFactory,
+    shopifyGraphqlServiceFactory,
+    monolithService,
+    shopTokens,
+    shopifyHmacVerifierService,
+  ),
+  shopifyWebhookHandlers = ShopifyWebhookHandlers(
+    config.webhook.syncOrderOnUpdated,
+    shopifyGraphqlServiceFactory,
+    monolithService,
+    shopifyHmacVerifierService
+  ),
+  monolithWebhookHandlers = MonolithWebhookHandlers(
+    shopifyGraphqlServiceFactory,
     monolithService,
     shopTokens
   ),
-  shopifyWebhookHandlers = ShopifyWebhookHandlers(config, shopifyServiceFactory, monolithService),
-  demoHandlers = DemoHandlers(config, shopifyServiceFactory),
-  dssHandlers = MonolithWebhookHandlers(shopifyServiceFactory, monolithService, shopTokens),
 )

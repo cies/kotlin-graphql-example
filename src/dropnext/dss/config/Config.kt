@@ -1,7 +1,7 @@
 package dropnext.dss.config
 
-import dropnext.dss.path.DssPaths
-import dropnext.dss.path.MonolithPaths
+import dropnext.dss.path.Paths
+import dropnext.dss.path.OutBoundMonolithPaths
 
 
 /**
@@ -17,7 +17,7 @@ data class Config(
   val webhook: WebhookConfig,
 
   /** When set, DSS REST routes require header `X-DSS-Internal-Secret` (except health/install/oauth/webhooks). */
-  val dssInternalSecret: String?,
+  val monolithWebhookAuthSecret: String?,
 ) {
   companion object {
     fun fromEnv(): Config {
@@ -34,7 +34,7 @@ data class Config(
         monolith = monolith,
         dev = dev,
         webhook = WebhookConfig.fromEnv(),
-        dssInternalSecret = EnvVars.optionalNormalized("DSS_INTERNAL_SECRET"),
+        monolithWebhookAuthSecret = EnvVars.optionalNormalized("DSS_INTERNAL_SECRET"),
       )
 
       val configIssues = computeRuntimeConfigIssues(dssConfig)
@@ -50,11 +50,11 @@ data class Config(
 
 /** Outbound monolith integration: where to reach it and how to authenticate. */
 data class MonolithConfig(
-  /** HTTPS base URL for monolith outbound calls; DSS appends paths from [dropnext.dss.path.MonolithPaths]. */
+  /** HTTPS base URL for monolith outbound calls; DSS appends paths from [dropnext.dss.path.OutBoundMonolithPaths]. */
   val baseUrl: String,
 
   /**
-   * Optional path inserted after [baseUrl]: `{base}/{prefix}` + [dropnext.dss.path.MonolithPaths.STORES_API_KEY].
+   * Optional path inserted after [baseUrl]: `{base}/{prefix}` + [dropnext.dss.path.OutBoundMonolithPaths.STORES_API_KEY].
    * Set via `MONOLITH_API_PREFIX` (e.g. `api/v1`); slashes at both ends are trimmed.
    */
   val apiPrefix: String?,
@@ -62,7 +62,7 @@ data class MonolithConfig(
   /** Sent as `Authorization: Bearer …` when non-blank. */
   val apiKey: String?,
 
-  /** Path appended to monolith base for order creation (default [dropnext.dss.path.MonolithPaths.ORDERS]). */
+  /** Path appended to monolith base for order creation (default [dropnext.dss.path.OutBoundMonolithPaths.ORDERS]). */
   val createOrderPath: String,
 
   /** When false (default), [baseUrl] must be `https://`. */
@@ -73,7 +73,7 @@ data class MonolithConfig(
       val baseUrl = EnvVars.optionalNormalized("MONOLITH_BASE_URL") ?: return null
       val prefix = EnvVars.optionalNormalized("MONOLITH_API_PREFIX")
         ?.trim { it == '/' }?.takeIf { it.isNotEmpty() }
-      val rawPath = EnvVars.optionalNormalized("MONOLITH_CREATE_ORDER_PATH") ?: MonolithPaths.ORDERS
+      val rawPath = EnvVars.optionalNormalized("MONOLITH_CREATE_ORDER_PATH") ?: OutBoundMonolithPaths.ORDERS
       val path = if (rawPath.startsWith('/')) rawPath else "/$rawPath"
       return MonolithConfig(
         baseUrl = baseUrl,
@@ -94,12 +94,6 @@ data class DevConfig(
 
   /** When true, the sandbox token map is merged and the `/demo/` routes are forced on (see `ENABLE_TEST_HARNESS`). */
   val enableTestHarness: Boolean,
-
-  /**
-   * When true (only with [enableTestHarness]), DSS + demo skip real Shopify calls and return stub 200/OK
-   * so the HTML harness can be exercised without a real token. See `DSS_SANDBOX_FAKE_SHOPIFY`.
-   */
-  val sandboxFakeShopify: Boolean,
 ) {
   companion object {
     fun fromEnv(): DevConfig {
@@ -107,7 +101,6 @@ data class DevConfig(
       return DevConfig(
         enableDemoRoutes = EnvVars.optionalBool("ENABLE_DEMO_ROUTES") || testHarness,
         enableTestHarness = testHarness,
-        sandboxFakeShopify = testHarness && EnvVars.optionalBool("DSS_SANDBOX_FAKE_SHOPIFY"),
       )
     }
   }
@@ -116,7 +109,8 @@ data class DevConfig(
 
 /** Webhook policy switches. */
 data class WebhookConfig(
-  /** When true, `POST` to [dropnext.dss.path.MonolithPaths.ORDERS] on `orders/updated` as well as `orders/create` (default false). */
+  /** When true, `POST` to [dropnext.dss.path.OutBoundMonolithPaths.ORDERS] on `orders/updated` as well as `orders/create` (default false). */
+  // TODO: what is the use of this? the comment does not explain why.
   val syncOrderOnUpdated: Boolean,
 ) {
   companion object {
@@ -147,10 +141,10 @@ internal fun computeRuntimeConfigIssues(dssConfig: Config): List<String> {
   if (!shopify.publicBaseUrl.startsWith("https://", ignoreCase = true)) {
     issues += "PUBLIC_BASE_URL should use https://"
   }
-  if (dssConfig.dssInternalSecret?.contains("change_this") == true) {
+  if (dssConfig.monolithWebhookAuthSecret?.contains("change_this") == true) {
     issues += "DSS_INTERNAL_SECRET is still the placeholder value — set a real secret"
   }
-  if (dssConfig.dssInternalSecret != null && dssConfig.dssInternalSecret.length < 32) {
+  if (dssConfig.monolithWebhookAuthSecret != null && dssConfig.monolithWebhookAuthSecret.length < 32) {
     issues += "DSS_INTERNAL_SECRET should be at least 32 characters"
   }
   val monolithBaseUrl = dssConfig.monolith.baseUrl
@@ -196,7 +190,7 @@ data class ShopifyConfig(
         scopes = scopes,
         publicBaseUrl = publicBaseUrl.trimEnd('/'),
         oauthRedirectPath = (env("OAUTH_REDIRECT_PATH")
-          ?: "").ifBlank { DssPaths.DEFAULT_OAUTH_CALLBACK },
+          ?: "").ifBlank { Paths.DEFAULT_OAUTH_CALLBACK },
         apiVersion = (env("SHOPIFY_API_VERSION") ?: "").ifBlank { "2026-04" },
         serverPort = resolveServerPort(),
       )

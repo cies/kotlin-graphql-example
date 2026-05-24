@@ -1,20 +1,19 @@
 package dropnext.dss.handler
 
-import dropnext.dss.config.Config
 import dropnext.dss.lib.dto.DeleteProductVariantsRequest
 import dropnext.dss.lib.dto.UpsertProductVariantsRequest
 import dropnext.dss.lib.monolith.DeleteVariantsResult
 import dropnext.dss.lib.monolith.MonolithService
+import dropnext.dss.lib.monolith.ShopifyGraphqlServiceFactory
 import dropnext.dss.lib.monolith.UpsertVariantsResult
 import dropnext.dss.lib.monolith.logMonolithFailure
+import dropnext.dss.lib.shopify.ShopDomain
 import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlService
-import dropnext.dss.lib.monolith.ShopifyServiceFactory
-import dropnext.dss.lib.shopify.webhook.ShopifySignatures
+import dropnext.dss.lib.shopify.webhook.ShopifyHmacVerifierService
 import dropnext.dss.lib.shopify.webhook.ShopifyWebhookTopic
 import dropnext.dss.lib.shopify.webhook.graphqlResourceIdFromShopifyWebhook
 import dropnext.dss.lib.shopify.webhook.shopDomainFromWebhookBody
 import dropnext.dss.lib.shopify.webhook.variantLegacyIdsFromProductWebhook
-import dropnext.dss.lib.shopify.ShopDomain
 import dropnext.dss.shopify.toProductVariantItems
 import dropnext.dss.workflow.syncShopifyOrderToMonolith
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -26,20 +25,20 @@ import io.ktor.server.response.respond
 
 private val log = KotlinLogging.logger {}
 
-/** Handler for `POST` to [dropnext.dss.path.DssPaths.WEBHOOKS_SHOPIFY] — verifies HMAC and dispatches per topic. */
+/** Handler for `POST` to [dropnext.dss.path.Paths.WEBHOOKS_SHOPIFY] — verifies HMAC and dispatches per topic. */
 class ShopifyWebhookHandlers(
-  private val dssConfig: Config,
-  private val shopifyServiceFactory: ShopifyServiceFactory,
+  private val syncOrderOnUpdated: Boolean,
+  private val shopifyGraphqlServiceFactory: ShopifyGraphqlServiceFactory,
   private val monolithService: MonolithService,
+  private val shopifyHmacVerifierService: ShopifyHmacVerifierService,
 ) {
-  private val config = dssConfig.shopify
 
   suspend fun handleShopifyWebhook(call: ApplicationCall) {
     val hmacHeader = call.request.headers["X-Shopify-Hmac-Sha256"]
     val topic = ShopifyWebhookTopic.parse(call.request.headers["X-Shopify-Topic"])
     val shopDomainHeader = call.request.headers["X-Shopify-Shop-Domain"]
     val body = call.receive<ByteArray>()
-    if (!ShopifySignatures.verifyWebhook(hmacHeader, config.appClientSecret, body)) {
+    if (!shopifyHmacVerifierService.verifyWebhook(hmacHeader, body)) {
       call.respond(HttpStatusCode.Unauthorized)
       return
     }
@@ -47,7 +46,7 @@ class ShopifyWebhookHandlers(
     log.info { "Webhook verified topic=${topic.raw} shopDomainHeader=$shopDomainHeader bodyBytes=${body.size}" }
 
     val shop = ShopDomain.fromWebhook(shopDomainHeader, shopDomainFromWebhookBody(bodyStr))
-    val shopify = shop?.let { shopifyServiceFactory.forShop(it) }
+    val shopify = shop?.let { shopifyGraphqlServiceFactory.forShop(it) }
     if (shop == null || shopify == null) {
       log.error {
         "Webhook: no Admin token topic=${topic.raw} shopDomainHeader=$shopDomainHeader shop=$shop " +
@@ -65,7 +64,7 @@ class ShopifyWebhookHandlers(
       ShopifyWebhookTopic.OrdersCreate ->
         handleOrderWebhook(shopify, bodyStr, topic.raw, syncToMonolith = true)
       ShopifyWebhookTopic.OrdersUpdated ->
-        handleOrderWebhook(shopify, bodyStr, topic.raw, syncToMonolith = dssConfig.webhook.syncOrderOnUpdated)
+        handleOrderWebhook(shopify, bodyStr, topic.raw, syncToMonolith = syncOrderOnUpdated)
       is ShopifyWebhookTopic.Other ->
         log.info { "Webhook topic not handled: ${topic.raw}" }
     }

@@ -40,27 +40,24 @@ fun testMonolithConfig(
 fun testDevConfig(
   enableDemoRoutes: Boolean = false,
   enableTestHarness: Boolean = false,
-  sandboxFakeShopify: Boolean = false,
 ): DevConfig =
   DevConfig(
     enableDemoRoutes = enableDemoRoutes,
     enableTestHarness = enableTestHarness,
-    sandboxFakeShopify = sandboxFakeShopify,
   )
 
 fun testDssAppConfig(
   shopify: ShopifyConfig = testShopifyConfig(),
   dssInternalSecret: String? = null,
-  sandboxFakeShopify: Boolean = false,
   syncOrderOnUpdated: Boolean = false,
   monolithBaseUrl: String = "https://monolith.test",
 ): Config =
   Config(
     shopify = shopify,
     monolith = testMonolithConfig(baseUrl = monolithBaseUrl),
-    dev = testDevConfig(sandboxFakeShopify = sandboxFakeShopify),
+    dev = testDevConfig(),
     webhook = WebhookConfig(syncOrderOnUpdated = syncOrderOnUpdated),
-    dssInternalSecret = dssInternalSecret,
+    monolithWebhookAuthSecret = dssInternalSecret,
   )
 
 fun testShopTokens(initial: Map<ShopDomain, String> = emptyMap()): ShopAccessTokenCache =

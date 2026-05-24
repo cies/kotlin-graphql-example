@@ -8,7 +8,7 @@ package dropnext.dss.path
  * The order-create path defaults to [ORDERS] but is overridable via env
  * `MONOLITH_CREATE_ORDER_PATH` (see [dropnext.dss.config.MonolithConfig.createOrderPath]).
  */
-object MonolithPaths {
+object OutBoundMonolithPaths {
   /** `POST /orders` — create a Shopify order in the monolith. Default for [dropnext.dss.config.MonolithConfig.createOrderPath]. */
   const val ORDERS = "/orders"
 

@@ -18,7 +18,7 @@ import org.slf4j.MDC
 private val log = KotlinLogging.logger {}
 
 /** Catches anything that escapes a handler — returns a generic 500 so secrets never leak into the body. */
-fun Application.installDssStatusPages() {
+fun Application.installStatusPages() {
   install(StatusPages) {
     exception<Throwable> { call, cause ->
       log.error(cause) { "Unhandled error on ${call.request.local.method.value} ${call.request.local.uri}" }
@@ -34,10 +34,10 @@ fun Application.installJsonContentNegotiation() {
   }
 }
 
-/** Per-call attribute that stores the trace id installed by [installDssTraceId]. */
+/** Per-call attribute that stores the trace id installed by [installTraceId]. */
 val dssTraceIdKey = AttributeKey<String>("DssTraceId")
 
-fun Application.installDssTraceId() {
+fun Application.installTraceId() {
   intercept(ApplicationCallPipeline.Setup) {
     val traceId = call.request.header("X-Request-Id")?.trim()?.takeIf { it.isNotEmpty() }
       ?: call.request.header("X-Trace-Id")?.trim()?.takeIf { it.isNotEmpty() }

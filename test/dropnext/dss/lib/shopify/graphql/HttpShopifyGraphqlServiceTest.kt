@@ -31,7 +31,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlinx.coroutines.runBlocking
 
-class ShopifyGraphqlServiceTest {
+class HttpShopifyGraphqlServiceTest {
 
   private lateinit var fake: FakeShopifyGraphqlServer
   private lateinit var httpClient: HttpClient
@@ -56,7 +56,7 @@ class ShopifyGraphqlServiceTest {
     }
     val url = URI("http://localhost:$port/admin/api/2026-04/graphql.json").toURL()
     val gqlClient = GraphQLKtorClient(url, httpClient)
-    shopify = ShopifyGraphqlService(ShopDomain.parse("acme.myshopify.com")!!, gqlClient, "tok")
+    shopify = HttpShopifyGraphqlService(ShopDomain.parse("acme.myshopify.com")!!, gqlClient, "tok")
   }
 
   @AfterTest

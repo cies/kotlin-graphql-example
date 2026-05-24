@@ -8,7 +8,7 @@ package dropnext.dss.path
  * Canonical contract for DSS-internal endpoints: repo root **`openapi.json`**.
  * Keep these in sync with the spec — see `MonolithPaths` for the outbound counterpart.
  */
-object DssPaths {
+object Paths {
   // --- Diagnostics ---
   const val INDEX = "/"
   const val HEALTH = "/health"

@@ -8,9 +8,16 @@ import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
 
-// TODO(cies): Make this a proper service class like the others that takes the clientSecret in the ctor.
-object ShopifySignatures {
-  fun verifyOAuthCallback(params: Parameters, clientSecret: String, hmacHex: String): Boolean {
+/**
+ * Verifies Shopify-issued HMAC signatures on inbound traffic. Binds the app's client secret
+ * once at construction so callers don't thread it through every verification call.
+ *
+ * Stateless aside from the injected [clientSecret], so a single instance is safe to share
+ * across requests.
+ */
+class ShopifyHmacVerifierService(private val clientSecret: String) {
+
+  fun verifyOAuthCallback(params: Parameters, hmacHex: String): Boolean {
     // Shopify: remove hmac/signature, sort by key, join with "&" as in query string (see OAuth docs).
     val message = params.entries()
       .asSequence()
@@ -27,7 +34,7 @@ object ShopifySignatures {
     )
   }
 
-  fun verifyWebhook(hmacHeader: String?, clientSecret: String, rawBody: ByteArray): Boolean {
+  fun verifyWebhook(hmacHeader: String?, rawBody: ByteArray): Boolean {
     if (hmacHeader.isNullOrBlank()) return false
     val mac = Mac.getInstance("HmacSHA256")
     mac.init(SecretKeySpec(clientSecret.toByteArray(StandardCharsets.UTF_8), "HmacSHA256"))

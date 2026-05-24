@@ -1,6 +1,5 @@
 package dropnext.dss.handler
 
-import dropnext.dss.config.Config
 import dropnext.dss.domain.MonolithPersistOutcome
 import dropnext.dss.lib.dto.UpdateStoreApiKeyRequest
 import dropnext.dss.lib.ktor.DssError
@@ -9,10 +8,10 @@ import dropnext.dss.lib.monolith.MonolithService
 import dropnext.dss.lib.monolith.ShopAccessTokenCache
 import dropnext.dss.lib.monolith.StoreApiKeyResult
 import dropnext.dss.lib.monolith.logMonolithFailure
-import dropnext.dss.lib.monolith.ShopifyServiceFactory
+import dropnext.dss.lib.monolith.ShopifyGraphqlServiceFactory
 import dropnext.dss.lib.shopify.oauth.ShopifyOAuthService
-import dropnext.dss.lib.shopify.webhook.ShopifySignatures
-import dropnext.dss.path.DssPaths
+import dropnext.dss.lib.shopify.webhook.ShopifyHmacVerifierService
+import dropnext.dss.path.Paths
 import dropnext.dss.presentation.renderOAuthInstallPage
 import dropnext.dss.lib.shopify.ShopDomain
 import dropnext.dss.lib.shopify.legacyIdFromGid
@@ -31,13 +30,13 @@ private val log = KotlinLogging.logger {}
 
 /** Handlers for the Shopify install / OAuth-callback flow. */
 class OAuthHandlers(
-  private val dssConfig: Config,
+  private val shopifyPublicBaseUrl: String,
   private val oauthClient: ShopifyOAuthService,
-  private val shopifyServiceFactory: ShopifyServiceFactory,
+  private val shopifyGraphqlServiceFactory: ShopifyGraphqlServiceFactory,
   private val monolithService: MonolithService,
   private val shopTokens: ShopAccessTokenCache,
+  private val shopifyHmacVerifierService: ShopifyHmacVerifierService,
 ) {
-  private val shopifyConfig = dssConfig.shopify
 
   suspend fun handleInstall(call: ApplicationCall) {
     val rawShop = call.requireParam("shop") ?: return
@@ -57,7 +56,7 @@ class OAuthHandlers(
     val state = call.requireParam("state") ?: return
     val code = call.requireParam("code") ?: return
 
-    if (!ShopifySignatures.verifyOAuthCallback(params, shopifyConfig.appClientSecret, hmac)) {
+    if (!shopifyHmacVerifierService.verifyOAuthCallback(params, hmac)) {
       return call.respondTextError(DssError.InvalidSignature("Invalid HMAC"))
     }
     if (!oauthClient.isSignedStateValid(state, shop)) {
@@ -72,7 +71,7 @@ class OAuthHandlers(
 
     // The just-issued token has not been cached yet, so pass it explicitly to the factory so the
     // subsequent Graphql calls authorise correctly.
-    val shopify = shopifyServiceFactory.forShop(shop, explicitToken = oauthResponse.accessToken)
+    val shopify = shopifyGraphqlServiceFactory.forShop(shop, explicitToken = oauthResponse.accessToken)
       ?: return call.respondTextError(DssError.UpstreamFailure("could not build ShopifyService for $shop"))
 
     val identityResult = shopify.shopIdentity()
@@ -88,7 +87,7 @@ class OAuthHandlers(
     val edgeCount = syncResult.data?.products?.edges?.size ?: 0
     log.info { "SyncProductsPage after OAuth: shop=${shop.host} productEdges=$edgeCount" }
 
-    val callbackUrl = "${shopifyConfig.publicBaseUrl}${DssPaths.WEBHOOKS_SHOPIFY}"
+    val callbackUrl = "$shopifyPublicBaseUrl${Paths.WEBHOOKS_SHOPIFY}"
     val webhookReport = shopify.registerStandardWebhooks(callbackUrl)
 
     val html = renderOAuthInstallPage(

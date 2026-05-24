@@ -1,33 +1,33 @@
 package dropnext.dss.lib.monolith
 
-import dropnext.dss.path.MonolithPaths
+import dropnext.dss.path.OutBoundMonolithPaths
 import dropnext.dss.lib.dto.CreateShopifyOrderRequest
 import dropnext.dss.lib.dto.DeleteProductVariantsRequest
 import dropnext.dss.lib.dto.UpdateStoreApiKeyRequest
 import dropnext.dss.lib.dto.UpsertProductVariantsRequest
 
-/** Outbound calls to the main backend (monolith). Path constants in [MonolithPaths]. */
+/** Outbound calls to the main backend (monolith). Path constants in [OutBoundMonolithPaths]. */
 interface MonolithService {
   /**
-   * `POST` to [MonolithPaths.ORDERS] — only from Shopify order webhooks. Body is exactly
+   * `POST` to [OutBoundMonolithPaths.ORDERS] — only from Shopify order webhooks. Body is exactly
    * [CreateShopifyOrderRequest] (those top-level JSON keys — no extras). Expects idempotent
    * handling (e.g. 409 duplicate order).
    */
   suspend fun postCreateOrder(request: CreateShopifyOrderRequest): CreateOrderResult
 
-  /** `PUT` to [MonolithPaths.STORES_API_KEY] — persist the Shopify access token after OAuth install. */
+  /** `PUT` to [OutBoundMonolithPaths.STORES_API_KEY] — persist the Shopify access token after OAuth install. */
   suspend fun putStoreApiKey(request: UpdateStoreApiKeyRequest): StoreApiKeyResult
 
-  /** `GET` to [MonolithPaths.STORES] with `?shopify_subdomain=…` — look up a store by subdomain. */
+  /** `GET` to [OutBoundMonolithPaths.STORES] with `?shopify_subdomain=…` — look up a store by subdomain. */
   suspend fun getStore(shopifySubdomain: String): GetStoreResult
 
-  /** `POST` to [MonolithPaths.PRODUCT_VARIANTS] — upsert product variants from a Shopify products/create or products/update webhook. */
+  /** `POST` to [OutBoundMonolithPaths.PRODUCT_VARIANTS] — upsert product variants from a Shopify products/create or products/update webhook. */
   suspend fun upsertProductVariants(request: UpsertProductVariantsRequest): UpsertVariantsResult
 
-  /** `GET` to [MonolithPaths.PRODUCT_VARIANTS] with `?shopify_subdomain=…` — list all variant IDs the monolith knows about. */
+  /** `GET` to [OutBoundMonolithPaths.PRODUCT_VARIANTS] with `?shopify_subdomain=…` — list all variant IDs the monolith knows about. */
   suspend fun getProductVariantIds(shopifySubdomain: String): GetVariantIdsResult
 
-  /** `DELETE` to [MonolithPaths.PRODUCT_VARIANTS] — soft-delete variants that no longer exist in Shopify. */
+  /** `DELETE` to [OutBoundMonolithPaths.PRODUCT_VARIANTS] — soft-delete variants that no longer exist in Shopify. */
   suspend fun deleteProductVariants(request: DeleteProductVariantsRequest): DeleteVariantsResult
 }
 

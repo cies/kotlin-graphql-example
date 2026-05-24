@@ -14,7 +14,7 @@ class TracingTest {
   @Test
   fun `echoes incoming X-Trace-Id back on the response`() {
     withEmbeddedServer({
-      installDssTraceId()
+      installTraceId()
       routing { get("/echo") { call.respondText(call.dssTraceId()) } }
     }) { baseUrl, client ->
       val response = client.get("$baseUrl/echo") { header("X-Trace-Id", "trace-abc-123") }
@@ -26,7 +26,7 @@ class TracingTest {
   @Test
   fun `X-Request-Id takes precedence over X-Trace-Id`() {
     withEmbeddedServer({
-      installDssTraceId()
+      installTraceId()
       routing { get("/echo") { call.respondText(call.dssTraceId()) } }
     }) { baseUrl, client ->
       val response =
@@ -42,7 +42,7 @@ class TracingTest {
   @Test
   fun `generates a 16-char hex id when no header is provided`() {
     withEmbeddedServer({
-      installDssTraceId()
+      installTraceId()
       routing { get("/echo") { call.respondText(call.dssTraceId()) } }
     }) { baseUrl, client ->
       val response = client.get("$baseUrl/echo")
@@ -56,7 +56,7 @@ class TracingTest {
   @Test
   fun `blank trace header is treated as missing`() {
     withEmbeddedServer({
-      installDssTraceId()
+      installTraceId()
       routing { get("/echo") { call.respondText(call.dssTraceId()) } }
     }) { baseUrl, client ->
       val response = client.get("$baseUrl/echo") { header("X-Trace-Id", "   ") }

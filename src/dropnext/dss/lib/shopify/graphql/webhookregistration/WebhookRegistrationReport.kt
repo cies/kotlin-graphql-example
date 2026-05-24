@@ -1,13 +1,7 @@
-package dropnext.dss.lib.shopify.graphql
+package dropnext.dss.lib.shopify.graphql.webhookregistration
 
 import dropnext.graphql.generated.enums.WebhookSubscriptionTopic
 
-
-data class WebhookSubscriptionStatus(
-  val id: String,
-  val topic: WebhookSubscriptionTopic,
-  val uri: String,
-)
 
 /**
  * Summary of the OAuth-time webhook subscription run, used by the install confirmation page.
@@ -20,4 +14,10 @@ data class WebhookRegistrationReport(
   val activeSubscriptions: List<WebhookSubscriptionStatus>,
   val addedSubscriptions: List<WebhookSubscriptionStatus>,
   val failedTopics: List<Pair<WebhookSubscriptionTopic, String>>,
+)
+
+data class WebhookSubscriptionStatus(
+  val id: String,
+  val topic: WebhookSubscriptionTopic,
+  val uri: String,
 )

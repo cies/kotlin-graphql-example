@@ -37,10 +37,9 @@ class ConfigTest {
       dev = DevConfig(
         enableDemoRoutes = false,
         enableTestHarness = false,
-        sandboxFakeShopify = false,
       ),
       webhook = WebhookConfig(syncOrderOnUpdated = false),
-      dssInternalSecret = dssInternalSecret,
+      monolithWebhookAuthSecret = dssInternalSecret,
     )
 
   @Test

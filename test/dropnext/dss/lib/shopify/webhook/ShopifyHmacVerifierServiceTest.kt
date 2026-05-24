@@ -1,6 +1,5 @@
 package dropnext.dss.lib.shopify.webhook
 
-import dropnext.dss.lib.shopify.webhook.ShopifySignatures
 import io.ktor.http.parametersOf
 import java.nio.charset.StandardCharsets
 import java.util.Base64
@@ -8,15 +7,16 @@ import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 import kotlin.test.Test
 
-class ShopifySignaturesTest {
+class ShopifyHmacVerifierServiceTest {
 
   private val secret = "shpss_test_secret"
+  private val signatures = ShopifyHmacVerifierService(secret)
 
   @Test
   fun `verifyWebhook accepts a correct base64 hmac`() {
     val body = """{"id":1001,"name":"#1001"}""".toByteArray(StandardCharsets.UTF_8)
     val hmac = base64HmacSha256(secret, body)
-    assert(ShopifySignatures.verifyWebhook(hmac, secret, body))
+    assert(signatures.verifyWebhook(hmac, body))
   }
 
   @Test
@@ -24,28 +24,28 @@ class ShopifySignaturesTest {
     val body = """{"id":1001}""".toByteArray(StandardCharsets.UTF_8)
     val hmac = base64HmacSha256(secret, body)
     val tampered = """{"id":1002}""".toByteArray(StandardCharsets.UTF_8)
-    assert(!ShopifySignatures.verifyWebhook(hmac, secret, tampered))
+    assert(!signatures.verifyWebhook(hmac, tampered))
   }
 
   @Test
   fun `verifyWebhook rejects wrong secret`() {
     val body = """{"id":1}""".toByteArray(StandardCharsets.UTF_8)
     val hmac = base64HmacSha256("other-secret", body)
-    assert(!ShopifySignatures.verifyWebhook(hmac, secret, body))
+    assert(!signatures.verifyWebhook(hmac, body))
   }
 
   @Test
   fun `verifyWebhook rejects null or blank hmac header`() {
     val body = """{"x":1}""".toByteArray(StandardCharsets.UTF_8)
-    assert(!ShopifySignatures.verifyWebhook(null, secret, body))
-    assert(!ShopifySignatures.verifyWebhook("", secret, body))
-    assert(!ShopifySignatures.verifyWebhook("   ", secret, body))
+    assert(!signatures.verifyWebhook(null, body))
+    assert(!signatures.verifyWebhook("", body))
+    assert(!signatures.verifyWebhook("   ", body))
   }
 
   @Test
   fun `verifyWebhook rejects malformed base64`() {
     val body = """{"x":1}""".toByteArray(StandardCharsets.UTF_8)
-    assert(!ShopifySignatures.verifyWebhook("!!!not base64!!!", secret, body))
+    assert(!signatures.verifyWebhook("!!!not base64!!!", body))
   }
 
   @Test
@@ -57,7 +57,7 @@ class ShopifySignaturesTest {
     )
     val expectedMessage = "code=abc123&shop=acme.myshopify.com&timestamp=1700000000"
     val hmac = hexHmacSha256(secret, expectedMessage)
-    assert(ShopifySignatures.verifyOAuthCallback(params, secret, hmac))
+    assert(signatures.verifyOAuthCallback(params, hmac))
   }
 
   @Test
@@ -70,13 +70,13 @@ class ShopifySignaturesTest {
     )
     val canonical = "code=abc&shop=acme.myshopify.com"
     val hmac = hexHmacSha256(secret, canonical)
-    assert(ShopifySignatures.verifyOAuthCallback(params, secret, hmac))
+    assert(signatures.verifyOAuthCallback(params, hmac))
   }
 
   @Test
   fun `verifyOAuthCallback rejects a wrong hmac`() {
     val params = parametersOf("shop" to listOf("acme.myshopify.com"))
-    assert(!ShopifySignatures.verifyOAuthCallback(params, secret, "00".repeat(32)))
+    assert(!signatures.verifyOAuthCallback(params, "00".repeat(32)))
   }
 
   @Test
@@ -85,7 +85,7 @@ class ShopifySignaturesTest {
     val canonical = "shop=acme.myshopify.com"
     val lower = hexHmacSha256(secret, canonical)
     val upper = lower.uppercase()
-    assert(ShopifySignatures.verifyOAuthCallback(params, secret, upper))
+    assert(signatures.verifyOAuthCallback(params, upper))
   }
 
   private fun base64HmacSha256(secret: String, body: ByteArray): String {

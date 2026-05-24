@@ -4,13 +4,12 @@ import dropnext.dss.config.Config
 import dropnext.dss.lib.dto.ErrorResponse
 import dropnext.dss.lib.ktor.clientErrorMessage
 import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlService
-import dropnext.dss.lib.monolith.ShopifyServiceFactory
-import dropnext.dss.path.DssPaths
+import dropnext.dss.lib.monolith.ShopifyGraphqlServiceFactory
+import dropnext.dss.path.Paths
 import dropnext.dss.shopify.FulfillmentCreateDemoBody
 import dropnext.dss.shopify.FulfillmentTrackingUpdateDemoBody
 import dropnext.dss.lib.shopify.ShopDomain
 import io.github.oshai.kotlinlogging.KotlinLogging
-import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.receive
@@ -31,19 +30,10 @@ private const val MISSING_TOKEN_HINT =
  */
 class DemoHandlers(
   private val dssConfig: Config,
-  private val shopifyServiceFactory: ShopifyServiceFactory,
+  private val shopifyGraphqlServiceFactory: ShopifyGraphqlServiceFactory,
 ) {
   suspend fun handleListProducts(call: ApplicationCall) {
-    val ctx = prepareDemo(call, call.request.queryParameters["shop"], "GET ${DssPaths.DEMO_PRODUCTS}") ?: return
-    if (dssConfig.dev.sandboxFakeShopify) {
-      return call.respondText(
-        "Products (DSS_SANDBOX_FAKE_SHOPIFY — no HTTP to Shopify):\n" +
-          "  Demo product [variants: fake-sku@0.00]\n" +
-          "hasNextPage=false",
-        ContentType.Text.Plain,
-        HttpStatusCode.OK,
-      )
-    }
+    val ctx = prepareDemo(call, call.request.queryParameters["shop"], "GET ${Paths.DEMO_PRODUCTS}") ?: return
     val first = call.request.queryParameters["first"]?.toIntOrNull()?.coerceIn(1, 50) ?: 10
     val after = call.request.queryParameters["after"]
     runDemo(call, ctx) {
@@ -74,17 +64,10 @@ class DemoHandlers(
 
   suspend fun handleGetOrder(call: ApplicationCall) {
     val idParam = call.request.queryParameters["id"] ?: run {
-      log.warn { "[demo] GET ${DssPaths.DEMO_ORDER} — missing id query parameter" }
+      log.warn { "[demo] GET ${Paths.DEMO_ORDER} — missing id query parameter" }
       return call.respondText("Pass ?id=gid://shopify/Order/... or numeric id", status = HttpStatusCode.BadRequest)
     }
-    val ctx = prepareDemo(call, call.request.queryParameters["shop"], "GET ${DssPaths.DEMO_ORDER}") ?: return
-    if (dssConfig.dev.sandboxFakeShopify) {
-      return call.respondText(
-        "Order (DSS_SANDBOX_FAKE_SHOPIFY — no HTTP to Shopify):\nOrder #1001 id=$idParam shop=${ctx.shopify.shop.host}",
-        ContentType.Text.Plain,
-        HttpStatusCode.OK,
-      )
-    }
+    val ctx = prepareDemo(call, call.request.queryParameters["shop"], "GET ${Paths.DEMO_ORDER}") ?: return
     val orderGid = orderGidFromParam(idParam) ?: run {
       log.warn { "[demo] ${ctx.routeLabel} — invalid_id shop=${ctx.shopify.shop.host} id=$idParam" }
       return call.respondText("Invalid id", status = HttpStatusCode.BadRequest)
@@ -108,14 +91,7 @@ class DemoHandlers(
 
   suspend fun handleCreateFulfillment(call: ApplicationCall) {
     val body = call.receive<FulfillmentCreateDemoBody>()
-    val ctx = prepareDemo(call, body.shop, "POST ${DssPaths.DEMO_FULFILLMENT_CREATE}") ?: return
-    if (dssConfig.dev.sandboxFakeShopify) {
-      return call.respondText(
-        "Fulfillment create (DSS_SANDBOX_FAKE_SHOPIFY): ok\ngid://shopify/Fulfillment/9",
-        ContentType.Text.Plain,
-        HttpStatusCode.OK,
-      )
-    }
+    val ctx = prepareDemo(call, body.shop, "POST ${Paths.DEMO_FULFILLMENT_CREATE}") ?: return
     runDemo(call, ctx) {
       val r = ctx.shopify.demoCreateFulfillmentWithTracking(
         fulfillmentOrderId = body.fulfillmentOrderId,
@@ -136,14 +112,7 @@ class DemoHandlers(
 
   suspend fun handleUpdateTracking(call: ApplicationCall) {
     val body = call.receive<FulfillmentTrackingUpdateDemoBody>()
-    val ctx = prepareDemo(call, body.shop, "POST ${DssPaths.DEMO_FULFILLMENT_TRACKING}") ?: return
-    if (dssConfig.dev.sandboxFakeShopify) {
-      return call.respondText(
-        "Tracking update (DSS_SANDBOX_FAKE_SHOPIFY): ok",
-        ContentType.Text.Plain,
-        HttpStatusCode.OK,
-      )
-    }
+    val ctx = prepareDemo(call, body.shop, "POST ${Paths.DEMO_FULFILLMENT_TRACKING}") ?: return
     runDemo(call, ctx) {
       val r = ctx.shopify.demoUpdateFulfillmentTracking(
         fulfillmentId = body.fulfillmentId,
@@ -189,7 +158,7 @@ class DemoHandlers(
       call.respondText("Invalid shop", status = HttpStatusCode.BadRequest)
       return null
     }
-    val shopify = shopifyServiceFactory.forShop(shop) ?: run {
+    val shopify = shopifyGraphqlServiceFactory.forShop(shop) ?: run {
       log.warn { "[demo] $routeLabel — no_admin_token shop=${shop.host}" }
       call.respondText(MISSING_TOKEN_HINT, status = HttpStatusCode.Unauthorized)
       return null

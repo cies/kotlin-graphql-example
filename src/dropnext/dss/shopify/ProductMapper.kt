@@ -6,10 +6,11 @@ import dropnext.dss.lib.dto.SelectedOption
 import dropnext.graphql.generated.getproductbyid.Media
 import dropnext.graphql.generated.getproductbyid.MediaImage
 import dropnext.graphql.generated.getproductbyid.Product
+import dropnext.graphql.generated.getproductbyid.ProductVariant
 
 /**
  * Maps a Shopify Admin Graphql product (from [GetProductById]) to a list of [ProductVariantItem]
- * DTOs ready to be sent to the monolith via `POST` to [dropnext.dss.path.MonolithPaths.PRODUCT_VARIANTS].
+ * DTOs ready to be sent to the monolith via `POST` to [dropnext.dss.path.OutBoundMonolithPaths.PRODUCT_VARIANTS].
  *
  * @param currencyCode ISO 4217 currency code for the shop (e.g. "USD"); obtain from the
  *   `shop { currencyCode }` field returned alongside the product query.
@@ -42,7 +43,7 @@ fun Product.toProductVariantItems(currencyCode: String): List<ProductVariantItem
       barcode = v.barcode,
       priceInMinorUnits = priceMinor,
       priceCurrency = currencyCode,
-      selectedOptions = v.selectedOptions.map { opt -> SelectedOption(name = opt.name, value = opt.value) },
+      selectedOptions = v.selectedOptions.map { opt -> SelectedOption(opt.name, opt.value) },
       imageUrl = v.variantImageUrlOrNull(),
     )
   }
@@ -51,20 +52,22 @@ fun Product.toProductVariantItems(currencyCode: String): List<ProductVariantItem
 private fun Product.catalogImageUrls(): List<String> =
   media.edges.mapNotNull { edge -> edge.node.imageUrlOrNull() }
 
-private fun dropnext.graphql.generated.getproductbyid.ProductVariant.variantImageUrlOrNull(): String? =
+private fun ProductVariant.variantImageUrlOrNull(): String? =
   media.edges.firstOrNull()?.node?.imageUrlOrNull()
 
-private fun Media.imageUrlOrNull(): String? =
-  when (this) {
-    is MediaImage -> image?.url
-    else -> null
-  }
+private fun Media.imageUrlOrNull(): String? = when (this) {
+  is MediaImage -> image?.url
+  else -> null
+}
 
 private fun dropnext.graphql.generated.enums.ProductStatus.toProductStatus(): ProductStatus =
   when (this) {
     dropnext.graphql.generated.enums.ProductStatus.ACTIVE -> ProductStatus.ACTIVE
     dropnext.graphql.generated.enums.ProductStatus.ARCHIVED -> ProductStatus.ARCHIVED
     dropnext.graphql.generated.enums.ProductStatus.DRAFT -> ProductStatus.DRAFT
-    else -> ProductStatus.ACTIVE
+
+    // Better than an else branch...
+    dropnext.graphql.generated.enums.ProductStatus.UNLISTED,
+    dropnext.graphql.generated.enums.ProductStatus.__UNKNOWN_VALUE -> ProductStatus.ACTIVE
   }
 

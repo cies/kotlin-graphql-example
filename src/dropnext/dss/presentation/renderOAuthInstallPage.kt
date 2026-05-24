@@ -1,9 +1,9 @@
 package dropnext.dss.presentation
 
 import dropnext.dss.domain.MonolithPersistOutcome
-import dropnext.dss.path.DssPaths
-import dropnext.dss.path.MonolithPaths
-import dropnext.dss.lib.shopify.graphql.WebhookSubscriptionStatus
+import dropnext.dss.path.Paths
+import dropnext.dss.path.OutBoundMonolithPaths
+import dropnext.dss.lib.shopify.graphql.webhookregistration.WebhookSubscriptionStatus
 import dropnext.graphql.generated.enums.WebhookSubscriptionTopic
 import kotlinx.html.FlowContent
 import kotlinx.html.a
@@ -58,10 +58,10 @@ fun renderOAuthInstallPage(
       if (failedTopics.isNotEmpty()) {
         renderFailedTopics(failedTopics)
       }
-      val demoProductsHref = "${DssPaths.DEMO_PRODUCTS}?shop=${shop}"
-      val demoOrderHref = "${DssPaths.DEMO_ORDER}?shop=${shop}&id=ORDER_GID"
+      val demoProductsHref = "${Paths.DEMO_PRODUCTS}?shop=${shop}"
+      val demoOrderHref = "${Paths.DEMO_ORDER}?shop=${shop}&id=ORDER_GID"
       p { a(href = demoProductsHref) { +demoProductsHref } }
-      p { a(href = demoOrderHref) { +"${DssPaths.DEMO_ORDER}?shop=${shop}&id=..." } }
+      p { a(href = demoOrderHref) { +"${Paths.DEMO_ORDER}?shop=${shop}&id=..." } }
     }
   }.toString()
 }
@@ -72,14 +72,14 @@ private fun FlowContent.renderMonolithPersistBlock(outcome: MonolithPersistOutco
       style = "color:green"
       strong { +"Shopify token saved via monolith" }
       +" ("
-      code { +"PUT …${MonolithPaths.STORES_API_KEY}" }
+      code { +"PUT …${OutBoundMonolithPaths.STORES_API_KEY}" }
       +", store_id=${outcome.storeId}) and cached in memory — webhooks and routes can use this process immediately."
     }
     is MonolithPersistOutcome.Failed -> p {
       style = "color:#b91c1c"
       strong {
         +"Monolith "
-        code { +"PUT …${MonolithPaths.STORES_API_KEY}" }
+        code { +"PUT …${OutBoundMonolithPaths.STORES_API_KEY}" }
         +" failed"
       }
       +" (HTTP status ${outcome.httpStatus}). Token is cached in this server’s memory only."

@@ -1,6 +1,6 @@
 package dropnext.dss.lib.monolith
 
-import dropnext.dss.path.MonolithPaths
+import dropnext.dss.path.OutBoundMonolithPaths
 import dropnext.dss.lib.json.MonolithJson
 import dropnext.dss.lib.dto.CreateShopifyOrderRequest
 import dropnext.dss.lib.dto.DeleteProductVariantsRequest
@@ -42,7 +42,7 @@ class HttpMonolithService(
   private val baseUrl: String,
   private val apiPathPrefix: String?,
   private val apiKey: String?,
-  private val createOrderPath: String = MonolithPaths.ORDERS,
+  private val createOrderPath: String = OutBoundMonolithPaths.ORDERS,
 ) : MonolithService {
 
   private val createOrderJsonTopLevelKeys: Set<String> =
@@ -102,7 +102,7 @@ class HttpMonolithService(
 
   override suspend fun putStoreApiKey(request: UpdateStoreApiKeyRequest): StoreApiKeyResult =
     guardNetwork(onNetworkError = { StoreApiKeyResult.Error(0, it, null) }) {
-      val response = httpClient.put(url(MonolithPaths.STORES_API_KEY)) {
+      val response = httpClient.put(url(OutBoundMonolithPaths.STORES_API_KEY)) {
         contentType(ContentType.Application.Json)
         authHeader(this)
         setBody(MonolithJson.encodeToString(UpdateStoreApiKeyRequest.serializer(), request))
@@ -119,7 +119,7 @@ class HttpMonolithService(
 
   override suspend fun getStore(shopifySubdomain: String): GetStoreResult =
     guardNetwork(onNetworkError = { GetStoreResult.Error(0, it, null) }) {
-      val response = httpClient.get(url(MonolithPaths.STORES)) {
+      val response = httpClient.get(url(OutBoundMonolithPaths.STORES)) {
         authHeader(this)
         parameter("shopify_subdomain", shopifySubdomain)
       }
@@ -143,7 +143,7 @@ class HttpMonolithService(
 
   override suspend fun upsertProductVariants(request: UpsertProductVariantsRequest): UpsertVariantsResult =
     guardNetwork(onNetworkError = { UpsertVariantsResult.Error(0, it, null) }) {
-      val response = httpClient.post(url(MonolithPaths.PRODUCT_VARIANTS)) {
+      val response = httpClient.post(url(OutBoundMonolithPaths.PRODUCT_VARIANTS)) {
         contentType(ContentType.Application.Json)
         authHeader(this)
         setBody(MonolithJson.encodeToString(UpsertProductVariantsRequest.serializer(), request))
@@ -160,7 +160,7 @@ class HttpMonolithService(
 
   override suspend fun getProductVariantIds(shopifySubdomain: String): GetVariantIdsResult =
     guardNetwork(onNetworkError = { GetVariantIdsResult.Error(0, it, null) }) {
-      val response = httpClient.get(url(MonolithPaths.PRODUCT_VARIANTS)) {
+      val response = httpClient.get(url(OutBoundMonolithPaths.PRODUCT_VARIANTS)) {
         authHeader(this)
         parameter("shopify_subdomain", shopifySubdomain)
       }
@@ -180,7 +180,7 @@ class HttpMonolithService(
 
   override suspend fun deleteProductVariants(request: DeleteProductVariantsRequest): DeleteVariantsResult =
     guardNetwork(onNetworkError = { DeleteVariantsResult.Error(0, it, null) }) {
-      val response = httpClient.delete(url(MonolithPaths.PRODUCT_VARIANTS)) {
+      val response = httpClient.delete(url(OutBoundMonolithPaths.PRODUCT_VARIANTS)) {
         contentType(ContentType.Application.Json)
         authHeader(this)
         setBody(MonolithJson.encodeToString(DeleteProductVariantsRequest.serializer(), request))
@@ -204,11 +204,11 @@ class HttpMonolithService(
     val json = MonolithJson.encodeToString(CreateShopifyOrderRequest.serializer(), request)
     val root = MonolithJson.parseToJsonElement(json)
     if (root !is JsonObject) {
-      return CreateOrderPayload.Invalid("POST ${MonolithPaths.ORDERS} body must be a JSON object")
+      return CreateOrderPayload.Invalid("POST ${OutBoundMonolithPaths.ORDERS} body must be a JSON object")
     }
     if (root.keys != createOrderJsonTopLevelKeys) {
       return CreateOrderPayload.Invalid(
-        "POST ${MonolithPaths.ORDERS} body must only include monolith order fields; got keys=${root.keys.sorted()}",
+        "POST ${OutBoundMonolithPaths.ORDERS} body must only include monolith order fields; got keys=${root.keys.sorted()}",
       )
     }
     return CreateOrderPayload.Ok(json)

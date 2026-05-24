@@ -332,6 +332,11 @@ class ArchitectureTest {
     // ShopifyConfig now lives inline in `config/DssAppConfig.kt` alongside the other config
     // groups (MonolithConfig, DevConfig, WebhookConfig). The test keeps its name for clarity.
     "/test/dropnext/dss/config/ShopifyConfigTest.kt",
+    // Focused integration test for HttpShopifyGraphqlService.registerStandardWebhooks; the data
+    // classes (WebhookRegistrationReport, WebhookSubscriptionStatus) moved into a subpackage
+    // and the loose registerStandardWebhooks function is gone, so there's no single src file
+    // to mirror.
+    "/test/dropnext/dss/lib/shopify/graphql/ShopifyWebhookRegistrationTest.kt",
   )
 
   /**

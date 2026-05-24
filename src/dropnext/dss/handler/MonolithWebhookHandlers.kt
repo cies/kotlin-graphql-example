@@ -1,6 +1,6 @@
 package dropnext.dss.handler
 
-import dropnext.dss.path.DssPaths
+import dropnext.dss.path.Paths
 import dropnext.dss.lib.dto.PutShopAccessTokenRequest
 import dropnext.dss.lib.dto.PutShopAccessTokenResponse
 import dropnext.dss.lib.dto.SyncShipmentsWithFulfillmentsRequest
@@ -16,7 +16,7 @@ import dropnext.dss.lib.ktor.receiveOr400
 import dropnext.dss.lib.ktor.respondError
 import dropnext.dss.lib.monolith.MonolithService
 import dropnext.dss.lib.monolith.ShopAccessTokenCache
-import dropnext.dss.lib.monolith.ShopifyServiceFactory
+import dropnext.dss.lib.monolith.ShopifyGraphqlServiceFactory
 import dropnext.dss.lib.monolith.StoreApiKeyResult
 import dropnext.dss.lib.monolith.logMonolithFailure
 import dropnext.dss.lib.shopify.ShopDomain
@@ -29,15 +29,15 @@ private val log = KotlinLogging.logger {}
 
 /**
  * Handlers for the DSS internal REST endpoints called by the monolith. Internal-secret
- * verification is enforced by the [dropnext.dss.lib.ktor.plugin.requireDssInternalSecret] route guard
- * in [dropnext.dss.routing.installDssRoutes], so these methods can focus on the business logic.
+ * verification is enforced by the [dropnext.dss.lib.ktor.plugin.requireMonolithWebhookAuthHeader] route guard
+ * in [dropnext.dss.routing.installMonolithWebhookRoutes], so these methods can focus on the business logic.
  *
- * Per-shop access-token resolution + Graphql wiring live inside [ShopifyServiceFactory]; handlers
- * call [ShopifyServiceFactory.forShop] and respond with [DssError.MissingShopifyAdminToken] when
+ * Per-shop access-token resolution + Graphql wiring live inside [ShopifyGraphqlServiceFactory]; handlers
+ * call [ShopifyGraphqlServiceFactory.forShop] and respond with [DssError.MissingShopifyAdminToken] when
  * no Admin token is available.
  */
 class MonolithWebhookHandlers(
-  private val shopifyServiceFactory: ShopifyServiceFactory,
+  private val shopifyGraphqlServiceFactory: ShopifyGraphqlServiceFactory,
   private val monolithService: MonolithService,
   private val shopTokenCache: ShopAccessTokenCache,
 ) {
@@ -45,7 +45,7 @@ class MonolithWebhookHandlers(
     val body = call.receiveOr400<SyncShipmentsWithFulfillmentsRequest>() ?: return
     if (!call.validateOrRespond(validateSyncShipmentsRequest(body))) return
     val shop = call.normalizeShopOrRespond(body.shopifySubdomain) ?: return
-    val shopify = shopifyServiceFactory.forShop(shop) ?: run {
+    val shopify = shopifyGraphqlServiceFactory.forShop(shop) ?: run {
       call.respondError(DssError.MissingShopifyAdminToken)
       return
     }
@@ -64,7 +64,7 @@ class MonolithWebhookHandlers(
     val body = call.receiveOr400<TrackingUpdateRequest>() ?: return
     if (!call.validateOrRespond(validateTrackingUpdateRequest(body))) return
     val shop = call.normalizeShopOrRespond(body.shopifySubdomain) ?: return
-    val shopify = shopifyServiceFactory.forShop(shop) ?: run {
+    val shopify = shopifyGraphqlServiceFactory.forShop(shop) ?: run {
       call.respondError(DssError.MissingShopifyAdminToken)
       return
     }
@@ -79,13 +79,13 @@ class MonolithWebhookHandlers(
     }
   }
 
-  /** `PUT` to [DssPaths.STORES_API_KEY] — caches a Shopify Admin token and forwards it to the monolith. */
+  /** `PUT` to [Paths.STORES_API_KEY] — caches a Shopify Admin token and forwards it to the monolith. */
   suspend fun handlePutStoreApiKey(call: ApplicationCall) {
     val body = call.receiveOr400<PutShopAccessTokenRequest>() ?: return
     val shop = call.normalizeShopOrRespond(body.shopifySubdomain) ?: return
 
     shopTokenCache[shop] = body.apiKey
-    log.info { "PUT ${DssPaths.STORES_API_KEY}: token cached in memory for shop=${shop.host}" }
+    log.info { "PUT ${Paths.STORES_API_KEY}: token cached in memory for shop=${shop.host}" }
 
     val apiKeyReq = UpdateStoreApiKeyRequest(
       shopifySubdomain = shop.subdomainShort,

@@ -2,6 +2,7 @@ package dropnext.dss.lib.monolith
 
 import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
 import dropnext.dss.lib.shopify.ShopDomain
+import dropnext.dss.lib.shopify.graphql.HttpShopifyGraphqlService
 import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlService
 import io.ktor.client.HttpClient
 import java.net.URI
@@ -9,31 +10,24 @@ import java.util.concurrent.ConcurrentHashMap
 
 
 /**
- * Builds [dropnext.dss.lib.shopify.graphql.ShopifyGraphqlService] instances on demand and hides the token resolution chain (header →
- * in-memory cache → monolith fallback) that handlers previously had to thread through every call.
- *
- * Token resolution is fast-pathed: the in-memory [ShopAccessTokenCache] is checked first; only on
- * miss do we make the network call to the monolith, and on success we backfill the cache so the
- * next request avoids the round trip. Constant-time identity / privacy: tokens themselves are
- * never logged, only the resolved shop subdomain.
+ * Production [ShopifyGraphqlServiceFactory]: resolves the Admin token via in-memory cache → monolith
+ * fallback, caches a per-shop [GraphQLKtorClient] (cheap reuse on each call), and hands back an
+ * [HttpShopifyGraphqlService] bound to that token. Tokens themselves are never logged — only the
+ * resolved shop subdomain.
  */
-class ShopifyServiceFactory(
+class HttpShopifyGraphqlServiceFactory(
   httpClient: HttpClient,
   private val tokens: ShopAccessTokenCache,
   private val monolith: MonolithService,
   private val apiVersion: String,
-) {
+) : ShopifyGraphqlServiceFactory {
+
   private val gqlClientCache = GraphqlClientCache(httpClient)
 
-  /**
-   * Returns a [dropnext.dss.lib.shopify.graphql.ShopifyGraphqlService] for [shop], or `null` when no Admin token is resolvable. When
-   * [explicitToken] is supplied (e.g.: directly after an OAuth code exchange, before the token
-   * has been cached) it short-circuits both the cache and the monolith fallback.
-   */
-  suspend fun forShop(shop: ShopDomain, explicitToken: String? = null): ShopifyGraphqlService? {
+  override suspend fun forShop(shop: ShopDomain, explicitToken: String?): ShopifyGraphqlService? {
     val token = explicitToken ?: resolveToken(shop) ?: return null
     val gqlClient = gqlClientCache.forShop(shop, apiVersion)
-    return ShopifyGraphqlService(shop, gqlClient, token)
+    return HttpShopifyGraphqlService(shop, gqlClient, token)
   }
 
   private suspend fun resolveToken(shop: ShopDomain): String? {
@@ -46,7 +40,7 @@ class ShopifyServiceFactory(
           "getStore",
           result.status,
           result.parsed,
-          "subdomain=${shop.subdomainShort}"
+          "subdomain=${shop.subdomainShort}",
         )
         null
       }
@@ -55,12 +49,12 @@ class ShopifyServiceFactory(
 }
 
 /**
- * Caches [com.expediagroup.graphql.client.ktor.GraphQLKtorClient] instances keyed by shop + API version so a new client object is not
+ * Caches [GraphQLKtorClient] instances keyed by shop + API version so a new client object is not
  * allocated on every request. The underlying [httpClient] is shared (one OkHttp connection
  * pool), so the only thing actually cached is the per-shop URL binding plus a small wrapper.
  *
- * Callers get a client with [forShop] and the per-shop Admin token is passed by [ShopifyGraphqlService]
- * via the `X-Shopify-Access-Token` header — tokens are never baked into a cached client.
+ * File-private — callers go through [HttpShopifyGraphqlServiceFactory.forShop], which hands back a
+ * [ShopifyGraphqlService] already bound to the resolved Admin token.
  */
 private class GraphqlClientCache(private val httpClient: HttpClient) {
   private val cache = ConcurrentHashMap<String, GraphQLKtorClient>()

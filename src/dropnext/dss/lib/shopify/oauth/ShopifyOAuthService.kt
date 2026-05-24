@@ -1,7 +1,7 @@
 package dropnext.dss.lib.shopify.oauth
 
 import dropnext.dss.config.ShopifyConfig
-import dropnext.dss.path.ShopifyPaths
+import dropnext.dss.path.OutBoundShopifyPaths
 import dropnext.dss.lib.shopify.ShopDomain
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -47,7 +47,7 @@ class ShopifyOAuthService(
     return buildString {
       append("https://")
       append(shop.host)
-      append(ShopifyPaths.ADMIN_OAUTH_AUTHORIZE)
+      append(OutBoundShopifyPaths.ADMIN_OAUTH_AUTHORIZE)
       append("?client_id=").append(enc(config.appClientId))
       append("&scope=").append(enc(config.scopes))
       append("&redirect_uri=").append(enc(config.redirectUrl))
@@ -97,7 +97,7 @@ class ShopifyOAuthService(
    */
   suspend fun exchangeCode(shop: ShopDomain, code: String): Result<OAuthAccessTokenResponse> =
     runCatching {
-      val url = "https://${shop.host}${ShopifyPaths.ADMIN_OAUTH_ACCESS_TOKEN}"
+      val url = "https://${shop.host}${OutBoundShopifyPaths.ADMIN_OAUTH_ACCESS_TOKEN}"
       httpClient.post(url) {
         contentType(ContentType.Application.Json)
         setBody(

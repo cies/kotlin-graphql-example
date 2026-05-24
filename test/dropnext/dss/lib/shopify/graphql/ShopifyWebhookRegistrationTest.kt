@@ -41,7 +41,7 @@ class ShopifyWebhookRegistrationTest {
     }
     val url = URI("http://localhost:$port/admin/api/2026-04/graphql.json").toURL()
     val gqlClient = GraphQLKtorClient(url, httpClient)
-    shopify = ShopifyGraphqlService(ShopDomain.parse("acme.myshopify.com")!!, gqlClient, "tok")
+    shopify = HttpShopifyGraphqlService(ShopDomain.parse("acme.myshopify.com")!!, gqlClient, "tok")
   }
 
   @AfterTest
