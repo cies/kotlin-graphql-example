@@ -8,10 +8,19 @@ import dropnext.dss.testing.fake.FakeMonolithService
 import dropnext.dss.testing.fake.FakeShopifyGraphqlService
 import dropnext.dss.testing.fake.FakeShopifyGraphqlServiceFactory
 import dropnext.dss.testing.fake.okResponse
-import dropnext.dss.testing.fake.testDssAppConfig
+import dropnext.dss.testing.fake.testConfig
 import dropnext.dss.testing.fake.testShopifyConfig
 import dropnext.dss.workflow.minimalOrder
 import dropnext.graphql.generated.GetOrderForDss
+import dropnext.graphql.generated.GetProductById
+import dropnext.graphql.generated.enums.CurrencyCode
+import dropnext.graphql.generated.enums.ProductStatus
+import dropnext.graphql.generated.getproductbyid.MediaConnection
+import dropnext.graphql.generated.getproductbyid.Product
+import dropnext.graphql.generated.getproductbyid.ProductVariant
+import dropnext.graphql.generated.getproductbyid.ProductVariantConnection
+import dropnext.graphql.generated.getproductbyid.ProductVariantEdge
+import dropnext.graphql.generated.getproductbyid.Shop as GetProductByIdShop
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
@@ -54,7 +63,7 @@ class ShopifyWebhookHandlersTest {
   fun startServer() {
     server = embeddedServer(CIO, port = 0) {
       routing {
-        post(Paths.WEBHOOKS_SHOPIFY) {
+        post(Paths.webhooksShopify) {
           val h = currentHandlers
           if (h == null) call.respondText("no handlers set", status = HttpStatusCode.InternalServerError)
           else h.handleShopifyWebhook(call)
@@ -90,7 +99,7 @@ class ShopifyWebhookHandlersTest {
   @Test
   fun `rejects request with missing HMAC header as 401`() = runBlocking {
     currentHandlers = handlers()
-    val r = httpClient.post("$baseUrl${Paths.WEBHOOKS_SHOPIFY}") {
+    val r = httpClient.post("$baseUrl${Paths.webhooksShopify}") {
       header("X-Shopify-Topic", "orders/create")
       setBody("""{"id":1}""")
     }
@@ -101,7 +110,7 @@ class ShopifyWebhookHandlersTest {
   fun `bad HMAC on orders_create gates out monolith POST`() = runBlocking {
     val fake = FakeMonolithService()
     currentHandlers = handlers(monolith = fake, shopify = FakeShopifyGraphqlService())
-    val r = httpClient.post("$baseUrl${Paths.WEBHOOKS_SHOPIFY}") {
+    val r = httpClient.post("$baseUrl${Paths.webhooksShopify}") {
       header("X-Shopify-Topic", "orders/create")
       header("X-Shopify-Shop-Domain", "acme.myshopify.com")
       header("X-Shopify-Hmac-Sha256", Base64.getEncoder().encodeToString(ByteArray(32)))
@@ -116,7 +125,7 @@ class ShopifyWebhookHandlersTest {
     val fake = FakeMonolithService()
     currentHandlers = handlers(monolith = fake)
     val body = """{"id":1,"domain":"acme.myshopify.com"}"""
-    val r = httpClient.post("$baseUrl${Paths.WEBHOOKS_SHOPIFY}") {
+    val r = httpClient.post("$baseUrl${Paths.webhooksShopify}") {
       header("X-Shopify-Topic", "shop/update")
       header("X-Shopify-Hmac-Sha256", base64HmacSha256(secret, body.toByteArray(StandardCharsets.UTF_8)))
       header("X-Shopify-Shop-Domain", "acme.myshopify.com")
@@ -131,7 +140,7 @@ class ShopifyWebhookHandlersTest {
     val fake = FakeMonolithService()
     currentHandlers = handlers(monolith = fake)
     val body = """{"id":1}"""
-    val r = httpClient.post("$baseUrl${Paths.WEBHOOKS_SHOPIFY}") {
+    val r = httpClient.post("$baseUrl${Paths.webhooksShopify}") {
       header("X-Shopify-Topic", "products/create")
       header("X-Shopify-Hmac-Sha256", base64HmacSha256(secret, body.toByteArray(StandardCharsets.UTF_8)))
       setBody(body)
@@ -146,7 +155,7 @@ class ShopifyWebhookHandlersTest {
     val fake = FakeMonolithService()
     currentHandlers = handlers(monolith = fake)
     val body = """{"id":1,"domain":"acme.myshopify.com"}"""
-    val r = httpClient.post("$baseUrl${Paths.WEBHOOKS_SHOPIFY}") {
+    val r = httpClient.post("$baseUrl${Paths.webhooksShopify}") {
       header("X-Shopify-Topic", "products/create")
       header("X-Shopify-Hmac-Sha256", base64HmacSha256(secret, body.toByteArray(StandardCharsets.UTF_8)))
       header("X-Shopify-Shop-Domain", "acme.myshopify.com")
@@ -164,7 +173,7 @@ class ShopifyWebhookHandlersTest {
     }
     currentHandlers = handlers(monolith = monolith, shopify = shopify)
     val body = """{"id":1001,"admin_graphql_api_id":"gid://shopify/Order/1001","domain":"acme.myshopify.com"}"""
-    val r = httpClient.post("$baseUrl${Paths.WEBHOOKS_SHOPIFY}") {
+    val r = httpClient.post("$baseUrl${Paths.webhooksShopify}") {
       header("X-Shopify-Topic", "orders/create")
       header("X-Shopify-Shop-Domain", "acme.myshopify.com")
       header("X-Shopify-Hmac-Sha256", base64HmacSha256(secret, body.toByteArray(StandardCharsets.UTF_8)))
@@ -188,7 +197,7 @@ class ShopifyWebhookHandlersTest {
     }
     currentHandlers = handlers(monolith = monolith, shopify = shopify, syncOnUpdated = true)
     val body = """{"id":1001,"admin_graphql_api_id":"gid://shopify/Order/1001","domain":"acme.myshopify.com"}"""
-    val r = httpClient.post("$baseUrl${Paths.WEBHOOKS_SHOPIFY}") {
+    val r = httpClient.post("$baseUrl${Paths.webhooksShopify}") {
       header("X-Shopify-Topic", "orders/updated")
       header("X-Shopify-Shop-Domain", "acme.myshopify.com")
       header("X-Shopify-Hmac-Sha256", base64HmacSha256(secret, body.toByteArray(StandardCharsets.UTF_8)))
@@ -199,13 +208,117 @@ class ShopifyWebhookHandlersTest {
     assert(monolith.lastCreateOrder?.shopifyOrderId == 1001L)
   }
 
+  // ---------- product webhook flows ----------
+
+  @Test
+  fun `products_create loads the product and upserts mapped variants to the monolith`() = runBlocking {
+    val monolith = FakeMonolithService()
+    val shopify = FakeShopifyGraphqlService().apply {
+      getProductByIdResponse = okResponse(
+        GetProductById.Result(
+          product = sampleProduct(legacyResourceId = "501", variantId = "9001"),
+          shop = GetProductByIdShop(currencyCode = CurrencyCode.EUR),
+        ),
+      )
+    }
+    currentHandlers = handlers(monolith = monolith, shopify = shopify)
+    val body = """{"id":501,"admin_graphql_api_id":"gid://shopify/Product/501","domain":"acme.myshopify.com"}"""
+    val r = httpClient.post("$baseUrl${Paths.webhooksShopify}") {
+      header("X-Shopify-Topic", "products/create")
+      header("X-Shopify-Shop-Domain", "acme.myshopify.com")
+      header("X-Shopify-Hmac-Sha256", base64HmacSha256(secret, body.toByteArray(StandardCharsets.UTF_8)))
+      setBody(body)
+    }
+    assert(r.status == HttpStatusCode.OK)
+    assert(shopify.getProductByIdCalls.single() == "gid://shopify/Product/501")
+    val upsert = monolith.upsertProductVariantsCalls.single()
+    assert(upsert.shopifySubdomain == "acme")
+    assert(upsert.productVariants.single().productVariantId == 9001L)
+    assert(upsert.productVariants.single().priceCurrency == "EUR")
+  }
+
+  @Test
+  fun `products_update routes through the same upsert path as products_create`() = runBlocking {
+    val monolith = FakeMonolithService()
+    val shopify = FakeShopifyGraphqlService().apply {
+      getProductByIdResponse = okResponse(
+        GetProductById.Result(
+          product = sampleProduct(legacyResourceId = "502", variantId = "9002"),
+          shop = GetProductByIdShop(currencyCode = CurrencyCode.USD),
+        ),
+      )
+    }
+    currentHandlers = handlers(monolith = monolith, shopify = shopify)
+    val body = """{"id":502,"admin_graphql_api_id":"gid://shopify/Product/502","domain":"acme.myshopify.com"}"""
+    val r = httpClient.post("$baseUrl${Paths.webhooksShopify}") {
+      header("X-Shopify-Topic", "products/update")
+      header("X-Shopify-Shop-Domain", "acme.myshopify.com")
+      header("X-Shopify-Hmac-Sha256", base64HmacSha256(secret, body.toByteArray(StandardCharsets.UTF_8)))
+      setBody(body)
+    }
+    assert(r.status == HttpStatusCode.OK)
+    assert(monolith.upsertProductVariantsCalls.single().productVariants.single().productVariantId == 9002L)
+  }
+
+  @Test
+  fun `products_create skips monolith call when Shopify returns no product`() = runBlocking {
+    val monolith = FakeMonolithService()
+    // FakeShopifyGraphqlService default getProductByIdResponse returns product=null.
+    val shopify = FakeShopifyGraphqlService()
+    currentHandlers = handlers(monolith = monolith, shopify = shopify)
+    val body = """{"id":999,"admin_graphql_api_id":"gid://shopify/Product/999","domain":"acme.myshopify.com"}"""
+    val r = httpClient.post("$baseUrl${Paths.webhooksShopify}") {
+      header("X-Shopify-Topic", "products/create")
+      header("X-Shopify-Shop-Domain", "acme.myshopify.com")
+      header("X-Shopify-Hmac-Sha256", base64HmacSha256(secret, body.toByteArray(StandardCharsets.UTF_8)))
+      setBody(body)
+    }
+    assert(r.status == HttpStatusCode.OK)
+    assert(shopify.getProductByIdCalls.size == 1)
+    assert(monolith.upsertProductVariantsCalls.isEmpty())
+  }
+
+  @Test
+  fun `products_delete deletes variant ids parsed from the webhook body`() = runBlocking {
+    val monolith = FakeMonolithService()
+    val shopify = FakeShopifyGraphqlService()
+    currentHandlers = handlers(monolith = monolith, shopify = shopify)
+    val body = """{"id":503,"admin_graphql_api_id":"gid://shopify/Product/503","domain":"acme.myshopify.com","variants":[{"id":701},{"id":702}]}"""
+    val r = httpClient.post("$baseUrl${Paths.webhooksShopify}") {
+      header("X-Shopify-Topic", "products/delete")
+      header("X-Shopify-Shop-Domain", "acme.myshopify.com")
+      header("X-Shopify-Hmac-Sha256", base64HmacSha256(secret, body.toByteArray(StandardCharsets.UTF_8)))
+      setBody(body)
+    }
+    assert(r.status == HttpStatusCode.OK)
+    val deleteReq = monolith.deleteProductVariantsCalls.single()
+    assert(deleteReq.shopifySubdomain == "acme")
+    assert(deleteReq.productVariantIds == listOf(701L, 702L))
+  }
+
+  @Test
+  fun `products_delete with no variants in body skips monolith call`() = runBlocking {
+    val monolith = FakeMonolithService()
+    val shopify = FakeShopifyGraphqlService()
+    currentHandlers = handlers(monolith = monolith, shopify = shopify)
+    val body = """{"id":503,"admin_graphql_api_id":"gid://shopify/Product/503","domain":"acme.myshopify.com"}"""
+    val r = httpClient.post("$baseUrl${Paths.webhooksShopify}") {
+      header("X-Shopify-Topic", "products/delete")
+      header("X-Shopify-Shop-Domain", "acme.myshopify.com")
+      header("X-Shopify-Hmac-Sha256", base64HmacSha256(secret, body.toByteArray(StandardCharsets.UTF_8)))
+      setBody(body)
+    }
+    assert(r.status == HttpStatusCode.OK)
+    assert(monolith.deleteProductVariantsCalls.isEmpty())
+  }
+
   @Test
   fun `orders_updated with syncOrderOnUpdated false does not POST to the monolith`() = runBlocking {
     val monolith = FakeMonolithService()
     val shopify = FakeShopifyGraphqlService()
     currentHandlers = handlers(monolith = monolith, shopify = shopify, syncOnUpdated = false)
     val body = """{"id":1001,"admin_graphql_api_id":"gid://shopify/Order/1001","domain":"acme.myshopify.com"}"""
-    val r = httpClient.post("$baseUrl${Paths.WEBHOOKS_SHOPIFY}") {
+    val r = httpClient.post("$baseUrl${Paths.webhooksShopify}") {
       header("X-Shopify-Topic", "orders/updated")
       header("X-Shopify-Shop-Domain", "acme.myshopify.com")
       header("X-Shopify-Hmac-Sha256", base64HmacSha256(secret, body.toByteArray(StandardCharsets.UTF_8)))
@@ -229,7 +342,7 @@ class ShopifyWebhookHandlersTest {
     shopify: FakeShopifyGraphqlService? = null,
     syncOnUpdated: Boolean = false,
   ): ShopifyWebhookHandlers = dssDependencies(
-    config = testDssAppConfig(
+    config = testConfig(
       shopify = testShopifyConfig(appClientSecret = secret),
       syncOrderOnUpdated = syncOnUpdated,
     ),
@@ -244,4 +357,39 @@ class ShopifyWebhookHandlersTest {
     mac.init(SecretKeySpec(secret.toByteArray(StandardCharsets.UTF_8), "HmacSHA256"))
     return Base64.getEncoder().encodeToString(mac.doFinal(body))
   }
+
+  /** Minimal `Product` for the GetProductById stub — just enough to map to a single [ProductVariantItem]. */
+  private fun sampleProduct(legacyResourceId: String, variantId: String): Product = Product(
+    id = "gid://shopify/Product/$legacyResourceId",
+    legacyResourceId = legacyResourceId,
+    title = "Sample",
+    description = "",
+    descriptionHtml = "",
+    vendor = "",
+    productType = "",
+    tags = emptyList(),
+    handle = "sample",
+    status = ProductStatus.ACTIVE,
+    publishedAt = "2026-04-01T00:00:00Z",
+    createdAt = "2026-04-01T00:00:00Z",
+    updatedAt = "2026-04-01T00:00:00Z",
+    media = MediaConnection(edges = emptyList()),
+    variants = ProductVariantConnection(
+      edges = listOf(
+        ProductVariantEdge(
+          node = ProductVariant(
+            id = "gid://shopify/ProductVariant/$variantId",
+            legacyResourceId = variantId,
+            title = "Default",
+            sku = "SKU-$variantId",
+            barcode = null,
+            price = "10.00",
+            updatedAt = "2026-04-01T00:00:00Z",
+            selectedOptions = emptyList(),
+            media = MediaConnection(edges = emptyList()),
+          ),
+        ),
+      ),
+    ),
+  )
 }

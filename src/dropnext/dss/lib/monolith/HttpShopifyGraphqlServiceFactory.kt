@@ -53,6 +53,10 @@ class HttpShopifyGraphqlServiceFactory(
  * allocated on every request. The underlying [httpClient] is shared (one OkHttp connection
  * pool), so the only thing actually cached is the per-shop URL binding plus a small wrapper.
  *
+ * Intentionally does NOT implement `Closeable`: `GraphQLKtorClient.close()` delegates to
+ * `httpClient.close()` on the *shared* client, which `DssDependencies.close()` already closes
+ * once. Calling `close()` on every cache entry would close the shared client repeatedly.
+ *
  * File-private — callers go through [HttpShopifyGraphqlServiceFactory.forShop], which hands back a
  * [ShopifyGraphqlService] already bound to the resolved Admin token.
  */

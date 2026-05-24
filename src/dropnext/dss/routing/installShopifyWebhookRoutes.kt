@@ -6,5 +6,5 @@ import io.ktor.server.routing.Route
 import io.ktor.server.routing.post
 
 fun Route.installShopifyWebhookRoutes(handlers: ShopifyWebhookHandlers) {
-  post(Paths.WEBHOOKS_SHOPIFY) { handlers.handleShopifyWebhook(call) }
+  post(Paths.webhooksShopify) { handlers.handleShopifyWebhook(call) }
 }

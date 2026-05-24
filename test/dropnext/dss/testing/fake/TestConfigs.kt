@@ -5,8 +5,6 @@ import dropnext.dss.config.Config
 import dropnext.dss.config.MonolithConfig
 import dropnext.dss.config.ShopifyConfig
 import dropnext.dss.config.WebhookConfig
-import dropnext.dss.lib.monolith.ShopAccessTokenCache
-import dropnext.dss.lib.shopify.ShopDomain
 
 fun testShopifyConfig(
   appClientSecret: String = "test-secret",
@@ -22,43 +20,21 @@ fun testShopifyConfig(
     serverPort = 0,
   )
 
-fun testMonolithConfig(
-  baseUrl: String = "https://monolith.test",
-  apiPrefix: String? = null,
-  apiKey: String? = null,
-  createOrderPath: String = "/orders",
-  allowInsecureUrl: Boolean = true,
-): MonolithConfig =
-  MonolithConfig(
-    baseUrl = baseUrl,
-    apiPrefix = apiPrefix,
-    apiKey = apiKey,
-    createOrderPath = createOrderPath,
-    allowInsecureUrl = allowInsecureUrl,
-  )
-
-fun testDevConfig(
-  enableDemoRoutes: Boolean = false,
-  enableTestHarness: Boolean = false,
-): DevConfig =
-  DevConfig(
-    enableDemoRoutes = enableDemoRoutes,
-    enableTestHarness = enableTestHarness,
-  )
-
-fun testDssAppConfig(
+fun testConfig(
   shopify: ShopifyConfig = testShopifyConfig(),
-  dssInternalSecret: String? = null,
+  monolithWebhookAuthSecret: String? = null,
   syncOrderOnUpdated: Boolean = false,
   monolithBaseUrl: String = "https://monolith.test",
 ): Config =
   Config(
     shopify = shopify,
-    monolith = testMonolithConfig(baseUrl = monolithBaseUrl),
-    dev = testDevConfig(),
+    monolith = MonolithConfig(
+      baseUrl = monolithBaseUrl,
+      apiPrefix = null,
+      apiKey = null,
+      allowInsecureUrl = true,
+    ),
+    dev = DevConfig(enableDemoRoutes = false, enableTestHarness = false),
     webhook = WebhookConfig(syncOrderOnUpdated = syncOrderOnUpdated),
-    monolithWebhookAuthSecret = dssInternalSecret,
+    monolithWebhookAuthSecret = monolithWebhookAuthSecret,
   )
-
-fun testShopTokens(initial: Map<ShopDomain, String> = emptyMap()): ShopAccessTokenCache =
-  ShopAccessTokenCache(initial)

@@ -8,7 +8,7 @@ import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlService
  * Vends a [ShopifyGraphqlService] for a given [ShopDomain]. Production wires
  * [HttpShopifyGraphqlServiceFactory] (resolves the access token via header → cache → monolith fallback,
  * then constructs an [dropnext.dss.lib.shopify.graphql.HttpShopifyGraphqlService]); tests wire
- * `FakeShopifyServiceFactory` (returns an in-memory fake).
+ * `FakeShopifyGraphqlServiceFactory` (returns an in-memory fake).
  */
 interface ShopifyGraphqlServiceFactory {
   /**

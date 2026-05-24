@@ -1,7 +1,9 @@
-package dropnext.dss.lib.shopify.graphql
+package dropnext.dss.workflow
 
 import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
 import dropnext.dss.lib.shopify.ShopDomain
+import dropnext.dss.lib.shopify.graphql.HttpShopifyGraphqlService
+import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlService
 import dropnext.dss.testing.fake.FakeShopifyGraphqlServer
 import dropnext.graphql.generated.GetWebhookSubscriptions
 import dropnext.graphql.generated.RegisterWebhook
@@ -21,7 +23,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlinx.coroutines.runBlocking
 
-class ShopifyWebhookRegistrationTest {
+class RegisterShopifyWebhooksTest {
 
   private lateinit var fake: FakeShopifyGraphqlServer
   private lateinit var httpClient: HttpClient
@@ -55,7 +57,7 @@ class ShopifyWebhookRegistrationTest {
     stubExistingSubscriptions(emptyList())
     stubRegisterOk()
 
-    val report = shopify.registerStandardWebhooks("https://dss.example/webhooks/shopify")
+    val report = registerShopifyWebhooks(shopify,"https://dss.example/webhooks/shopify")
 
     val registers = fake.calls.filter { it.operationName == "RegisterWebhook" }
     assert(registers.size == 5)
@@ -67,7 +69,7 @@ class ShopifyWebhookRegistrationTest {
     stubExistingSubscriptions(emptyList())
     stubRegisterOk()
 
-    shopify.registerStandardWebhooks("https://dss.example/webhooks/shopify")
+    registerShopifyWebhooks(shopify,"https://dss.example/webhooks/shopify")
 
     val registers = fake.calls.filter { it.operationName == "RegisterWebhook" }
     val ordersCalls = registers.filter { call ->
@@ -98,7 +100,7 @@ class ShopifyWebhookRegistrationTest {
       RegisterWebhook.Result.serializer(),
     )
 
-    val report = shopify.registerStandardWebhooks("https://dss.example/webhooks/shopify")
+    val report = registerShopifyWebhooks(shopify, "https://dss.example/webhooks/shopify")
     assert(report.failedTopics.size == 5)
     assert(report.failedTopics.all { "duplicate subscription" in it.second })
   }
@@ -120,7 +122,7 @@ class ShopifyWebhookRegistrationTest {
     stubExistingSubscriptions(active)
     stubRegisterOk()
 
-    val report = shopify.registerStandardWebhooks("https://dss.example/webhooks/shopify")
+    val report = registerShopifyWebhooks(shopify,"https://dss.example/webhooks/shopify")
     assert(report.addedSubscriptions.isEmpty())
     assert(report.activeSubscriptions.size == active.size)
   }

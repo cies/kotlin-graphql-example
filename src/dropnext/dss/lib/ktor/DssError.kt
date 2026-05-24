@@ -37,7 +37,8 @@ sealed interface DssError {
   /** 401 — no Shopify Admin token resolvable for the shop in question. */
   data object MissingShopifyAdminToken : DssError {
     override val message: String =
-      "missing Shopify Admin token: use header X-Shopify-Access-Token or configure DSS_SHOP_ACCESS_TOKENS"
+      "missing Shopify Admin token: configure DSS_SHOP_ACCESS_TOKENS, complete OAuth install, " +
+        "or persist a token via PUT /stores/api-key"
   }
 
   /** 403 — HMAC or signed-state verification failed. */

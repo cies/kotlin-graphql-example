@@ -3,7 +3,7 @@ package dropnext.dss.lib.shopify
 import dropnext.dss.lib.shopify.ShopDomain
 import kotlin.test.Test
 
-class ShopDomainsTest {
+class ShopDomainTest {
 
   @Test
   fun `normalises full myshopify host`() {

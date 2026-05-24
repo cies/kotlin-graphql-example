@@ -6,34 +6,36 @@ package dropnext.dss.path
  * log strings, UI text, and the `/webhooks/shopify` callback URL we register with Shopify.
  *
  * Canonical contract for DSS-internal endpoints: repo root **`openapi.json`**.
- * Keep these in sync with the spec — see `MonolithPaths` for the outbound counterpart.
+ * Keep these in sync with the spec — see [dropnext.dss.lib.monolith.OutBoundMonolithPaths] and [dropnext.dss.lib.shopify.oauth.OutBoundShopifyOAuthPaths]
+ * for the outbound counterparts.
  */
+@Suppress("ConstPropertyName") // Less shouty field names.
 object Paths {
   // --- Diagnostics ---
-  const val INDEX = "/"
-  const val HEALTH = "/health"
-  const val API = "/api"
-  const val API_CHECK = "/api/check"
-  const val API_REDIRECT_URL = "/api/redirect-url"
+  const val index = "/"
+  const val health = "/health"
+  const val api = "/api"
+  const val apiCheck = "/api/check"
+  const val apiRedirectUrl = "/api/redirect-url"
 
   // --- Shopify OAuth ---
-  const val INSTALL = "/install"
+  const val install = "/install"
 
   /** Default OAuth callback path; the actual value comes from `ShopifyConfig.oauthRedirectPath` (env `OAUTH_REDIRECT_PATH`). */
-  const val DEFAULT_OAUTH_CALLBACK = "/oauth/callback"
+  const val defaultOAuthCallback = "/oauth/callback"
 
   // --- Shopify webhooks ---
-  const val WEBHOOKS_SHOPIFY = "/webhooks/shopify"
+  const val webhooksShopify = "/webhooks/shopify"
 
   // --- DSS internal REST (called by monolith) ---
-  const val STORES_API_KEY = "/stores/api-key"
-  const val SYNC_SHIPMENTS_WITH_FULFILLMENTS = "/sync-shipments-with-fulfillments"
-  const val TRACKING_UPDATES = "/tracking-updates"
-  const val TRACKING_UPDATE = "/tracking-update"
+  const val storesApiKey = "/stores/api-key"
+  const val syncShipmentsWithFulfillments = "/sync-shipments-with-fulfillments"
+  const val trackingUpdates = "/tracking-updates"
+  const val trackingUpdate = "/tracking-update"
 
   // --- Demo / smoke-test routes (only when enableDemoRoutes) ---
-  const val DEMO_PRODUCTS = "/demo/products"
-  const val DEMO_ORDER = "/demo/order"
-  const val DEMO_FULFILLMENT_CREATE = "/demo/fulfillment/create"
-  const val DEMO_FULFILLMENT_TRACKING = "/demo/fulfillment/tracking"
+  const val demoProducts = "/demo/products"
+  const val demoOrder = "/demo/order"
+  const val demoFulfillmentCreate = "/demo/fulfillment/create"
+  const val demoFulfillmentTracking = "/demo/fulfillment/tracking"
 }

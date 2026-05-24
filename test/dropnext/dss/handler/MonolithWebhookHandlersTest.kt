@@ -47,7 +47,7 @@ class MonolithWebhookHandlersTest {
   fun `sync-shipments returns 401 when internal secret is required and not provided`() {
     val secret = "y".repeat(32)
     runDssApp(handlers(), secret = secret) { client ->
-      val r = client.post(Paths.SYNC_SHIPMENTS_WITH_FULFILLMENTS) {
+      val r = client.post(Paths.syncShipmentsWithFulfillments) {
         contentType(ContentType.Application.Json)
         setBody(validSyncRequest())
       }
@@ -65,7 +65,7 @@ class MonolithWebhookHandlersTest {
   fun `sync-shipments reaches handler when internal secret matches`() {
     val secret = "y".repeat(32)
     runDssApp(handlers(), secret = secret) { client ->
-      val r = client.post(Paths.SYNC_SHIPMENTS_WITH_FULFILLMENTS) {
+      val r = client.post(Paths.syncShipmentsWithFulfillments) {
         header("X-DSS-Internal-Secret", secret)
         contentType(ContentType.Application.Json)
         setBody(validSyncRequest())
@@ -79,7 +79,7 @@ class MonolithWebhookHandlersTest {
 
   @Test
   fun `sync-shipments returns 400 for non-positive shopify_order_id`() = runDssApp(handlers()) { client ->
-    val r = client.post(Paths.SYNC_SHIPMENTS_WITH_FULFILLMENTS) {
+    val r = client.post(Paths.syncShipmentsWithFulfillments) {
       contentType(ContentType.Application.Json)
       setBody(validSyncRequest().copy(shopifyOrderId = 0))
     }
@@ -89,7 +89,7 @@ class MonolithWebhookHandlersTest {
 
   @Test
   fun `sync-shipments returns 400 for invalid shopify_subdomain`() = runDssApp(handlers()) { client ->
-    val r = client.post(Paths.SYNC_SHIPMENTS_WITH_FULFILLMENTS) {
+    val r = client.post(Paths.syncShipmentsWithFulfillments) {
       contentType(ContentType.Application.Json)
       setBody(validSyncRequest().copy(shopifySubdomain = "!!invalid!!"))
     }
@@ -99,7 +99,7 @@ class MonolithWebhookHandlersTest {
 
   @Test
   fun `sync-shipments returns 400 for malformed JSON body`() = runDssApp(handlers()) { client ->
-    val r = client.post(Paths.SYNC_SHIPMENTS_WITH_FULFILLMENTS) {
+    val r = client.post(Paths.syncShipmentsWithFulfillments) {
       contentType(ContentType.Application.Json)
       setBody("{ this is not json")
     }
@@ -111,7 +111,7 @@ class MonolithWebhookHandlersTest {
 
   @Test
   fun `sync-shipments returns 401 when shop has no Admin token`() = runDssApp(handlers()) { client ->
-    val r = client.post(Paths.SYNC_SHIPMENTS_WITH_FULFILLMENTS) {
+    val r = client.post(Paths.syncShipmentsWithFulfillments) {
       contentType(ContentType.Application.Json)
       setBody(validSyncRequest())
     }
@@ -121,7 +121,7 @@ class MonolithWebhookHandlersTest {
 
   @Test
   fun `tracking-update returns 401 when shop has no Admin token`() = runDssApp(handlers()) { client ->
-    val r = client.post(Paths.TRACKING_UPDATE) {
+    val r = client.post(Paths.trackingUpdate) {
       contentType(ContentType.Application.Json)
       setBody(validTrackingRequest())
     }
@@ -135,7 +135,7 @@ class MonolithWebhookHandlersTest {
   fun `PUT stores api-key caches token in shopAccessTokens map`() {
     val tokens = ShopAccessTokenCache()
     runDssApp(handlers(shopTokens = tokens)) { client ->
-      val r = client.put(Paths.STORES_API_KEY) {
+      val r = client.put(Paths.storesApiKey) {
         contentType(ContentType.Application.Json)
         setBody(
           PutShopAccessTokenRequest(
@@ -157,7 +157,7 @@ class MonolithWebhookHandlersTest {
     val tokens = ShopAccessTokenCache()
     val fake = FakeMonolithService()
     runDssApp(handlers(shopTokens = tokens, monolith = fake)) { client ->
-      val r = client.put(Paths.STORES_API_KEY) {
+      val r = client.put(Paths.storesApiKey) {
         contentType(ContentType.Application.Json)
         setBody(
           PutShopAccessTokenRequest(
@@ -183,7 +183,7 @@ class MonolithWebhookHandlersTest {
     val tokens = ShopAccessTokenCache()
     val fake = FakeMonolithService().apply { putStoreApiKeyStatus = 500 }
     runDssApp(handlers(shopTokens = tokens, monolith = fake)) { client ->
-      val r = client.put(Paths.STORES_API_KEY) {
+      val r = client.put(Paths.storesApiKey) {
         contentType(ContentType.Application.Json)
         setBody(
           PutShopAccessTokenRequest(
@@ -201,7 +201,7 @@ class MonolithWebhookHandlersTest {
 
   @Test
   fun `PUT stores api-key rejects invalid shopify_subdomain as 400`() = runDssApp(handlers()) { client ->
-    val r = client.put(Paths.STORES_API_KEY) {
+    val r = client.put(Paths.storesApiKey) {
       contentType(ContentType.Application.Json)
       setBody(
         PutShopAccessTokenRequest(
@@ -218,7 +218,7 @@ class MonolithWebhookHandlersTest {
   @Test
   fun `PUT stores api-key requires internal secret when configured`() =
     runDssApp(handlers(), secret = "z".repeat(32)) { client ->
-      val r = client.put(Paths.STORES_API_KEY) {
+      val r = client.put(Paths.storesApiKey) {
         contentType(ContentType.Application.Json)
         setBody(
           PutShopAccessTokenRequest(

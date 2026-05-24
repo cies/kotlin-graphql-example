@@ -6,6 +6,7 @@ import dropnext.dss.lib.dto.PutShopAccessTokenResponse
 import dropnext.dss.lib.dto.SyncShipmentsWithFulfillmentsRequest
 import dropnext.dss.lib.dto.TrackingUpdateRequest
 import dropnext.dss.lib.dto.UpdateStoreApiKeyRequest
+import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlService
 import dropnext.dss.lib.shopify.graphql.fulfillment.FulfillmentResult
 import dropnext.dss.lib.shopify.graphql.fulfillment.RequestValidation
 import dropnext.dss.lib.shopify.graphql.fulfillment.toDssError
@@ -20,6 +21,8 @@ import dropnext.dss.lib.monolith.ShopifyGraphqlServiceFactory
 import dropnext.dss.lib.monolith.StoreApiKeyResult
 import dropnext.dss.lib.monolith.logMonolithFailure
 import dropnext.dss.lib.shopify.ShopDomain
+import dropnext.dss.workflow.syncShopifyShipmentsToFulfillments
+import dropnext.dss.workflow.syncShopifyTrackingEvent
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.respond
@@ -43,49 +46,59 @@ class MonolithWebhookHandlers(
 ) {
   suspend fun handleSyncShipments(call: ApplicationCall) {
     val body = call.receiveOr400<SyncShipmentsWithFulfillmentsRequest>() ?: return
-    if (!call.validateOrRespond(validateSyncShipmentsRequest(body))) return
-    val shop = call.normalizeShopOrRespond(body.shopifySubdomain) ?: return
-    val shopify = shopifyGraphqlServiceFactory.forShop(shop) ?: run {
-      call.respondError(DssError.MissingShopifyAdminToken)
-      return
-    }
-
-    when (val result = shopify.syncShipmentsWithFulfillments(body)) {
-      is FulfillmentResult.Ok -> call.respond(result.value)
-      is FulfillmentResult.Err -> {
-        val mapped = result.toDssError()
-        log.warn { "sync-shipments failed shop=${shop.host}: ${mapped.message}" }
-        call.respondError(mapped)
-      }
-    }
+    runFulfillmentRequest(
+      call = call,
+      subdomain = body.shopifySubdomain,
+      validation = validateSyncShipmentsRequest(body),
+      operation = "sync-shipments",
+    ) { syncShopifyShipmentsToFulfillments(it, body) }
   }
 
   suspend fun handleTrackingUpdate(call: ApplicationCall) {
     val body = call.receiveOr400<TrackingUpdateRequest>() ?: return
-    if (!call.validateOrRespond(validateTrackingUpdateRequest(body))) return
-    val shop = call.normalizeShopOrRespond(body.shopifySubdomain) ?: return
+    runFulfillmentRequest(
+      call = call,
+      subdomain = body.shopifySubdomain,
+      validation = validateTrackingUpdateRequest(body),
+      operation = "tracking-update",
+    ) { syncShopifyTrackingEvent(it, body) }
+  }
+
+  /**
+   * Common shape for the two fulfillment-flavored monolith webhooks: validate → resolve shop →
+   * resolve Admin token → invoke [block] and translate its [FulfillmentResult] to the appropriate
+   * `respond` / `respondError` outcome.
+   */
+  private suspend inline fun <reified T : Any> runFulfillmentRequest(
+    call: ApplicationCall,
+    subdomain: String,
+    validation: RequestValidation,
+    operation: String,
+    block: suspend (ShopifyGraphqlService) -> FulfillmentResult<T>,
+  ) {
+    if (!call.validateOrRespond(validation)) return
+    val shop = call.normalizeShopOrRespond(subdomain) ?: return
     val shopify = shopifyGraphqlServiceFactory.forShop(shop) ?: run {
       call.respondError(DssError.MissingShopifyAdminToken)
       return
     }
-
-    when (val result = shopify.createTrackingEvent(body)) {
+    when (val result = block(shopify)) {
       is FulfillmentResult.Ok -> call.respond(result.value)
       is FulfillmentResult.Err -> {
         val mapped = result.toDssError()
-        log.warn { "tracking-update failed shop=${shop.host}: ${mapped.message}" }
+        log.warn { "$operation failed shop=${shop.host}: ${mapped.message}" }
         call.respondError(mapped)
       }
     }
   }
 
-  /** `PUT` to [Paths.STORES_API_KEY] — caches a Shopify Admin token and forwards it to the monolith. */
+  /** `PUT` to [Paths.storesApiKey] — caches a Shopify Admin token and forwards it to the monolith. */
   suspend fun handlePutStoreApiKey(call: ApplicationCall) {
     val body = call.receiveOr400<PutShopAccessTokenRequest>() ?: return
     val shop = call.normalizeShopOrRespond(body.shopifySubdomain) ?: return
 
     shopTokenCache[shop] = body.apiKey
-    log.info { "PUT ${Paths.STORES_API_KEY}: token cached in memory for shop=${shop.host}" }
+    log.info { "PUT ${Paths.storesApiKey}: token cached in memory for shop=${shop.host}" }
 
     val apiKeyReq = UpdateStoreApiKeyRequest(
       shopifySubdomain = shop.subdomainShort,

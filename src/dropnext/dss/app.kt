@@ -65,7 +65,7 @@ private fun logConfigSummary(config: Config) {
   if (config.dev.enableTestHarness) {
     log.info {
       "[test-harness] /demo/ routes forced on; SANDBOX_SHOP/SANDBOX_ACCESS_TOKEN merged into the token map " +
-        "(set DSS_SHOP_ACCESS_TOKENS or pass X-Shopify-Access-Token for real shops)."
+        "(configure DSS_SHOP_ACCESS_TOKENS for real shops, or complete the OAuth install flow)."
     }
   } else if (config.dev.enableDemoRoutes) {
     log.info { "[demo] /demo/ routes enabled via ENABLE_DEMO_ROUTES=true — disable in production." }

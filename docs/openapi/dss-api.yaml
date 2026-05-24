@@ -5,9 +5,10 @@ info:
   description: |
     This API is how our **main backend app** (monolith) asks the **Shopify service** to call Shopify Admin API.
 
-    The service is **stateless**: it does not persist shop rows or tokens. For each fulfillment call, pass either
-    header **`X-Shopify-Access-Token`** (Admin API token for that shop) or configure env **`DSS_SHOP_ACCESS_TOKENS`**
-    (`shop.myshopify.com|shpat_…` pairs, comma-separated). Optional **`DSS_INTERNAL_SECRET`** still gates these routes.
+    The service is **stateless**: it does not persist shop rows or tokens. The per-shop Shopify Admin token is
+    resolved server-side from an in-memory cache populated by env **`DSS_SHOP_ACCESS_TOKENS`**
+    (`shop.myshopify.com|shpat_…` pairs, comma-separated), the OAuth install callback, and **`PUT /stores/api-key`**;
+    a cache miss falls back to a monolith **`GET /stores`** lookup. Optional **`DSS_INTERNAL_SECRET`** still gates these routes.
 
     **Canonical machine-readable specification:** **`openapi.json`** at the repository root (`x-webhooks` map tells the monolith
     where to POST). Gradle **`openApiGenerate`** uses that JSON to generate Kotlin DTOs (`build.gradle.kts`).
@@ -464,12 +465,3 @@ paths:
       description: |
         If whoever deployed the server set the `DSS_INTERNAL_SECRET` environment variable,
         every request must send this header with that same value - like a shared password between services.
-    ShopifyAccessToken:
-      name: X-Shopify-Access-Token
-      in: header
-      required: false
-      schema:
-        type: string
-      description: |
-        Shopify Admin API access token for the shop in the JSON body (`shopify_subdomain`). Required unless
-        the server was configured with `DSS_SHOP_ACCESS_TOKENS` / `SANDBOX_ACCESS_TOKEN` for that shop.

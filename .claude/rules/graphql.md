@@ -2,6 +2,7 @@
 paths:
   - "src/resources/*.graphql"
   - "src/dropnext/dss/shopify/**/*.kt"
+  - "src/dropnext/dss/lib/shopify/**/*.kt"
 ---
 # Rules for Shopify Graphql queries and codegen
 
@@ -32,12 +33,12 @@ paths:
 
 ## Per-shop clients
 
-Graphql calls are made against the **shop-specific** endpoint `https://{shop}/admin/api/{version}/graphql.json` with a per-shop Admin access token. Use `GraphqlClientCache` to retrieve a client — do not construct one ad hoc.
+Graphql calls are made against the **shop-specific** endpoint `https://{shop}/admin/api/{version}/graphql.json` with a per-shop Admin access token. Call `ShopifyGraphqlServiceFactory.forShop(shop)` (production wiring: `HttpShopifyGraphqlServiceFactory` in `lib/monolith/`) to get a `ShopifyGraphqlService` already bound to the resolved token — do not construct `GraphQLKtorClient` ad hoc.
 
 
 ## Webhook handling
 
-- Inbound webhooks are verified with `X-Shopify-Hmac-Sha256` in **constant time** (`SecureCompare.kt`).
+- Inbound webhooks are verified with `X-Shopify-Hmac-Sha256` in **constant time** by `ShopifyHmacVerifierService` (`lib/shopify/webhook/`), which delegates to `constantTimeEquals` in `lib/ktor/ConstantTimeEquals.kt`.
 - Always validate HMAC before parsing the body.
 - Read the shop domain from `X-Shopify-Shop-Domain` header (reverse proxies must forward it).
-- Inbound webhook wiring is in `routing/WebhookRouting.kt`; per-topic dispatch happens in `handler/WebhookHandlers.kt` (matches on `ShopifyWebhookTopic`). Outbound subscription registration on install lives in `shopify/ShopifyWebhookRegistration.kt`.
+- Inbound webhook wiring is in `routing/installShopifyWebhookRoutes.kt`; per-topic dispatch happens in `handler/ShopifyWebhookHandlers.kt` (matches on `ShopifyWebhookTopic`). Outbound subscription registration on install lives in `HttpShopifyGraphqlService.registerStandardWebhooks` (`lib/shopify/graphql/`), with the result types in `lib/shopify/graphql/webhookregistration/`.

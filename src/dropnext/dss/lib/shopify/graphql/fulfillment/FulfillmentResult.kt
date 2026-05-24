@@ -10,10 +10,3 @@ sealed interface FulfillmentResult<out T> {
     data class Network(val message: String) : Err()
   }
 }
-
-fun FulfillmentResult.Err.toMessage(): String = when (this) {
-  is FulfillmentResult.Err.UserError -> messages.joinToString("; ")
-  is FulfillmentResult.Err.GraphqlError -> raw
-  is FulfillmentResult.Err.NotFound -> detail
-  is FulfillmentResult.Err.Network -> message
-}

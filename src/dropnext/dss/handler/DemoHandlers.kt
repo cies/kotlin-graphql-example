@@ -9,6 +9,7 @@ import dropnext.dss.path.Paths
 import dropnext.dss.shopify.FulfillmentCreateDemoBody
 import dropnext.dss.shopify.FulfillmentTrackingUpdateDemoBody
 import dropnext.dss.lib.shopify.ShopDomain
+import dropnext.dss.lib.shopify.orderGidFromParam
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -33,7 +34,7 @@ class DemoHandlers(
   private val shopifyGraphqlServiceFactory: ShopifyGraphqlServiceFactory,
 ) {
   suspend fun handleListProducts(call: ApplicationCall) {
-    val ctx = prepareDemo(call, call.request.queryParameters["shop"], "GET ${Paths.DEMO_PRODUCTS}") ?: return
+    val ctx = prepareDemo(call, call.request.queryParameters["shop"], "GET ${Paths.demoProducts}") ?: return
     val first = call.request.queryParameters["first"]?.toIntOrNull()?.coerceIn(1, 50) ?: 10
     val after = call.request.queryParameters["after"]
     runDemo(call, ctx) {
@@ -64,10 +65,10 @@ class DemoHandlers(
 
   suspend fun handleGetOrder(call: ApplicationCall) {
     val idParam = call.request.queryParameters["id"] ?: run {
-      log.warn { "[demo] GET ${Paths.DEMO_ORDER} — missing id query parameter" }
+      log.warn { "[demo] GET ${Paths.demoOrder} — missing id query parameter" }
       return call.respondText("Pass ?id=gid://shopify/Order/... or numeric id", status = HttpStatusCode.BadRequest)
     }
-    val ctx = prepareDemo(call, call.request.queryParameters["shop"], "GET ${Paths.DEMO_ORDER}") ?: return
+    val ctx = prepareDemo(call, call.request.queryParameters["shop"], "GET ${Paths.demoOrder}") ?: return
     val orderGid = orderGidFromParam(idParam) ?: run {
       log.warn { "[demo] ${ctx.routeLabel} — invalid_id shop=${ctx.shopify.shop.host} id=$idParam" }
       return call.respondText("Invalid id", status = HttpStatusCode.BadRequest)
@@ -91,7 +92,7 @@ class DemoHandlers(
 
   suspend fun handleCreateFulfillment(call: ApplicationCall) {
     val body = call.receive<FulfillmentCreateDemoBody>()
-    val ctx = prepareDemo(call, body.shop, "POST ${Paths.DEMO_FULFILLMENT_CREATE}") ?: return
+    val ctx = prepareDemo(call, body.shop, "POST ${Paths.demoFulfillmentCreate}") ?: return
     runDemo(call, ctx) {
       val r = ctx.shopify.demoCreateFulfillmentWithTracking(
         fulfillmentOrderId = body.fulfillmentOrderId,
@@ -112,7 +113,7 @@ class DemoHandlers(
 
   suspend fun handleUpdateTracking(call: ApplicationCall) {
     val body = call.receive<FulfillmentTrackingUpdateDemoBody>()
-    val ctx = prepareDemo(call, body.shop, "POST ${Paths.DEMO_FULFILLMENT_TRACKING}") ?: return
+    val ctx = prepareDemo(call, body.shop, "POST ${Paths.demoFulfillmentTracking}") ?: return
     runDemo(call, ctx) {
       val r = ctx.shopify.demoUpdateFulfillmentTracking(
         fulfillmentId = body.fulfillmentId,
@@ -174,16 +175,11 @@ class DemoHandlers(
   ) {
     try {
       block()
-    } catch (e: Throwable) {
+    } catch (e: Exception) {
       val msg = clientErrorMessage(e)
       log.error(e) { "[demo] ${ctx.routeLabel} failed shop=${ctx.shopify.shop.host}: $msg" }
       call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = msg))
     }
   }
 
-  private fun orderGidFromParam(idParam: String): String? {
-    if (idParam.startsWith("gid://")) return idParam
-    val n = idParam.toLongOrNull() ?: return null
-    return "gid://shopify/Order/$n"
-  }
 }

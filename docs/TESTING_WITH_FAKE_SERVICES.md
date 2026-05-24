@@ -29,4 +29,4 @@ Configure the fake:
 | `MONOLITH_CREATE_ORDER_PATH` | Default `/orders` |
 | `DSS_ALLOW_INSECURE_MONOLITH` | `true` for local `http://` stubs |
 
-See [`DssAppConfig`](../src/dropnext/dss/config/DssAppConfig.kt) and [`README.md`](../README.md).
+See [`Config`](../src/dropnext/dss/config/Config.kt) and [`README.md`](../README.md).

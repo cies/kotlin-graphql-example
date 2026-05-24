@@ -1,7 +1,6 @@
 package dropnext.dss.lib.shopify.oauth
 
 import dropnext.dss.config.ShopifyConfig
-import dropnext.dss.path.OutBoundShopifyPaths
 import dropnext.dss.lib.shopify.ShopDomain
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -47,7 +46,7 @@ class ShopifyOAuthService(
     return buildString {
       append("https://")
       append(shop.host)
-      append(OutBoundShopifyPaths.ADMIN_OAUTH_AUTHORIZE)
+      append(OutBoundShopifyOAuthPaths.adminOAuthAuthorize)
       append("?client_id=").append(enc(config.appClientId))
       append("&scope=").append(enc(config.scopes))
       append("&redirect_uri=").append(enc(config.redirectUrl))
@@ -97,7 +96,7 @@ class ShopifyOAuthService(
    */
   suspend fun exchangeCode(shop: ShopDomain, code: String): Result<OAuthAccessTokenResponse> =
     runCatching {
-      val url = "https://${shop.host}${OutBoundShopifyPaths.ADMIN_OAUTH_ACCESS_TOKEN}"
+      val url = "https://${shop.host}${OutBoundShopifyOAuthPaths.adminOAuthAccessToken}"
       httpClient.post(url) {
         contentType(ContentType.Application.Json)
         setBody(
@@ -116,17 +115,6 @@ class ShopifyOAuthService(
     return Base64.getUrlEncoder()
       .withoutPadding()
       .encodeToString(mac.doFinal(message.toByteArray(StandardCharsets.UTF_8)))
-  }
-
-  companion object {
-
-    /** Returns 32 hex characters for use as the legacy unsigned OAuth `state` parameter (tests only). */
-    // TODO: move this to a fake? (create an OAuthService interface that this class implements first)
-    fun randomState(): String {
-      val bytes = ByteArray(16)
-      SecureRandom().nextBytes(bytes)
-      return bytes.joinToString("") { "%02x".format(it) }
-    }
   }
 }
 

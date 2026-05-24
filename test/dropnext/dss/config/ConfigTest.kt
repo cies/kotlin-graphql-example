@@ -31,7 +31,6 @@ class ConfigTest {
         baseUrl = monolithBaseUrl,
         apiPrefix = null,
         apiKey = null,
-        createOrderPath = "/orders",
         allowInsecureUrl = allowInsecureMonolithUrl,
       ),
       dev = DevConfig(

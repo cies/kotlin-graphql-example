@@ -3,7 +3,7 @@ package dropnext.dss.lib.shopify
 import dropnext.dss.lib.shopify.ShopDomain
 import kotlin.test.Test
 
-class ShopDomainsWebhookTest {
+class ShopDomainWebhookTest {
 
   @Test
   fun `prefers X-Shopify-Shop-Domain header`() {

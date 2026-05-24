@@ -1,10 +1,7 @@
 package dropnext.dss.lib.shopify
 
-import dropnext.dss.lib.shopify.fulfillmentGid
-import dropnext.dss.lib.shopify.fulfillmentOrderGid
 import dropnext.dss.lib.shopify.legacyIdFromGid
 import dropnext.dss.lib.shopify.orderGid
-import dropnext.dss.lib.shopify.shopifyShopIdFromShopGid
 import kotlin.test.Test
 
 class ShopifyGidTest {
@@ -26,23 +23,5 @@ class ShopifyGidTest {
   fun `orderGid round-trips through legacyIdFromGid`() {
     assert(legacyIdFromGid(orderGid(1001L)) == 1001L)
     assert(orderGid(1001L) == "gid://shopify/Order/1001")
-  }
-
-  @Test
-  fun `fulfillmentGid round-trips through legacyIdFromGid`() {
-    assert(legacyIdFromGid(fulfillmentGid(42L)) == 42L)
-    assert(fulfillmentGid(42L) == "gid://shopify/Fulfillment/42")
-  }
-
-  @Test
-  fun `fulfillmentOrderGid round-trips through legacyIdFromGid`() {
-    assert(legacyIdFromGid(fulfillmentOrderGid(7L)) == 7L)
-    assert(fulfillmentOrderGid(7L) == "gid://shopify/FulfillmentOrder/7")
-  }
-
-  @Test
-  fun `shopifyShopIdFromShopGid is an alias for legacyIdFromGid`() {
-    assert(shopifyShopIdFromShopGid("gid://shopify/Shop/55") == 55L)
-    assert(shopifyShopIdFromShopGid("gid://shopify/Shop/") == null)
   }
 }

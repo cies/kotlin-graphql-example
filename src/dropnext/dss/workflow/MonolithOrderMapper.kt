@@ -23,7 +23,7 @@ fun orderToCreateShopifyOrderRequest(
   shopifySubdomain: String,
   order: Order,
 ): CreateShopifyOrderRequest {
-  val orderLegacy = legacyIdFromGid(order.id) ?: order.legacyResourceId.toLong()
+  val orderLegacy = legacyIdFromGid(order.id) ?: order.legacyResourceId.toLongOrNull() ?: 0L
   val shipping = order.shippingAddress?.toDto() ?: ShippingAddress(
     firstName = null,
     lastName = null,

@@ -10,7 +10,7 @@ import kotlinx.serialization.json.longOrNull
 
 
 // Helpers for pulling small bits of information out of Shopify HTTP webhook bodies BEFORE we make a
-// follow-up Graphql call to load the full resource. Verifying the HMAC stays in `ShopifySignatures`;
+// follow-up Graphql call to load the full resource. Verifying the HMAC stays in `ShopifyHmacVerifierService`;
 // these parsers assume the body is already trusted.
 
 /**

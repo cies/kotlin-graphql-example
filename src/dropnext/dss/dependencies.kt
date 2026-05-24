@@ -12,6 +12,7 @@ import dropnext.dss.lib.ktor.createSharedHttpClient
 import dropnext.dss.lib.monolith.HttpMonolithService
 import dropnext.dss.lib.monolith.HttpShopifyGraphqlServiceFactory
 import dropnext.dss.lib.monolith.MonolithService
+import dropnext.dss.lib.monolith.OutBoundMonolithPaths
 import dropnext.dss.lib.monolith.ShopAccessTokenCache
 import dropnext.dss.lib.monolith.ShopifyGraphqlServiceFactory
 import dropnext.dss.lib.shopify.oauth.ShopifyOAuthService
@@ -23,9 +24,10 @@ import io.ktor.client.HttpClient
 private val log = KotlinLogging.logger {}
 
 /**
- * Every collaborator the running app needs, wired once. This is passed to [dssModule].
- * Tests assemble the same shape (with fakes substituted via the optional [dssDependencies]
- * parameters) so the Ktor module mounted in production runs unchanged under `testApplication`.
+ * Every collaborator the running app needs, wired once. [main][dropnext.dss.main] passes this graph
+ * into the Ktor `embeddedServer` block. Tests assemble the same shape (with fakes substituted via
+ * the optional [dssDependencies] parameters) so the routing wired in production runs unchanged
+ * under `testApplication`.
  */
 data class DssDependencies(
   val config: Config,
@@ -76,7 +78,7 @@ fun dssDependencies(
     baseUrl = config.monolith.baseUrl,
     apiPathPrefix = config.monolith.apiPrefix,
     apiKey = config.monolith.apiKey,
-    createOrderPath = config.monolith.createOrderPath,
+    createOrderPath = OutBoundMonolithPaths.orders,
   ),
   shopifyGraphqlServiceFactory: ShopifyGraphqlServiceFactory = HttpShopifyGraphqlServiceFactory(
     httpClient = httpClient,

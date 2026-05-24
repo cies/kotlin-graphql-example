@@ -53,21 +53,22 @@ All Kotlin lives under `src/dropnext/dss/` (we set `srcDir("src")` in Gradle to 
 | Package | Role |
 | ------- | ---- |
 | [`app.kt`](src/dropnext/dss/app.kt) | `main` — reads config, builds the dependency graph, starts Ktor. |
-| [`config/`](src/dropnext/dss/config) | Env-var parsing, `DssAppConfig` + `ShopifyConfig`, sandbox token map. |
-| [`path/`](src/dropnext/dss/path) | URL path constants for inbound DSS routes, outbound monolith routes, and outbound Shopify routes. Single source of truth. |
-| [`shopify/`](src/dropnext/dss/shopify) | Shopify-specific helpers: OAuth, HMAC signatures, webhook body parsers, product/order mappers, shop-domain normalization. |
+| [`dependencies.kt`](src/dropnext/dss/dependencies.kt) | Assembles `DssDependencies` (HTTP clients, services, handlers); tests override per-collaborator. |
+| [`config/`](src/dropnext/dss/config) | Env-var parsing; top-level `Config` plus `ShopifyConfig`, `MonolithConfig`, `DevConfig`, `WebhookConfig`; sandbox token map. |
+| [`path/`](src/dropnext/dss/path) | URL path constants — `Paths` (inbound), `OutBoundMonolithPaths`, `OutBoundShopifyPaths`. Single source of truth. |
+| [`shopify/`](src/dropnext/dss/shopify) | Shopify-domain mappers and demo bodies (`ProductMapper`, `MoneyMinorUnits`, `DemoFulfillmentBodies`). |
+| [`domain/`](src/dropnext/dss/domain) | Internal value objects shared across layers (e.g. `MonolithPersistOutcome`). |
 | [`workflow/`](src/dropnext/dss/workflow) | Multi-step orchestration that doesn't touch HTTP types directly (e.g. webhook → load order → map → post to monolith). |
 | [`handler/`](src/dropnext/dss/handler) | Ktor handlers — `ApplicationCall → response`. Where validation, auth, and transport concerns live. |
-| [`routing/`](src/dropnext/dss/routing) | Thin Ktor route bindings (`installXyzRoutes(handlers)`). One per handler family. |
+| [`routing/`](src/dropnext/dss/routing) | Thin Ktor route bindings — one `Route.install*Routes(handlers)` function per handler family. |
 | [`presentation/`](src/dropnext/dss/presentation) | Pure view layer — data in, HTML out. No Ktor/HTTP types. |
-| [`lib/dss/`](src/dropnext/dss/lib/dss) | DSS protocol primitives: `ShopAccessTokenCache`, GID helpers, constant-time compare, generated OpenAPI DTOs under `lib.dss.dto`. |
-| [`lib/fulfillment/`](src/dropnext/dss/lib/fulfillment) | Pure fulfillment domain: request validation, fulfillment-order matching, `FulfillmentResult` + status mapping, `DssFulfillmentService`. |
-| [`lib/monolith/`](src/dropnext/dss/lib/monolith) | Outbound monolith client: `MonolithService` interface, `HttpMonolithService` impl, error body parsing, structured logging. |
+| [`lib/shopify/`](src/dropnext/dss/lib/shopify) | Shopify protocol primitives: `ShopDomain`, GID helpers, `ShopifyOAuthService`, `ShopifyHmacVerifierService`, `ShopifyGraphqlService` + fulfillment helpers + webhook id/topic parsers. |
+| [`lib/monolith/`](src/dropnext/dss/lib/monolith) | Outbound monolith client: `MonolithService` interface, `HttpMonolithService` impl, error body parsing, structured logging, `ShopAccessTokenCache`, `ShopifyGraphqlServiceFactory` (Admin-token resolution). |
 | [`lib/json/`](src/dropnext/dss/lib/json) | Shared `kotlinx.serialization` configs: `AppJson` (inbound) and `MonolithJson` (outbound). |
-| [`lib/ktor/`](src/dropnext/dss/lib/ktor) | Ktor server extensions: trace-id MDC interceptor, plain-text error helpers, auth helpers. |
+| [`lib/ktor/`](src/dropnext/dss/lib/ktor) | Ktor server extensions: trace-id MDC interceptor, error helpers, shared HTTP client builders, monolith-webhook auth plugin. |
 | `src/resources/` | `.graphql` queries (compile-time-typed by the Gradle plugin), `logback.xml`. |
 | `src/graphql-schema/` | Committed Shopify Admin schema (regenerated via `./gradlew graphqlIntrospectSchema`). |
-| [`openapi.json`](openapi.json) | Canonical DSS ↔ monolith contract. DTOs under `lib.dss.dto` are **generated** from this by `openApiGenerate`. |
+| [`openapi.json`](openapi.json) | Canonical DSS ↔ monolith contract. DTOs under `dropnext.dss.lib.dto` are **generated** from this by `openApiGenerate`. |
 
 
 ### Our preferred IDE
@@ -86,7 +87,7 @@ See [docs/setup-intellij-idea.md](./docs/setup-intellij-idea.md) for IntelliJ ID
    ```
 
 4. Point your browser to `http://localhost:{PORT}/install?shop=your-dev-store.myshopify.com` to start the OAuth flow.
-5. Optional: set `ENABLE_TEST_HARNESS=true` and open `/dev/test-harness` for an interactive page that hits DSS/Demo routes against a sandbox shop (the `/demo/*` routes skip real Shopify HTTP when `DSS_SANDBOX_FAKE_SHOPIFY=true`).
+5. Optional: set `ENABLE_TEST_HARNESS=true` to turn on the `/demo/*` routes and merge a `SANDBOX_SHOP` / `SANDBOX_ACCESS_TOKEN` entry into the in-memory token map for hand-testing against a sandbox shop.
 
 
 ### Build deployable containers
@@ -132,7 +133,7 @@ Inbound DSS webhook contracts live under `x-webhooks` in the spec (3.0 has no ro
 ```
 
 * Generator: `kotlin` + `jvm-ktor`
-* Output: `build/generated/openapi/.../dropnext/dss/lib/dss/dto/`
+* Output: `build/generated/openapi/.../dropnext/dss/lib/dto/` (`modelPackage = "dropnext.dss.lib.dto"` in `build.gradle.kts`)
 * Policy: **Models only** (`apis=false`) — HTTP stays in handwritten `HttpMonolithService`
 
 Do not add handwritten copies of `CreateShopifyOrderRequest` or other spec DTOs.
@@ -167,8 +168,7 @@ point the IDE plugin at the committed `src/graphql-schema/schema.graphql`.
 * **App URL**: `PUBLIC_BASE_URL` must be the HTTPS origin Shopify uses to reach this service.
 * **Listen address**: binds `0.0.0.0` so it works in containers and typical PaaS hosting.
 * **Access tokens**: the server is **stateless** — it does not persist Admin API tokens.
-After OAuth, the success page shows how to set `DSS_SHOP_ACCESS_TOKENS` (or use `X-Shopify-Access-Token` on DSS requests).
-Webhooks and `/demo/*` resolve the token from that env map for each shop.
+After OAuth, the success page shows how to set `DSS_SHOP_ACCESS_TOKENS` so a future cold start can re-resolve the token without OAuth. Webhooks, `/demo/*`, and internal REST routes resolve the per-shop Admin token through the in-memory cache (filled by OAuth, `DSS_SHOP_ACCESS_TOKENS`, or `PUT /stores/api-key`), falling back to a monolith `GET /stores` lookup.
 
 
 ### Webhooks registered on install
@@ -193,7 +193,7 @@ OpenAPI (human-readable mirror): [`docs/openapi/dss-api.yaml`](docs/openapi/dss-
 * `POST /tracking-updates` — alias for `/tracking-update`, same payload.
 * `PUT /stores/api-key` — accepts `PutShopAccessTokenRequest`; caches the Shopify Admin token in memory and forwards it to the monolith when `MONOLITH_BASE_URL` is set.
 
-Pass `X-Shopify-Access-Token` or configure `DSS_SHOP_ACCESS_TOKENS`. When `DSS_INTERNAL_SECRET` is set, all four routes also require header `X-DSS-Internal-Secret`.
+The per-shop Admin token is resolved server-side via the in-memory cache (filled by OAuth, `DSS_SHOP_ACCESS_TOKENS`, or `PUT /stores/api-key`) with a fallback to monolith `GET /stores`. When `DSS_INTERNAL_SECRET` is set, all four routes also require header `X-DSS-Internal-Secret`.
 
 
 ### Security notes (production)
@@ -228,10 +228,9 @@ Unhandled server errors return a generic message; details stay in server logs on
 | `DSS_ALLOW_INSECURE_MONOLITH` | no | Set `true` only for local dev so `MONOLITH_BASE_URL` may use `http://`. Production should use `https://` (default: insecure URLs are rejected at startup). |
 | `DSS_SYNC_ORDER_ON_UPDATED` | no | Default `false`. When `true`, `orders/updated` webhooks also POST to the monolith (in addition to `orders/create`). |
 | `ENABLE_DEMO_ROUTES` | no | Set `true` to expose `/demo/*` without the HTML harness. **If `ENABLE_TEST_HARNESS=true`, demo routes are always turned on** for local testing. |
-| `ENABLE_TEST_HARNESS` | no | Set `true` for `/dev/test-harness` and **/demo/* routes**. With harness on, a default fake token is merged for `SANDBOX_SHOP` unless `SANDBOX_ACCESS_TOKEN` is set. |
+| `ENABLE_TEST_HARNESS` | no | Set `true` to force the **/demo/* routes** on and merge a sandbox token entry. With harness on, a default fake token is merged for `SANDBOX_SHOP` unless `SANDBOX_ACCESS_TOKEN` is set. |
 | `SANDBOX_SHOP` | no | Short handle merged into the token map when the harness is on (default `harness-sandbox`). |
 | `SANDBOX_ACCESS_TOKEN` | no | Optional real dev-store Admin token for that sandbox shop; if unset with harness on, a **non-production placeholder** is used. |
-| `DSS_SANDBOX_FAKE_SHOPIFY` | no | Only with **`ENABLE_TEST_HARNESS=true`**. If `true`, the `/demo/*` routes **skip real Shopify HTTP** and return stub **200** JSON/text so the test page does not hit 500/Graphql throws. Use for local UI checks; never in production. |
 
 Legacy compatibility: `SHOPIFY_API_KEY` and `SHOPIFY_API_SECRET` are still accepted as fallbacks when the new `SHOPIFY_APP_CLIENT_ID` / `SHOPIFY_APP_CLIENT_SECRET` vars are not set.
 
@@ -240,7 +239,7 @@ Legacy compatibility: `SHOPIFY_API_KEY` and `SHOPIFY_API_SECRET` are still accep
 
 * **Startup exits quickly**: verify required vars `SHOPIFY_APP_CLIENT_ID` and `SHOPIFY_APP_CLIENT_SECRET` (or legacy `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET`), plus `SHOPIFY_SCOPES` and `PUBLIC_BASE_URL`.
 * **OAuth callback mismatch in Shopify**: ensure `{PUBLIC_BASE_URL}{OAUTH_REDIRECT_PATH}` exactly matches the Partner Dashboard redirect URL.
-* **DSS auth failures (`401`)**: provide `X-Shopify-Access-Token` or configure `DSS_SHOP_ACCESS_TOKENS`; include `X-DSS-Internal-Secret` when `DSS_INTERNAL_SECRET` is set.
+* **DSS auth failures (`401`)**: ensure a Shopify Admin token is resolvable for the shop — seed `DSS_SHOP_ACCESS_TOKENS`, complete OAuth, or `PUT /stores/api-key`; include `X-DSS-Internal-Secret` when `DSS_INTERNAL_SECRET` is set.
 * **`DSS_SHOP_ACCESS_TOKENS` parse issues**: use comma-separated `shop.myshopify.com|shpat_...` pairs.
 * **`[monolith] MONOLITH_BASE_URL is unset` despite being configured**: duplicate `MONOLITH_BASE_URL` / `MONOLITH_API_KEY` lines (often empty trailing blocks pasted from templates) cause **last value wins**. Remove the trailing empties so only one assignment remains; redeploy/restart.
 * **`Monolith store api-key … status=404` with HTML `<h1>Not Found`**: DSS hit `{MONOLITH_BASE_URL}/stores/api-key` (before optional prefix). Use the REST API domain (often `api.…`), or set `MONOLITH_API_PREFIX` if routes live under a path (`api/v1`). Confirm with `curl -i -X PUT https://your-api…/stores/api-key` (+ Bearer header) outside DSS.

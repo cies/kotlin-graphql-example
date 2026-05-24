@@ -201,6 +201,12 @@ class ArchitectureTest {
     "/dropnext/dss/lib/shopify/",
     // Maps the GetOrderForDss result into the monolith CreateShopifyOrderRequest DTO.
     "/dropnext/dss/workflow/MonolithOrderMapper.kt",
+    // Multi-step Shopify orchestrations that compose ShopifyGraphqlService primitives —
+    // they map between generated payloads and the FulfillmentResult / WebhookRegistrationReport
+    // types handlers consume. Touching generated types is part of the contract here.
+    "/dropnext/dss/workflow/syncShopifyShipmentsToFulfillments.kt",
+    "/dropnext/dss/workflow/syncShopifyTrackingEvent.kt",
+    "/dropnext/dss/workflow/registerShopifyWebhooks.kt",
     // Maps GetProductById result (Product / variants / media) into monolith UpsertVariants DTOs.
     "/dropnext/dss/shopify/ProductMapper.kt",
     // Renders WebhookSubscriptionTopic.name into HTML on the install confirmation page.
@@ -276,18 +282,31 @@ class ArchitectureTest {
       }
   }
 
+  /**
+   * Packages allowed to be star-imported. Mirrors `ij_kotlin_packages_to_use_import_on_demand`
+   * in `.editorconfig` — `kotlinx.html` is an HTML-builder eDSL whose ergonomics depend on
+   * pulling in all tag/attribute functions at once.
+   */
+  private val allowedWildcardImportPackages = listOf(
+    "kotlinx.html",
+  )
+
   @Test
   fun `main sources do not use wildcard imports`() {
     // Konsist's KoImport.name strips the trailing `.*`, so a Konsist-based check silently passes.
     // We grep the source files directly — no extra dependency, no false negatives.
-    val wildcardImportLine = Regex("""^\s*import\s+[\w.]+\.\*\s*$""")
+    val wildcardImportLine = Regex("""^\s*import\s+([\w.]+)\.\*\s*$""")
     val violations = java.io.File("src").walkTopDown()
       .filter { it.isFile && it.extension == "kt" }
       .flatMap { file ->
         file.readLines()
           .withIndex()
-          .filter { (_, line) -> wildcardImportLine.matches(line) }
-          .map { (idx, line) -> "${file.path}:${idx + 1}  ${line.trim()}" }
+          .mapNotNull { (idx, line) ->
+            val match = wildcardImportLine.matchEntire(line) ?: return@mapNotNull null
+            val pkg = match.groupValues[1]
+            if (pkg in allowedWildcardImportPackages) null
+            else "${file.path}:${idx + 1}  ${line.trim()}"
+          }
       }
       .toList()
     assert(violations.isEmpty()) {
@@ -320,9 +339,9 @@ class ArchitectureTest {
     // Integration-style test exercising the webhook → monolith path end-to-end. Unit-level
     // coverage of MonolithOrderSync.kt would live in a separate MonolithOrderSyncTest.kt.
     "/test/dropnext/dss/workflow/WebhookMonolithSyncTest.kt",
-    // Webhook-flavored variant of ShopDomainsTest — covers shop-domain handling on the inbound
+    // Webhook-flavored variant of ShopDomainTest — covers shop-domain handling on the inbound
     // webhook path specifically, with no single matching lib/shopify/ source file.
-    "/test/dropnext/dss/lib/shopify/ShopDomainsWebhookTest.kt",
+    "/test/dropnext/dss/lib/shopify/ShopDomainWebhookTest.kt",
     // Tests the trace-id MDC interceptor that lives inside `lib/ktor/plugins.kt` alongside the
     // other Ktor plugin installers — no dedicated `Tracing.kt` source file.
     "/test/dropnext/dss/lib/ktor/TracingTest.kt",
@@ -332,11 +351,6 @@ class ArchitectureTest {
     // ShopifyConfig now lives inline in `config/DssAppConfig.kt` alongside the other config
     // groups (MonolithConfig, DevConfig, WebhookConfig). The test keeps its name for clarity.
     "/test/dropnext/dss/config/ShopifyConfigTest.kt",
-    // Focused integration test for HttpShopifyGraphqlService.registerStandardWebhooks; the data
-    // classes (WebhookRegistrationReport, WebhookSubscriptionStatus) moved into a subpackage
-    // and the loose registerStandardWebhooks function is gone, so there's no single src file
-    // to mirror.
-    "/test/dropnext/dss/lib/shopify/graphql/ShopifyWebhookRegistrationTest.kt",
   )
 
   /**

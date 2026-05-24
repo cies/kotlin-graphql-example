@@ -1,23 +1,63 @@
 package dropnext.dss.lib.shopify.webhook
 
+import dropnext.graphql.generated.enums.WebhookSubscriptionTopic
+
 
 /**
  * Inbound webhook topics this service routes on. [Other] captures any unhandled topic header,
  * preserving the raw string so monitoring can flag unexpected topics by name. A nullable enum
  * would collapse "unknown topic 'foo/bar'" and "missing header" into the same `null` and lose
  * that signal.
+ *
+ * Each known case carries the matching Shopify Admin Graphql [subscriptionTopic], so the
+ * post-install webhook registration in `HttpShopifyGraphqlService.registerStandardWebhooks`
+ * derives its target list from [known] — adding a topic in one place is enough.
  */
 sealed interface ShopifyWebhookTopic {
   val raw: String
 
-  data object ProductsCreate : ShopifyWebhookTopic { override val raw = "products/create" }
-  data object ProductsUpdate : ShopifyWebhookTopic { override val raw = "products/update" }
-  data object ProductsDelete : ShopifyWebhookTopic { override val raw = "products/delete" }
-  data object OrdersCreate : ShopifyWebhookTopic { override val raw = "orders/create" }
-  data object OrdersUpdated : ShopifyWebhookTopic { override val raw = "orders/updated" }
-  data class Other(override val raw: String) : ShopifyWebhookTopic
+  /** Admin Graphql enum value used for outbound subscription registration. `null` for [Other]. */
+  val subscriptionTopic: WebhookSubscriptionTopic?
+
+  data object ProductsCreate : ShopifyWebhookTopic {
+    override val raw = "products/create"
+    override val subscriptionTopic = WebhookSubscriptionTopic.PRODUCTS_CREATE
+  }
+
+  data object ProductsUpdate : ShopifyWebhookTopic {
+    override val raw = "products/update"
+    override val subscriptionTopic = WebhookSubscriptionTopic.PRODUCTS_UPDATE
+  }
+
+  data object ProductsDelete : ShopifyWebhookTopic {
+    override val raw = "products/delete"
+    override val subscriptionTopic = WebhookSubscriptionTopic.PRODUCTS_DELETE
+  }
+
+  data object OrdersCreate : ShopifyWebhookTopic {
+    override val raw = "orders/create"
+    override val subscriptionTopic = WebhookSubscriptionTopic.ORDERS_CREATE
+  }
+
+  data object OrdersUpdated : ShopifyWebhookTopic {
+    override val raw = "orders/updated"
+    override val subscriptionTopic = WebhookSubscriptionTopic.ORDERS_UPDATED
+  }
+
+  data class Other(override val raw: String) : ShopifyWebhookTopic {
+    override val subscriptionTopic: WebhookSubscriptionTopic? = null
+  }
 
   companion object {
+    /** Every named topic the service registers and handles, in install-time registration order. */
+    val known: List<ShopifyWebhookTopic> = listOf(
+      ProductsUpdate,
+      ProductsCreate,
+      ProductsDelete,
+      OrdersCreate,
+      OrdersUpdated,
+    )
+
     fun parse(header: String?): ShopifyWebhookTopic =
       when (val v = header?.trim().orEmpty()) {
         ProductsCreate.raw -> ProductsCreate

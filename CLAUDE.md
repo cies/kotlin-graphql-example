@@ -45,7 +45,7 @@ Companion project: [`dropnext-monolith`](../dropnext/dropnext-monolith). Convent
 ### Development Environment
 
 - Copy `.env.example` to `.env` and fill in `SHOPIFY_APP_CLIENT_ID`, `SHOPIFY_APP_CLIENT_SECRET`, `SHOPIFY_SCOPES`, `PUBLIC_BASE_URL` (use [ngrok](https://ngrok.com/) or similar for HTTPS).
-- Optional: `ENABLE_TEST_HARNESS=true` exposes `/dev/test-harness` plus `/demo/*` routes.
+- Optional: `ENABLE_TEST_HARNESS=true` turns on the `/demo/*` routes and merges the sandbox token map (see [README.md](./README.md) for env-var details).
 - See the full env-var table in [README.md](./README.md).
 
 
@@ -56,7 +56,7 @@ Companion project: [`dropnext-monolith`](../dropnext/dropnext-monolith). Convent
 
 - **Language**: Kotlin 2.3.21 on JVM 25 (toolchain — Gradle downloads it).
 - **Web Framework**: [Ktor](https://ktor.io/) (CIO engine).
-- **HTTP Client**: Ktor + OkHttp (shared singleton; see `SharedHttpClient.kt`).
+- **HTTP Client**: Ktor + OkHttp (shared singleton; see `lib/ktor/httpClientBuilders.kt`).
 - **Graphql Client**: [graphql-kotlin](https://github.com/ExpediaGroup/graphql-kotlin) — compile-time typed against the Shopify Admin schema (proxy: `https://shopify.dev/admin-graphql-direct-proxy/{version}`).
 - **Serialization**: `kotlinx.serialization` (no reflection).
 - **Logging**: Logback (`src/resources/logback.xml`) with MDC trace IDs.
@@ -68,41 +68,42 @@ Companion project: [`dropnext-monolith`](../dropnext/dropnext-monolith). Convent
 ```
 /src/dropnext/dss                # Application code (Kotlin)
 ├── app.kt                       # `main` — wires config, handlers, routing into a Ktor `embeddedServer`.
-├── SharedHttpClient.kt          # Ktor HttpClient singleton with OkHttp engine.
-├── GraphqlClientCache.kt        # Per-shop Graphql client cache (shop-scoped access tokens).
+├── dependencies.kt              # Builds the `DssDependencies` graph; tests override individual collaborators with fakes.
 ├── config/                      # Environment + Shopify config + per-shop token map.
-│   ├── DssAppConfig.kt
+│   ├── Config.kt                # Top-level `Config` plus `ShopifyConfig`, `MonolithConfig`, `DevConfig`, `WebhookConfig`.
 │   ├── EnvVars.kt
-│   ├── ShopAccessTokensEnv.kt
-│   └── ShopifyConfig.kt
+│   └── ShopAccessTokensEnv.kt
 ├── path/                        # Inbound/outbound HTTP path constants (single source of truth).
-│   ├── DssPaths.kt
-│   ├── MonolithPaths.kt
-│   └── ShopifyPaths.kt
-├── shopify/                     # Shopify-specific helpers (OAuth, webhooks, signatures, mappers).
+│   ├── Paths.kt                 # Inbound (this service's exposed routes).
+│   ├── OutBoundMonolithPaths.kt # Outbound to monolith.
+│   └── OutBoundShopifyPaths.kt  # Outbound to Shopify (per-shop OAuth + Admin Graphql endpoint).
+├── shopify/                     # Shopify-domain mappers and demo bodies (no HTTP/OAuth/HMAC concerns — those live in `lib/shopify/`).
+│   ├── DemoFulfillmentBodies.kt
+│   ├── MoneyMinorUnits.kt
+│   └── ProductMapper.kt
+├── domain/                      # Internal value objects shared across layers (e.g. `MonolithPersistOutcome`).
 ├── handler/                     # HTTP request handlers (Ktor `ApplicationCall` → response).
 │   ├── DemoHandlers.kt
 │   ├── DiagnosticsHandlers.kt
-│   ├── DssHttpHandlers.kt
+│   ├── MonolithWebhookHandlers.kt
 │   ├── OAuthHandlers.kt
-│   └── WebhookHandlers.kt
+│   └── ShopifyWebhookHandlers.kt
 ├── routing/                     # Ktor route bindings — wires handlers to URL paths.
-│   ├── DemoRouting.kt
-│   ├── DiagnosticsRouting.kt
-│   ├── DssRouting.kt
-│   ├── OAuthRouting.kt
-│   └── WebhookRouting.kt
+│   ├── installDemoRoutes.kt
+│   ├── installDiagnosticsRoutes.kt
+│   ├── installMonolithWebhookRoutes.kt
+│   ├── installOAuthRoutes.kt
+│   └── installShopifyWebhookRoutes.kt
 ├── presentation/                # Pure view layer (data in, HTML string out — no Ktor/HTTP types).
-│   └── OAuthInstallView.kt
+│   └── renderOAuthInstallPage.kt
 ├── workflow/                    # Orchestration: load order, map, post to monolith. No HTTP/routing concerns.
 │   ├── MonolithOrderMapper.kt
 │   └── MonolithOrderSync.kt
 └── lib/                         # Small, focused utilities.
-    ├── dss/                     # DSS-protocol primitives (auth, secure compare, GIDs, token resolution).
-    ├── fulfillment/             # Shopify fulfillment domain (matching, validation, service, result types).
+    ├── shopify/                 # Shopify protocol primitives: shop-domain, GIDs, OAuth client, HMAC verifier, Graphql service + fulfillment + webhook helpers.
+    ├── monolith/                # Outbound monolith HTTP client, shop-access-token cache, `ShopifyGraphqlServiceFactory` (resolves Admin tokens).
     ├── json/                    # Shared kotlinx.serialization configs (AppJson inbound, MonolithJson outbound).
-    ├── ktor/                    # Ktor server extensions (trace-id MDC, error helpers).
-    └── monolith/                # Outbound monolith HTTP client + error logging.
+    └── ktor/                    # Ktor server extensions (trace-id MDC, error helpers, shared HTTP client builders, monolith-webhook auth plugin).
 
 /src/resources                   # JVM classpath resources (logback.xml, .graphql queries, openapi.json fallback)
 /src/graphql-schema              # Introspected Shopify Admin schema (generated by `graphqlIntrospectSchema`)
@@ -115,7 +116,7 @@ Companion project: [`dropnext-monolith`](../dropnext/dropnext-monolith). Convent
 ### Inbound webhook flow
 
 1. Shopify POSTs to `/webhooks/shopify`.
-2. `WebhookHandlers.handleShopifyWebhook` verifies `X-Shopify-Hmac-Sha256` (constant-time compare via `ShopifySignatures.verifyWebhook`) against the app secret.
+2. `ShopifyWebhookHandlers.handleShopifyWebhook` verifies `X-Shopify-Hmac-Sha256` (constant-time compare via `ShopifyHmacVerifierService.verifyWebhook`) against the app secret.
 3. Topic-specific dispatch on `ShopifyWebhookTopic` runs:
    - `PRODUCTS_CREATE` / `PRODUCTS_UPDATE`: parses body for resource id, runs `GetProductById` Graphql query, then upserts variants on the monolith.
    - `PRODUCTS_DELETE`: parses variant legacy ids from the webhook body and soft-deletes them on the monolith.
@@ -127,7 +128,7 @@ TODO: document deduplication strategy for at-least-once webhook delivery in mult
 
 ### DSS internal REST
 
-Authenticated by `X-DSS-Internal-Secret` (when `DSS_INTERNAL_SECRET` is set) plus per-shop `X-Shopify-Access-Token` (or `DSS_SHOP_ACCESS_TOKENS` env map). Canonical spec: [`openapi.json`](./openapi.json). DTOs are **generated** by `openApiGenerate` into `dropnext.dss.lib.dss.dto` — do not hand-write them.
+The monolith-webhook routes (`installMonolithWebhookRoutes`) require header `X-DSS-Internal-Secret` when `DSS_INTERNAL_SECRET` is set (constant-time check by [`installMonolithWebhookAuthSecret`](src/dropnext/dss/lib/ktor/plugin/monolithWebhookAuthHeader.kt)). Per-shop calls resolve the Shopify Admin token through `ShopifyGraphqlServiceFactory.forShop` (cache → monolith `GET /stores` fallback); seed the cache via `DSS_SHOP_ACCESS_TOKENS`, complete the OAuth install, or `PUT /stores/api-key`. Canonical spec: [`openapi.json`](./openapi.json). DTOs are **generated** by `openApiGenerate` into `dropnext.dss.lib.dto` — do not hand-write them.
 
 TODO: list the current endpoints with one-line descriptions.
 
@@ -222,7 +223,7 @@ Before writing code, articulate:
 - **Edge cases**: boundary conditions, failure modes, empty/null states (e.g. missing Admin token, Graphql user errors, monolith 4xx/5xx, duplicate webhooks).
 - **Reuse inventory**: existing functions, utilities, and patterns to reuse (with file paths).
 Actively look for these — avoid writing new code when suitable implementations already exist.
-- Ensure new names follow the conventions in this CLAUDE.md (Graphql casing, plural/singular naming, handler files named `*Handlers.kt`, routing files named `*Routing.kt`).
+- Ensure new names follow the conventions in this CLAUDE.md (Graphql casing, plural/singular naming, handler files named `*Handlers.kt`, routing files named `install*Routes.kt`).
 
 Phase one starts from a human description of the task at hand;
 Claude Code should request as much questions it needs from the human developer to understand the end goal(s).
@@ -274,9 +275,9 @@ Then verify the following:
 
 - **Spec fidelity**: does the implementation match the behavioral contract from Phase 1?
 - **Test quality**: do tests assert meaningful behavior? Never broaden asserts to make tests pass.
-- **Security surface**: HMAC verification on inbound webhooks via `ShopifySignatures.verifyWebhook`, constant-time compare for `X-DSS-Internal-Secret`, HTTPS-only outbound to monolith in production, no secrets logged (tokens, Bearer headers, request bodies).
+- **Security surface**: HMAC verification on inbound webhooks via `ShopifyHmacVerifierService.verifyWebhook`, constant-time compare for `X-DSS-Internal-Secret`, HTTPS-only outbound to monolith in production, no secrets logged (tokens, Bearer headers, request bodies).
 - **Architecture-test compliance**: no reflection, no ad-hoc `Json {}` or `HttpClient(...)` construction (use `AppJson`/`MonolithJson` and `createSharedHttpClient()`), no wildcard imports, package-layer rules respected (see `ArchitectureTest`).
-- **Naming conventions**: handler files end with `Handlers.kt`, routing files with `Routing.kt`, paths in `path/` packages, Graphql casing (`Graphql`/`Gql`/`gql`, never `GraphQL`/`GraphQl`), plural/singular function naming.
+- **Naming conventions**: handler files end with `Handlers.kt`, routing files start with `install` and end with `Routes.kt` (each defines a single `Route.install*Routes(...)` extension), paths in `path/` packages, Graphql casing (`Graphql`/`Gql`/`gql`, never `GraphQL`/`GraphQl`), plural/singular function naming.
 - **Traceability**: every new piece can be traced through routing → handler → path → workflow → Graphql query / monolith call → tests.
 - **Doc comments**: some functions do not need them, some do: ensure all that do have meaningful doc comments.
 

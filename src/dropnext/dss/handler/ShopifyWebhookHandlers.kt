@@ -25,7 +25,7 @@ import io.ktor.server.response.respond
 
 private val log = KotlinLogging.logger {}
 
-/** Handler for `POST` to [dropnext.dss.path.Paths.WEBHOOKS_SHOPIFY] — verifies HMAC and dispatches per topic. */
+/** Handler for `POST` to [dropnext.dss.path.Paths.webhooksShopify] — verifies HMAC and dispatches per topic. */
 class ShopifyWebhookHandlers(
   private val syncOrderOnUpdated: Boolean,
   private val shopifyGraphqlServiceFactory: ShopifyGraphqlServiceFactory,
@@ -105,7 +105,7 @@ class ShopifyWebhookHandlers(
   }
 
   private suspend fun handleProductDelete(shop: ShopDomain, bodyStr: String) {
-    val id = graphqlResourceIdFromShopifyWebhook("products/delete", bodyStr)
+    val id = graphqlResourceIdFromShopifyWebhook(ShopifyWebhookTopic.ProductsDelete.raw, bodyStr)
     log.info { "Webhook product deleted id=$id" }
 
     val variantIds = variantLegacyIdsFromProductWebhook(bodyStr)

@@ -1,20 +1,23 @@
 package dropnext.dss.lib.shopify.graphql
 
 import com.expediagroup.graphql.client.types.GraphQLClientResponse
-import dropnext.dss.lib.dto.SyncShipmentsWithFulfillmentsRequest
-import dropnext.dss.lib.dto.SyncShipmentsWithFulfillmentsResponse
-import dropnext.dss.lib.dto.TrackingUpdateRequest
-import dropnext.dss.lib.dto.TrackingUpdateResponse
 import dropnext.dss.lib.shopify.ShopDomain
-import dropnext.dss.lib.shopify.graphql.fulfillment.FulfillmentResult
-import dropnext.dss.lib.shopify.graphql.webhookregistration.WebhookRegistrationReport
+import dropnext.graphql.generated.FulfillmentCancelMutation
+import dropnext.graphql.generated.FulfillmentCreateWithLineItems
 import dropnext.graphql.generated.FulfillmentCreateWithTracking
+import dropnext.graphql.generated.FulfillmentEventCreateMutation
 import dropnext.graphql.generated.FulfillmentTrackingInfoUpdateMutation
 import dropnext.graphql.generated.GetOrderById
 import dropnext.graphql.generated.GetOrderForDss
 import dropnext.graphql.generated.GetProductById
+import dropnext.graphql.generated.GetWebhookSubscriptions
+import dropnext.graphql.generated.RegisterWebhook
 import dropnext.graphql.generated.ShopIdentity
 import dropnext.graphql.generated.SyncProductsPage
+import dropnext.graphql.generated.enums.WebhookSubscriptionTopic
+import dropnext.graphql.generated.inputs.FulfillmentEventInput
+import dropnext.graphql.generated.inputs.FulfillmentOrderLineItemsInput
+import dropnext.graphql.generated.inputs.FulfillmentTrackingInput
 
 
 /**
@@ -24,6 +27,10 @@ import dropnext.graphql.generated.SyncProductsPage
  *
  * Each instance is bound to a single [shop] — the per-shop access token is injected at
  * construction and never leaks back across the API.
+ *
+ * Methods here are **single-shot Graphql primitives**. Multi-step orchestrations
+ * (cancel-then-recreate, scan-then-register) live as workflow functions under
+ * `dropnext.dss.workflow.*` and compose these primitives.
  */
 interface ShopifyGraphqlService {
 
@@ -74,26 +81,33 @@ interface ShopifyGraphqlService {
     notifyCustomer: Boolean?,
   ): GraphQLClientResponse<FulfillmentTrackingInfoUpdateMutation.Result>
 
-  // ---------- multi-step orchestrations ----------
+  // ---------- fulfillment primitives (composed by workflow/syncShopifyShipments… and …TrackingEvent…) ----------
 
-  /**
-   * Cancels every open Shopify fulfillment on the order, then creates new fulfillments from the
-   * provided shipments. Fulfillment orders are resolved automatically by matching
-   * `product_variant_id` against fulfillment order line items.
-   */
-  suspend fun syncShipmentsWithFulfillments(
-    payload: SyncShipmentsWithFulfillmentsRequest,
-  ): FulfillmentResult<SyncShipmentsWithFulfillmentsResponse>
+  /** `FulfillmentCancel` — cancels a single Shopify fulfillment by GID. */
+  suspend fun cancelFulfillment(fulfillmentGid: String): GraphQLClientResponse<FulfillmentCancelMutation.Result>
 
-  /** Looks up the Shopify fulfillment by order + tracking number, then creates a FulfillmentEvent. */
-  suspend fun createTrackingEvent(
-    payload: TrackingUpdateRequest,
-  ): FulfillmentResult<TrackingUpdateResponse>
+  /** `FulfillmentCreateWithLineItems` — creates one fulfillment spanning one or more fulfillment orders. */
+  suspend fun createFulfillmentWithLineItems(
+    lineItemsByFulfillmentOrder: List<FulfillmentOrderLineItemsInput>,
+    tracking: FulfillmentTrackingInput,
+    notifyCustomer: Boolean,
+  ): GraphQLClientResponse<FulfillmentCreateWithLineItems.Result>
 
-  /**
-   * Subscribes the shop to the five product/order topics DSS cares about. Orders subscriptions
-   * are restricted to id-only fields so Shopify does not require "protected customer data"
-   * approval (the DSS fetches the full order via Graphql after the webhook arrives).
-   */
-  suspend fun registerStandardWebhooks(callbackUrl: String): WebhookRegistrationReport
+  /** `FulfillmentEventCreate` — appends a tracking event to an existing fulfillment. */
+  suspend fun createFulfillmentEvent(input: FulfillmentEventInput): GraphQLClientResponse<FulfillmentEventCreateMutation.Result>
+
+  // ---------- webhook subscription primitives (composed by workflow/registerShopifyWebhooks) ----------
+
+  /** `GetWebhookSubscriptions` — lists the shop's existing subscriptions filtered by [topics] / [callbackUrl]. */
+  suspend fun getWebhookSubscriptions(
+    topics: List<WebhookSubscriptionTopic>,
+    callbackUrl: String,
+  ): GraphQLClientResponse<GetWebhookSubscriptions.Result>
+
+  /** `RegisterWebhook` — subscribes the shop to one topic at [callbackUrl] with optional projected fields. */
+  suspend fun registerWebhook(
+    topic: WebhookSubscriptionTopic,
+    callbackUrl: String,
+    includeFields: List<String>?,
+  ): GraphQLClientResponse<RegisterWebhook.Result>
 }

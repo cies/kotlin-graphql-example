@@ -1,6 +1,6 @@
 package dropnext.dss.lib.shopify
 
-import dropnext.dss.path.OutBoundShopifyPaths
+import dropnext.dss.lib.shopify.oauth.OutBoundShopifyOAuthPaths
 
 
 /**
@@ -17,7 +17,7 @@ value class ShopDomain private constructor(val host: String) {
 
   /** Per-shop Admin Graphql endpoint, e.g. `https://acme.myshopify.com/admin/api/2026-04/graphql.json`. */
   fun adminGraphqlUrl(apiVersion: String): String =
-    "https://$host${OutBoundShopifyPaths.adminApiGraphqlJson(apiVersion)}"
+    "https://$host${OutBoundShopifyOAuthPaths.adminApiGraphqlJson(apiVersion)}"
 
   override fun toString(): String = host
 

@@ -29,6 +29,8 @@ ij_kotlin_imports_layout = *
 # The 999 values are hacks to enable "no-wildcard-imports" behavior.
 ij_kotlin_name_count_to_use_star_import = 999
 ij_kotlin_name_count_to_use_star_import_for_members = 9999
+# Import all kotlinx.html functions at once to improve code-completion while writing templates
+ij_kotlin_packages_to_use_import_on_demand = kotlinx.html.*
 
 
 [/src/resources/*.graphql]

@@ -1,7 +1,6 @@
 package dropnext.dss.config
 
 import dropnext.dss.path.Paths
-import dropnext.dss.path.OutBoundMonolithPaths
 
 
 /**
@@ -16,7 +15,11 @@ data class Config(
   val dev: DevConfig,
   val webhook: WebhookConfig,
 
-  /** When set, DSS REST routes require header `X-DSS-Internal-Secret` (except health/install/oauth/webhooks). */
+  /**
+   * When set, monolith-webhook routes (see [dropnext.dss.routing.installMonolithWebhookRoutes])
+   * require header `X-DSS-Internal-Secret`. Sourced from env `DSS_INTERNAL_SECRET`. Other
+   * inbound routes (health, install, oauth callback, Shopify webhooks, demo) ignore this value.
+   */
   val monolithWebhookAuthSecret: String?,
 ) {
   companion object {
@@ -50,20 +53,18 @@ data class Config(
 
 /** Outbound monolith integration: where to reach it and how to authenticate. */
 data class MonolithConfig(
-  /** HTTPS base URL for monolith outbound calls; DSS appends paths from [dropnext.dss.path.OutBoundMonolithPaths]. */
+  /** HTTPS base URL for monolith outbound calls; DSS appends paths from [OutBoundMonolithPaths]. */
   val baseUrl: String,
 
   /**
-   * Optional path inserted after [baseUrl]: `{base}/{prefix}` + [dropnext.dss.path.OutBoundMonolithPaths.STORES_API_KEY].
+   * Optional path segment inserted after [baseUrl] and prepended to every outbound monolith path
+   * (see [OutBoundMonolithPaths]): the effective URL is `{base}/{prefix}{path}`.
    * Set via `MONOLITH_API_PREFIX` (e.g. `api/v1`); slashes at both ends are trimmed.
    */
   val apiPrefix: String?,
 
   /** Sent as `Authorization: Bearer …` when non-blank. */
   val apiKey: String?,
-
-  /** Path appended to monolith base for order creation (default [dropnext.dss.path.OutBoundMonolithPaths.ORDERS]). */
-  val createOrderPath: String,
 
   /** When false (default), [baseUrl] must be `https://`. */
   val allowInsecureUrl: Boolean,
@@ -73,13 +74,10 @@ data class MonolithConfig(
       val baseUrl = EnvVars.optionalNormalized("MONOLITH_BASE_URL") ?: return null
       val prefix = EnvVars.optionalNormalized("MONOLITH_API_PREFIX")
         ?.trim { it == '/' }?.takeIf { it.isNotEmpty() }
-      val rawPath = EnvVars.optionalNormalized("MONOLITH_CREATE_ORDER_PATH") ?: OutBoundMonolithPaths.ORDERS
-      val path = if (rawPath.startsWith('/')) rawPath else "/$rawPath"
       return MonolithConfig(
         baseUrl = baseUrl,
         apiPrefix = prefix,
         apiKey = EnvVars.optionalNormalized("MONOLITH_API_KEY"),
-        createOrderPath = path,
         allowInsecureUrl = EnvVars.optionalBool("DSS_ALLOW_INSECURE_MONOLITH"),
       )
     }
@@ -109,7 +107,7 @@ data class DevConfig(
 
 /** Webhook policy switches. */
 data class WebhookConfig(
-  /** When true, `POST` to [dropnext.dss.path.OutBoundMonolithPaths.ORDERS] on `orders/updated` as well as `orders/create` (default false). */
+  /** When true, `POST` to [OutBoundMonolithPaths.ORDERS] on `orders/updated` as well as `orders/create` (default false). */
   // TODO: what is the use of this? the comment does not explain why.
   val syncOrderOnUpdated: Boolean,
 ) {
@@ -121,42 +119,30 @@ data class WebhookConfig(
 }
 
 
-internal fun computeRuntimeConfigIssues(dssConfig: Config): List<String> {
+internal fun computeRuntimeConfigIssues(dssConfig: Config): List<String> = buildList {
   val shopify = dssConfig.shopify
-  val issues = mutableListOf<String>()
-
   if (isPlaceholder(shopify.appClientId)) {
-    issues += "SHOPIFY_APP_CLIENT_ID (or SHOPIFY_API_KEY) is placeholder"
+    add("SHOPIFY_APP_CLIENT_ID (or SHOPIFY_API_KEY) is placeholder")
   }
   if (isPlaceholder(shopify.appClientSecret)) {
-    issues += "SHOPIFY_APP_CLIENT_SECRET (or SHOPIFY_API_SECRET) is placeholder"
+    add("SHOPIFY_APP_CLIENT_SECRET (or SHOPIFY_API_SECRET) is placeholder")
   }
-  if (isPlaceholder(shopify.publicBaseUrl) || shopify.publicBaseUrl.contains(
-      "example.com",
-      ignoreCase = true
-    )
-  ) {
-    issues += "PUBLIC_BASE_URL is placeholder"
+  if (isPlaceholder(shopify.publicBaseUrl) || shopify.publicBaseUrl.contains("example.com", ignoreCase = true)) {
+    add("PUBLIC_BASE_URL is placeholder")
   }
   if (!shopify.publicBaseUrl.startsWith("https://", ignoreCase = true)) {
-    issues += "PUBLIC_BASE_URL should use https://"
+    add("PUBLIC_BASE_URL should use https://")
   }
   if (dssConfig.monolithWebhookAuthSecret?.contains("change_this") == true) {
-    issues += "DSS_INTERNAL_SECRET is still the placeholder value — set a real secret"
+    add("DSS_INTERNAL_SECRET is still the placeholder value — set a real secret")
   }
   if (dssConfig.monolithWebhookAuthSecret != null && dssConfig.monolithWebhookAuthSecret.length < 32) {
-    issues += "DSS_INTERNAL_SECRET should be at least 32 characters"
+    add("DSS_INTERNAL_SECRET should be at least 32 characters")
   }
   val monolithBaseUrl = dssConfig.monolith.baseUrl
-  if (monolithBaseUrl.startsWith(
-      "http:",
-      ignoreCase = true
-    ) && !dssConfig.monolith.allowInsecureUrl
-  ) {
-    issues += "MONOLITH_BASE_URL must use https (set DSS_ALLOW_INSECURE_MONOLITH=true for local dev)"
+  if (monolithBaseUrl.startsWith("http:", ignoreCase = true) && !dssConfig.monolith.allowInsecureUrl) {
+    add("MONOLITH_BASE_URL must use https (set DSS_ALLOW_INSECURE_MONOLITH=true for local dev)")
   }
-
-  return issues
 }
 
 private fun isPlaceholder(value: String): Boolean =
@@ -189,8 +175,8 @@ data class ShopifyConfig(
         appClientSecret = appClientSecret,
         scopes = scopes,
         publicBaseUrl = publicBaseUrl.trimEnd('/'),
-        oauthRedirectPath = (env("OAUTH_REDIRECT_PATH")
-          ?: "").ifBlank { Paths.DEFAULT_OAUTH_CALLBACK },
+        oauthRedirectPath = (env("OAUTH_REDIRECT_PATH") ?: "")
+          .ifBlank { Paths.defaultOAuthCallback },
         apiVersion = (env("SHOPIFY_API_VERSION") ?: "").ifBlank { "2026-04" },
         serverPort = resolveServerPort(),
       )

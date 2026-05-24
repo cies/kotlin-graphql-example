@@ -23,7 +23,4 @@ class ShopAccessTokenCache(initial: Map<ShopDomain, String> = emptyMap()) {
   operator fun set(shop: ShopDomain, token: String) {
     tokens[shop] = token
   }
-
-  /** Snapshot, primarily for diagnostics. */
-  fun snapshot(): Map<ShopDomain, String> = tokens.toMap()
 }

@@ -10,7 +10,7 @@ import dropnext.graphql.generated.getproductbyid.ProductVariant
 
 /**
  * Maps a Shopify Admin Graphql product (from [GetProductById]) to a list of [ProductVariantItem]
- * DTOs ready to be sent to the monolith via `POST` to [dropnext.dss.path.OutBoundMonolithPaths.PRODUCT_VARIANTS].
+ * DTOs ready to be sent to the monolith via `POST` to [dropnext.dss.lib.monolith.OutBoundMonolithPaths.productVariants].
  *
  * @param currencyCode ISO 4217 currency code for the shop (e.g. "USD"); obtain from the
  *   `shop { currencyCode }` field returned alongside the product query.

@@ -4,29 +4,29 @@ This document records what was implemented for the **DropNext Shopify Service (D
 
 ## Configuration
 
-- **`DssAppConfig`** (`dropnext.dss.lib.dss`): reads `MONOLITH_BASE_URL`, `MONOLITH_API_KEY`, `MONOLITH_CREATE_ORDER_PATH`, `DSS_INTERNAL_SECRET`, `DSS_SHOP_ACCESS_TOKENS`, `SANDBOX_SHOP`, `SANDBOX_ACCESS_TOKEN`, harness flags (see `README.md`).
-- **Tokens**: Map `shop.myshopify.com` → Admin API token from env (`DSS_SHOP_ACCESS_TOKENS` as comma-separated `shop|token` pairs), merged with `SANDBOX_*` when the test harness is on. Callers may send **`X-Shopify-Access-Token`** on DSS POSTs instead.
+- **`Config`** (`dropnext.dss.config`): composes `ShopifyConfig`, `MonolithConfig`, `DevConfig`, `WebhookConfig` plus `monolithWebhookAuthSecret`. Reads `MONOLITH_BASE_URL`, `MONOLITH_API_KEY`, `MONOLITH_CREATE_ORDER_PATH`, `DSS_INTERNAL_SECRET`, `DSS_SHOP_ACCESS_TOKENS`, `SANDBOX_SHOP`, `SANDBOX_ACCESS_TOKEN`, harness flags (see `README.md`).
+- **Tokens**: Map `shop.myshopify.com` → Admin API token resolved server-side. Cache is seeded from env (`DSS_SHOP_ACCESS_TOKENS` as comma-separated `shop|token` pairs, merged with `SANDBOX_*` when the test harness is on), from the OAuth callback after a successful install, and from `PUT /stores/api-key` calls. A miss falls back to `MonolithService.getStore`. Tokens are never read from inbound request headers.
 
 ## REST API
 
 - **Canonical OpenAPI:** `openapi.json` (repo root, **3.0.0**): monolith **`paths`** DTO codegen + **`x-webhooks`** for DSS inbound URL contracts. `openApiGenerate` runs with **`skipValidateSpec=false`**; on Windows the spec path is passed as a **`file:` URI** so `$ref` resolution works.
 - Readable mirror / docs: **`docs/openapi/dss-api.yaml`** (paths + payloads aligned with `openapi.json`).
-- Routing vs handling: `dropnext.dss.lib.dss.DssRouting` (`installDssRoutes`); **`POST /tracking-update`** = sync shipments body (**`SyncShipmentsWithFulfillmentsRequest`**); **`POST /sync-shipments-with-fulfillments`** (and **`/tracking-updates`**) = **`TrackingUpdateRequest`**. **`/dummy1`/`/dummy2`** removed from routing.
-- When `DSS_INTERNAL_SECRET` is set, DSS routes require header `X-DSS-Internal-Secret` (see `DssInternalAuth`).
+- Routing vs handling: monolith-webhook routes wired by `dropnext.dss.routing.installMonolithWebhookRoutes`; **`POST /sync-shipments-with-fulfillments`** = **`SyncShipmentsWithFulfillmentsRequest`** → `MonolithWebhookHandlers.handleSyncShipments`; **`POST /tracking-update`** (and alias **`/tracking-updates`**) = **`TrackingUpdateRequest`** → `MonolithWebhookHandlers.handleTrackingUpdate`. **`/dummy1`/`/dummy2`** removed from routing.
+- When `DSS_INTERNAL_SECRET` is set, monolith-webhook routes require header `X-DSS-Internal-Secret` (see `installMonolithWebhookAuthSecret` in `lib/ktor/plugin/`).
 
 ## Monolith client
 
-- **`MonolithCreateOrderPort`** + **`HttpMonolithClient`** in `dropnext.dss.lib.monolith` (Ktor **client** only; no server dependency — see `ArchitectureTest`).
+- **`MonolithService`** interface + **`HttpMonolithService`** in `dropnext.dss.lib.monolith` (Ktor **client** only; no server dependency — see `ArchitectureTest`). `FakeMonolithService` is the in-memory recording test double.
 
 ## Shopify integration
 
-- **OAuth callback**: after code exchange, runs `ShopIdentity`, sync sample products, registers webhooks; **does not persist tokens** — success page shows a `DSS_SHOP_ACCESS_TOKENS` example line.
-- **Webhooks**: require a token in the env map for the shop; otherwise log and return 200 without Graphql.
-- **Fulfillment**: `DssFulfillmentService` — same Graphql flow as before; tracking uses `FulfillmentEventCreateMutation` with string status parsing (`FulfillmentEventStatusParser`).
+- **OAuth callback**: after code exchange, runs `ShopIdentity`, syncs sample products, calls `HttpShopifyGraphqlService.registerStandardWebhooks`, and persists the Admin token to the monolith via `MonolithService.putStoreApiKey` (the install success page shows the persist outcome).
+- **Webhooks**: `ShopifyWebhookHandlers` resolves the Admin token through `ShopifyGraphqlServiceFactory.forShop` (env-map → monolith fallback); when no token is resolvable the handler logs and returns 200 without Graphql.
+- **Fulfillment**: `HttpShopifyGraphqlService.syncShipmentsWithFulfillments` / `.createTrackingEvent` — same Graphql flow as before; tracking uses `FulfillmentEventCreateMutation` with string status parsing (`ParsedFulfillmentStatus.parseFulfillmentEventStatus` in `lib/shopify/graphql/fulfillment/`).
 
 ## Graphql documents
 
-- `GetOrderForDss.graphql` (includes `totalPriceSet` for monolith payload), `FulfillmentCancel.graphql`, `FulfillmentCreateWithLineItems.graphql`, `FulfillmentEventCreate.graphql`, `ShopIdentity.graphql` under `src/main/resources/`.
+- `GetOrderForDss.graphql` (includes `totalPriceSet` for monolith payload), `FulfillmentCancel.graphql`, `FulfillmentCreateWithLineItems.graphql`, `FulfillmentEventCreate.graphql`, `ShopIdentity.graphql` under `src/resources/`.
 
 ## Demo routes
 

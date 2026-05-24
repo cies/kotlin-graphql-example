@@ -41,7 +41,7 @@ class DssErrorTest {
   fun `missing shopify admin token maps to 401`() {
     val e = DssError.MissingShopifyAdminToken
     assert(e.toHttpStatus() == HttpStatusCode.Unauthorized)
-    assert("X-Shopify-Access-Token" in e.message)
+    assert("DSS_SHOP_ACCESS_TOKENS" in e.message)
   }
 
   @Test

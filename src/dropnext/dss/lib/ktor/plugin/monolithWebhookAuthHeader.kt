@@ -22,7 +22,7 @@ import io.ktor.server.routing.Route
 const val MONOLITH_WEBHOOK_AUTH_SECRET_KEY = "monolith-webhook-auth-secret"
 
 
-/** Wraps [build] in `authenticate(DSS_INTERNAL_SECRET_AUTH)` — used by [dropnext.dss.routing.installMonolithWebhookRoutes]. */
+/** Wraps [build] in `authenticate(MONOLITH_WEBHOOK_AUTH_SECRET_KEY)` — used by [dropnext.dss.routing.installMonolithWebhookRoutes]. */
 fun Route.requireMonolithWebhookAuthHeader(build: Route.() -> Unit) {
   authenticate(MONOLITH_WEBHOOK_AUTH_SECRET_KEY) { build() }
 }

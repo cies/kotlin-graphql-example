@@ -15,11 +15,11 @@ import dropnext.dss.path.Paths
 import dropnext.dss.presentation.renderOAuthInstallPage
 import dropnext.dss.lib.shopify.ShopDomain
 import dropnext.dss.lib.shopify.legacyIdFromGid
+import dropnext.dss.workflow.registerShopifyWebhooks
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
-import io.ktor.http.Parameters
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.header
 import io.ktor.server.response.respondRedirect
@@ -72,7 +72,7 @@ class OAuthHandlers(
     // The just-issued token has not been cached yet, so pass it explicitly to the factory so the
     // subsequent Graphql calls authorise correctly.
     val shopify = shopifyGraphqlServiceFactory.forShop(shop, explicitToken = oauthResponse.accessToken)
-      ?: return call.respondTextError(DssError.UpstreamFailure("could not build ShopifyService for $shop"))
+      ?: return call.respondTextError(DssError.UpstreamFailure("could not build ShopifyGraphqlService for $shop"))
 
     val identityResult = shopify.shopIdentity()
     val shopNode = identityResult.data?.shop
@@ -87,8 +87,8 @@ class OAuthHandlers(
     val edgeCount = syncResult.data?.products?.edges?.size ?: 0
     log.info { "SyncProductsPage after OAuth: shop=${shop.host} productEdges=$edgeCount" }
 
-    val callbackUrl = "$shopifyPublicBaseUrl${Paths.WEBHOOKS_SHOPIFY}"
-    val webhookReport = shopify.registerStandardWebhooks(callbackUrl)
+    val callbackUrl = "$shopifyPublicBaseUrl${Paths.webhooksShopify}"
+    val webhookReport = registerShopifyWebhooks(shopify, callbackUrl)
 
     val html = renderOAuthInstallPage(
       shop = shop.host,
@@ -105,7 +105,7 @@ class OAuthHandlers(
   }
 
   private suspend fun ApplicationCall.requireParam(name: String): String? =
-    request.queryParameters.required(name) ?: run {
+    request.queryParameters[name] ?: run {
       respondTextError(DssError.MissingParameter(name))
       null
     }
@@ -134,4 +134,3 @@ class OAuthHandlers(
   }
 }
 
-private fun Parameters.required(name: String): String? = this[name]

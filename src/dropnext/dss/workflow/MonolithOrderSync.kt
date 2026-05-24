@@ -62,7 +62,7 @@ suspend fun postMappedOrderToMonolith(
     }
 
     is CreateOrderResult.Error -> {
-      if (result.status >= 500) MDC.put("dss.webhook.outcome", "failed")
+      val mdcOutcome = if (result.status >= 500) MDC.putCloseable("dss.webhook.outcome", "failed") else null
       try {
         logMonolithFailure(
           operation = "postCreateOrder",
@@ -73,7 +73,7 @@ suspend fun postMappedOrderToMonolith(
               "fulfillmentStatus=${req.fulfillmentStatus}",
         )
       } finally {
-        MDC.remove("dss.webhook.outcome")
+        mdcOutcome?.close()
       }
     }
   }

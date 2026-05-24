@@ -13,7 +13,7 @@ import dropnext.graphql.generated.getorderfordss.FulfillmentOrderConnection
 import kotlin.test.Test
 import kotlinx.coroutines.runBlocking
 
-class WebhookMonolithSyncTest {
+class MonolithOrderSyncTest {
 
   @Test
   fun `posts mapped order via FakeMonolithService`() {

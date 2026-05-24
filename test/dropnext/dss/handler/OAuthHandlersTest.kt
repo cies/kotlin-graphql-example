@@ -3,6 +3,7 @@ package dropnext.dss.handler
 import dropnext.dss.dssDependencies
 import dropnext.dss.lib.monolith.ShopAccessTokenCache
 import dropnext.dss.lib.shopify.oauth.ShopifyOAuthService
+import dropnext.dss.lib.shopify.webhook.ShopifyWebhookTopic
 import dropnext.dss.path.Paths
 import dropnext.dss.lib.shopify.ShopDomain
 import dropnext.dss.testing.fake.FakeMonolithService
@@ -11,7 +12,7 @@ import dropnext.dss.testing.fake.FakeShopifyGraphqlService
 import dropnext.dss.testing.fake.FakeShopifyGraphqlServiceFactory
 import dropnext.dss.testing.fake.okResponse
 import dropnext.dss.testing.fake.shopifyRewritingHttpClient
-import dropnext.dss.testing.fake.testDssAppConfig
+import dropnext.dss.testing.fake.testConfig
 import dropnext.dss.testing.fake.testShopifyConfig
 import dropnext.graphql.generated.ShopIdentity
 import dropnext.graphql.generated.shopidentity.Shop as ShopIdentityShop
@@ -55,12 +56,12 @@ class OAuthHandlersTest {
   fun startServer() {
     server = embeddedServer(CIO, port = 0) {
       routing {
-        get(Paths.INSTALL) {
+        get(Paths.install) {
           val h = current
           if (h == null) call.respondText("no handlers set", status = HttpStatusCode.InternalServerError)
           else h.handleInstall(call)
         }
-        get(Paths.DEFAULT_OAUTH_CALLBACK) {
+        get(Paths.defaultOAuthCallback) {
           val h = current
           if (h == null) call.respondText("no handlers set", status = HttpStatusCode.InternalServerError)
           else h.handleOAuthCallback(call)
@@ -97,7 +98,7 @@ class OAuthHandlersTest {
   @Test
   fun `install returns 400 when shop query param is missing`() = runBlocking {
     current = handlers()
-    val r = client.get("$baseUrl${Paths.INSTALL}")
+    val r = client.get("$baseUrl${Paths.install}")
     assert(r.status == HttpStatusCode.BadRequest)
     assert("Missing shop" in r.bodyAsText())
   }
@@ -105,7 +106,7 @@ class OAuthHandlersTest {
   @Test
   fun `install returns 400 when shop is malformed`() = runBlocking {
     current = handlers()
-    val r = client.get("$baseUrl${Paths.INSTALL}?shop=!!invalid!!")
+    val r = client.get("$baseUrl${Paths.install}?shop=!!invalid!!")
     assert(r.status == HttpStatusCode.BadRequest)
     assert("Invalid shop" in r.bodyAsText())
   }
@@ -113,7 +114,7 @@ class OAuthHandlersTest {
   @Test
   fun `install redirects to Shopify authorize url for valid shop`() = runBlocking {
     current = handlers()
-    val r = client.get("$baseUrl${Paths.INSTALL}?shop=acme.myshopify.com")
+    val r = client.get("$baseUrl${Paths.install}?shop=acme.myshopify.com")
     assert(r.status == HttpStatusCode.Found)
     val location = r.headers["Location"]
     assert(location != null && location.startsWith("https://acme.myshopify.com/admin/oauth/authorize?"))
@@ -123,7 +124,7 @@ class OAuthHandlersTest {
   @Test
   fun `oauth callback returns 400 when hmac is missing`() = runBlocking {
     current = handlers()
-    val r = client.get("$baseUrl${Paths.DEFAULT_OAUTH_CALLBACK}?shop=acme.myshopify.com&code=c&state=s")
+    val r = client.get("$baseUrl${Paths.defaultOAuthCallback}?shop=acme.myshopify.com&code=c&state=s")
     assert(r.status == HttpStatusCode.BadRequest)
     assert("Missing hmac" in r.bodyAsText())
   }
@@ -131,7 +132,7 @@ class OAuthHandlersTest {
   @Test
   fun `oauth callback returns 400 when shop is missing`() = runBlocking {
     current = handlers()
-    val r = client.get("$baseUrl${Paths.DEFAULT_OAUTH_CALLBACK}?hmac=x&code=c&state=s")
+    val r = client.get("$baseUrl${Paths.defaultOAuthCallback}?hmac=x&code=c&state=s")
     assert(r.status == HttpStatusCode.BadRequest)
     assert("Missing shop" in r.bodyAsText())
   }
@@ -139,7 +140,7 @@ class OAuthHandlersTest {
   @Test
   fun `oauth callback returns 400 when shop is invalid`() = runBlocking {
     current = handlers()
-    val r = client.get("$baseUrl${Paths.DEFAULT_OAUTH_CALLBACK}?hmac=x&shop=!bad!&code=c&state=s")
+    val r = client.get("$baseUrl${Paths.defaultOAuthCallback}?hmac=x&shop=!bad!&code=c&state=s")
     assert(r.status == HttpStatusCode.BadRequest)
     assert("Invalid shop" in r.bodyAsText())
   }
@@ -147,7 +148,7 @@ class OAuthHandlersTest {
   @Test
   fun `oauth callback returns 400 when state is missing`() = runBlocking {
     current = handlers()
-    val r = client.get("$baseUrl${Paths.DEFAULT_OAUTH_CALLBACK}?hmac=x&shop=acme.myshopify.com&code=c")
+    val r = client.get("$baseUrl${Paths.defaultOAuthCallback}?hmac=x&shop=acme.myshopify.com&code=c")
     assert(r.status == HttpStatusCode.BadRequest)
     assert("Missing state" in r.bodyAsText())
   }
@@ -155,7 +156,7 @@ class OAuthHandlersTest {
   @Test
   fun `oauth callback returns 400 when code is missing`() = runBlocking {
     current = handlers()
-    val r = client.get("$baseUrl${Paths.DEFAULT_OAUTH_CALLBACK}?hmac=x&shop=acme.myshopify.com&state=s")
+    val r = client.get("$baseUrl${Paths.defaultOAuthCallback}?hmac=x&shop=acme.myshopify.com&state=s")
     assert(r.status == HttpStatusCode.BadRequest)
     assert("Missing code" in r.bodyAsText())
   }
@@ -164,7 +165,7 @@ class OAuthHandlersTest {
   fun `oauth callback returns 403 when hmac is wrong`() = runBlocking {
     current = handlers()
     val r = client.get(
-      "$baseUrl${Paths.DEFAULT_OAUTH_CALLBACK}?hmac=0000&shop=acme.myshopify.com&code=c&state=s",
+      "$baseUrl${Paths.defaultOAuthCallback}?hmac=0000&shop=acme.myshopify.com&code=c&state=s",
     )
     assert(r.status == HttpStatusCode.Forbidden)
     assert("Invalid HMAC" in r.bodyAsText())
@@ -195,7 +196,7 @@ class OAuthHandlersTest {
         // default (empty report) are fine here — the assertions don't touch them.
       }
       val shopifyConfig = testShopifyConfig(appClientSecret = secret)
-      val dssConfig = testDssAppConfig(shopify = shopifyConfig)
+      val dssConfig = testConfig(shopify = shopifyConfig)
       current = dssDependencies(
         config = dssConfig,
         httpClient = rewritingClient,
@@ -220,7 +221,7 @@ class OAuthHandlersTest {
       val hmac = hexHmac(secret, canonical)
 
       val callbackUrl =
-        "$baseUrl${Paths.DEFAULT_OAUTH_CALLBACK}?${Parameters.build {
+        "$baseUrl${Paths.defaultOAuthCallback}?${Parameters.build {
           appendAll(query)
           append("hmac", hmac)
         }.formUrlEncode()}"
@@ -237,7 +238,8 @@ class OAuthHandlersTest {
       assert(oauthServer.oauthCalls.size == 1)
       assert("\"code\":\"$code\"" in oauthServer.oauthCalls.single())
       assert(fakeShopify.shopIdentityCallCount == 1)
-      assert(fakeShopify.registerStandardWebhooksCalls.size == 1)
+      // Each known topic was registered once via the workflow.
+      assert(fakeShopify.registerWebhookCalls.size == ShopifyWebhookTopic.known.size)
     } finally {
       rewritingClient.close()
       oauthServer.stop()
@@ -247,7 +249,7 @@ class OAuthHandlersTest {
   // ---------- helpers ----------
 
   private fun handlers(): OAuthHandlers = dssDependencies(
-    config = testDssAppConfig(shopify = testShopifyConfig(appClientSecret = "oauth-test-secret")),
+    config = testConfig(shopify = testShopifyConfig(appClientSecret = "oauth-test-secret")),
     httpClient = client,
     monolithService = FakeMonolithService(),
   ).oauthHandlers

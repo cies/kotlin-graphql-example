@@ -1,24 +1,11 @@
 package dropnext.dss.presentation
 
 import dropnext.dss.domain.MonolithPersistOutcome
-import dropnext.dss.path.Paths
-import dropnext.dss.path.OutBoundMonolithPaths
 import dropnext.dss.lib.shopify.graphql.webhookregistration.WebhookSubscriptionStatus
+import dropnext.dss.path.Paths
 import dropnext.graphql.generated.enums.WebhookSubscriptionTopic
-import kotlinx.html.FlowContent
-import kotlinx.html.a
-import kotlinx.html.body
-import kotlinx.html.code
-import kotlinx.html.h1
-import kotlinx.html.head
-import kotlinx.html.html
-import kotlinx.html.li
-import kotlinx.html.meta
-import kotlinx.html.p
-import kotlinx.html.strong
+import kotlinx.html.*
 import kotlinx.html.stream.appendHTML
-import kotlinx.html.style
-import kotlinx.html.ul
 
 
 /** Renders the post-install confirmation page as a complete HTML document. */
@@ -38,7 +25,7 @@ fun renderOAuthInstallPage(
     }
     body {
       h1 { +"App installed" }
-      p { +"Shop: $shop (id ${shopId})" }
+      p { +"Shop: $shop (id $shopId)" }
       renderMonolithPersistBlock(monolithPersist)
       p { +"SyncProductsPage (first 3) product edges: $productEdgeCount" }
       p {
@@ -58,10 +45,10 @@ fun renderOAuthInstallPage(
       if (failedTopics.isNotEmpty()) {
         renderFailedTopics(failedTopics)
       }
-      val demoProductsHref = "${Paths.DEMO_PRODUCTS}?shop=${shop}"
-      val demoOrderHref = "${Paths.DEMO_ORDER}?shop=${shop}&id=ORDER_GID"
-      p { a(href = demoProductsHref) { +demoProductsHref } }
-      p { a(href = demoOrderHref) { +"${Paths.DEMO_ORDER}?shop=${shop}&id=..." } }
+      val demoProductsHref = "${Paths.demoProducts}?shop=$shop"
+      val demoOrderHref = "${Paths.demoOrder}?shop=$shop&id=ORDER_GID"
+      p { a(demoProductsHref) { +demoProductsHref } }
+      p { a(demoOrderHref) { +"${Paths.demoOrder}?shop=$shop&id=..." } }
     }
   }.toString()
 }
@@ -71,16 +58,12 @@ private fun FlowContent.renderMonolithPersistBlock(outcome: MonolithPersistOutco
     is MonolithPersistOutcome.Persisted -> p {
       style = "color:green"
       strong { +"Shopify token saved via monolith" }
-      +" ("
-      code { +"PUT …${OutBoundMonolithPaths.STORES_API_KEY}" }
-      +", store_id=${outcome.storeId}) and cached in memory — webhooks and routes can use this process immediately."
+      +" (store_id=${outcome.storeId}) and cached in memory — webhooks and routes can use this process immediately."
     }
     is MonolithPersistOutcome.Failed -> p {
       style = "color:#b91c1c"
       strong {
-        +"Monolith "
-        code { +"PUT …${OutBoundMonolithPaths.STORES_API_KEY}" }
-        +" failed"
+        +"Monolith PUT /orders failed"
       }
       +" (HTTP status ${outcome.httpStatus}). Token is cached in this server’s memory only."
       if (!outcome.detail.isNullOrBlank()) {
@@ -96,7 +79,7 @@ private fun FlowContent.renderSubscriptionList(subs: List<WebhookSubscriptionSta
     if (subs.isEmpty()) {
       li { +"None" }
     } else {
-      for (sub in subs) {
+      subs.forEach { sub ->
         li {
           code { +sub.topic.name }
           +" → "
@@ -116,7 +99,7 @@ private fun FlowContent.renderFailedTopics(failures: List<Pair<WebhookSubscripti
     strong { +"Webhook registrations that failed (check app scopes in Partner Dashboard):" }
   }
   ul {
-    for ((topic, errorMsg) in failures) {
+    failures.forEach { (topic, errorMsg) ->
       li {
         style = "color:red"
         code { +topic.name }

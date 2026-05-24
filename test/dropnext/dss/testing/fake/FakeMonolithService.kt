@@ -27,6 +27,9 @@ class FakeMonolithService : MonolithService {
   var putStoreApiKeyCallCount: Int = 0
     private set
 
+  val upsertProductVariantsCalls: MutableList<UpsertProductVariantsRequest> = mutableListOf()
+  val deleteProductVariantsCalls: MutableList<DeleteProductVariantsRequest> = mutableListOf()
+
   var createOrderStatus: Int = 200
   var createOrderErrorBody: String? = null
 
@@ -67,24 +70,16 @@ class FakeMonolithService : MonolithService {
     if (getStoreReturnsNotFound) GetStoreResult.NotFound(shopifySubdomain)
     else GetStoreResult.Ok(storeId = 1L, shopifyShopId = 99L, apiKey = "shpat_fake")
 
-  override suspend fun upsertProductVariants(request: UpsertProductVariantsRequest): UpsertVariantsResult =
-    UpsertVariantsResult.Ok(upserted = request.productVariants.size)
+  override suspend fun upsertProductVariants(request: UpsertProductVariantsRequest): UpsertVariantsResult {
+    upsertProductVariantsCalls.add(request)
+    return UpsertVariantsResult.Ok(upserted = request.productVariants.size)
+  }
 
   override suspend fun getProductVariantIds(shopifySubdomain: String): GetVariantIdsResult =
     GetVariantIdsResult.Ok(emptyList())
 
-  override suspend fun deleteProductVariants(request: DeleteProductVariantsRequest): DeleteVariantsResult =
-    DeleteVariantsResult.Ok(deleted = request.productVariantIds.size)
-
-  fun reset() {
-    lastCreateOrder = null
-    createOrderCallCount = 0
-    createOrderStatus = 200
-    createOrderErrorBody = null
-    lastPutStoreApiKey = null
-    putStoreApiKeyCallCount = 0
-    putStoreApiKeyStatus = 200
-    putStoreApiKeyStoreId = 1L
-    getStoreReturnsNotFound = false
+  override suspend fun deleteProductVariants(request: DeleteProductVariantsRequest): DeleteVariantsResult {
+    deleteProductVariantsCalls.add(request)
+    return DeleteVariantsResult.Ok(deleted = request.productVariantIds.size)
   }
 }

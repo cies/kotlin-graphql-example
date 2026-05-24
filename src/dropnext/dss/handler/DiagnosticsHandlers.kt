@@ -31,30 +31,30 @@ class DiagnosticsHandlers(
       API is running.
 
       --- Infrastructure / diagnostics ---
-        GET  ${Paths.INDEX.padEnd(26)}This index
-        GET  ${Paths.HEALTH.padEnd(26)}Liveness probe — returns "ok"
-        GET  ${Paths.API.padEnd(26)}JSON diagnostic info (config, URLs, issues)
-        GET  ${Paths.API_CHECK.padEnd(20)}?shop=  Readiness for a specific shop (token + feature flags)
-        GET  ${Paths.API_REDIRECT_URL.padEnd(26)}Full OAuth redirect URL
+        GET  ${Paths.index.padEnd(26)}This index
+        GET  ${Paths.health.padEnd(26)}Liveness probe — returns "ok"
+        GET  ${Paths.api.padEnd(26)}JSON diagnostic info (config, URLs, issues)
+        GET  ${Paths.apiCheck.padEnd(20)}?shop=  Readiness for a specific shop (token + feature flags)
+        GET  ${Paths.apiRedirectUrl.padEnd(26)}Full OAuth redirect URL
 
       --- Shopify OAuth ---
-        GET  ${Paths.INSTALL.padEnd(20)}?shop=  Start OAuth — redirects to Shopify authorize URL
+        GET  ${Paths.install.padEnd(20)}?shop=  Start OAuth — redirects to Shopify authorize URL
         GET  ${shopifyConfig.oauthRedirectPath.padEnd(26)}OAuth callback — code exchange, saves token, registers webhooks
 
       --- Webhooks ---
-        POST ${Paths.WEBHOOKS_SHOPIFY.padEnd(26)}Shopify webhook receiver (products/*, orders/*)
+        POST ${Paths.webhooksShopify.padEnd(26)}Shopify webhook receiver (products/*, orders/*)
 
       --- DSS Internal API (X-DSS-Internal-Secret header required if configured) ---
-        PUT  ${Paths.STORES_API_KEY.padEnd(40)} Set Shopify Admin token (see repo openapi.json)
-        POST ${Paths.TRACKING_UPDATE.padEnd(40)} Monolith webhook: SyncShipmentsWithFulfillmentsRequest → sync Shopify fulfillments
-        POST ${Paths.SYNC_SHIPMENTS_WITH_FULFILLMENTS.padEnd(40)} Monolith webhook: TrackingUpdateRequest → Shopify FulfillmentEvent
-        POST ${Paths.TRACKING_UPDATES.padEnd(40)} Same TrackingUpdate body as .../sync-shipments-with-fulfillments (compat)
+        PUT  ${Paths.storesApiKey.padEnd(40)} Set Shopify Admin token (see repo openapi.json)
+        POST ${Paths.syncShipmentsWithFulfillments.padEnd(40)} Monolith webhook: SyncShipmentsWithFulfillmentsRequest → sync Shopify fulfillments
+        POST ${Paths.trackingUpdate.padEnd(40)} Monolith webhook: TrackingUpdateRequest → Shopify FulfillmentEvent
+        POST ${Paths.trackingUpdates.padEnd(40)} Alias for ${Paths.trackingUpdate} (same TrackingUpdateRequest body)
 
       --- Demo routes$demoNote ---
-        GET  ${Paths.DEMO_PRODUCTS.padEnd(28)}?shop=     List products via Shopify Graphql
-        GET  ${Paths.DEMO_ORDER.padEnd(28)}?shop=&id=  Load a single order by GID or numeric ID
-        POST ${Paths.DEMO_FULFILLMENT_CREATE.padEnd(40)} Create a fulfillment with tracking
-        POST ${Paths.DEMO_FULFILLMENT_TRACKING.padEnd(40)} Update fulfillment tracking info
+        GET  ${Paths.demoProducts.padEnd(28)}?shop=     List products via Shopify Graphql
+        GET  ${Paths.demoOrder.padEnd(28)}?shop=&id=  Load a single order by GID or numeric ID
+        POST ${Paths.demoFulfillmentCreate.padEnd(40)} Create a fulfillment with tracking
+        POST ${Paths.demoFulfillmentTracking.padEnd(40)} Update fulfillment tracking info
       """.trimIndent(),
       ContentType.Text.Plain,
       HttpStatusCode.OK,
@@ -91,7 +91,6 @@ class DiagnosticsHandlers(
           hasTokenMappedForShop = hasMappedToken,
           demoRoutesEnabled = dssConfig.dev.enableDemoRoutes,
           testHarnessEnabled = dssConfig.dev.enableTestHarness,
-          monolithConfigured = true,
         ),
       ),
     )
@@ -129,5 +128,4 @@ private data class ApiCheckDetails(
   val hasTokenMappedForShop: Boolean,
   val demoRoutesEnabled: Boolean,
   val testHarnessEnabled: Boolean,
-  val monolithConfigured: Boolean,
 )

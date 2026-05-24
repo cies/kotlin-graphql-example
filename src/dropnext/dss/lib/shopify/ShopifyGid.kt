@@ -4,10 +4,14 @@ package dropnext.dss.lib.shopify
 fun legacyIdFromGid(gid: String): Long? =
   gid.substringAfterLast('/').takeIf { it.isNotEmpty() }?.toLongOrNull()
 
-fun fulfillmentGid(legacyId: Long): String = "gid://shopify/Fulfillment/$legacyId"
-
-fun fulfillmentOrderGid(legacyId: Long): String = "gid://shopify/FulfillmentOrder/$legacyId"
-
 fun orderGid(legacyId: Long): String = "gid://shopify/Order/$legacyId"
 
-fun shopifyShopIdFromShopGid(shopGid: String): Long? = legacyIdFromGid(shopGid)
+/**
+ * Resolves a user-supplied id parameter to an order GID. Accepts either a full
+ * `gid://shopify/Order/<n>` value or a bare numeric id. Returns `null` for anything else.
+ */
+fun orderGidFromParam(idParam: String): String? {
+  if (idParam.startsWith("gid://")) return idParam
+  val numeric = idParam.toLongOrNull() ?: return null
+  return orderGid(numeric)
+}

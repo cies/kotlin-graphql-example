@@ -5,7 +5,7 @@ import dropnext.dss.lib.shopify.graphql.webhookregistration.WebhookSubscriptionS
 import dropnext.graphql.generated.enums.WebhookSubscriptionTopic
 import kotlin.test.Test
 
-class OAuthInstallViewTest {
+class RenderOAuthInstallPageTest {
 
   private fun renderBase(
     shop: String = "acme.myshopify.com",
@@ -81,8 +81,7 @@ class OAuthInstallViewTest {
   @Test
   fun `empty subscription lists render a None bullet`() {
     val html = renderBase()
-    // Two empty lists → at least two "None" bullets.
-    assert(html.count { it == '\n' } >= 0)
+    // One "None" bullet per empty list — both `activeSubscriptions` and `addedSubscriptions` default to empty.
     val noneCount = "<li>None</li>".toRegex().findAll(html).count()
     assert(noneCount == 2)
   }

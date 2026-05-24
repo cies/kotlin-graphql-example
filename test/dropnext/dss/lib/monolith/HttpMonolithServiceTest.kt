@@ -18,6 +18,7 @@ import io.ktor.serialization.kotlinx.json.json
 import java.util.concurrent.TimeUnit
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
+import kotlin.test.Test
 import kotlinx.coroutines.runBlocking
 
 class HttpMonolithServiceTest {
@@ -69,7 +70,7 @@ class HttpMonolithServiceTest {
 
   // ---------- postCreateOrder ----------
 
-  @org.junit.jupiter.api.Test
+  @Test
   fun `postCreateOrder returns HttpResponseSummary on 200`() = runBlocking {
     server.enqueue(HttpStatusCode.OK, """{"shopify_order_id":1001}""")
     val req = orderToCreateShopifyOrderRequest("acme", minimalOrder())
@@ -84,7 +85,7 @@ class HttpMonolithServiceTest {
     assert(recorded.contentType()?.startsWith("application/json") == true)
   }
 
-  @org.junit.jupiter.api.Test
+  @Test
   fun `postCreateOrder treats 409 as HttpResponseSummary (idempotent duplicate)`() = runBlocking {
     server.enqueue(HttpStatusCode.Conflict, """{"error":"Order already exists."}""")
     val req = orderToCreateShopifyOrderRequest("acme", minimalOrder())
@@ -93,7 +94,7 @@ class HttpMonolithServiceTest {
     assert((result as CreateOrderResult.HttpResponseSummary).status == 409)
   }
 
-  @org.junit.jupiter.api.Test
+  @Test
   fun `postCreateOrder maps non-2xx, non-409 to Error with parsed body`() = runBlocking {
     server.enqueue(HttpStatusCode.BadRequest, """{"error":{"code":"InvalidOrder","message":"bad","trace_id":"t-1"}}""")
     val req = orderToCreateShopifyOrderRequest("acme", minimalOrder())
@@ -105,7 +106,7 @@ class HttpMonolithServiceTest {
     assert(result.parsed?.monolithTraceId == "t-1")
   }
 
-  @org.junit.jupiter.api.Test
+  @Test
   fun `postCreateOrder returns Error(0) on connection failure`() = runBlocking {
     // Acquire a port by binding briefly, then close — the just-freed port is reliably refused.
     val transient = FakeMonolithHttpServer()
@@ -121,7 +122,7 @@ class HttpMonolithServiceTest {
 
   // ---------- putStoreApiKey ----------
 
-  @org.junit.jupiter.api.Test
+  @Test
   fun `putStoreApiKey on 200 deserialises the storeId`() = runBlocking {
     server.enqueue(HttpStatusCode.OK, """{"store_id":42}""")
     val result =
@@ -136,7 +137,7 @@ class HttpMonolithServiceTest {
     assert("\"api_key\":\"shpat_x\"" in recorded.body)
   }
 
-  @org.junit.jupiter.api.Test
+  @Test
   fun `putStoreApiKey on 500 returns Error`() = runBlocking {
     server.enqueue(HttpStatusCode.InternalServerError, """{"error":"boom"}""")
     val result =
@@ -147,7 +148,7 @@ class HttpMonolithServiceTest {
 
   // ---------- getStore ----------
 
-  @org.junit.jupiter.api.Test
+  @Test
   fun `getStore on 200 deserialises the StoreResponse`() = runBlocking {
     server.enqueue(HttpStatusCode.OK, """{"store_id":1,"shopify_shop_id":99,"api_key":"shpat_x"}""")
     val result = service().getStore("acme")
@@ -162,7 +163,7 @@ class HttpMonolithServiceTest {
     assert(recorded.query["shopify_subdomain"] == listOf("acme"))
   }
 
-  @org.junit.jupiter.api.Test
+  @Test
   fun `getStore on 404 returns NotFound with the subdomain`() = runBlocking {
     server.enqueue(HttpStatusCode.NotFound, """{"error":"missing"}""")
     val result = service().getStore("acme")
@@ -170,7 +171,7 @@ class HttpMonolithServiceTest {
     assert((result as GetStoreResult.NotFound).shopifySubdomain == "acme")
   }
 
-  @org.junit.jupiter.api.Test
+  @Test
   fun `getStore on 500 returns Error`() = runBlocking {
     server.enqueue(HttpStatusCode.InternalServerError, """{"error":"boom"}""")
     val result = service().getStore("acme")
@@ -180,7 +181,7 @@ class HttpMonolithServiceTest {
 
   // ---------- upsertProductVariants ----------
 
-  @org.junit.jupiter.api.Test
+  @Test
   fun `upsertProductVariants on 200 returns Ok with upserted count`() = runBlocking {
     server.enqueue(HttpStatusCode.OK, """{"upserted":3}""")
     val request =
@@ -193,7 +194,7 @@ class HttpMonolithServiceTest {
     assert(recorded.path == "/product-variants")
   }
 
-  @org.junit.jupiter.api.Test
+  @Test
   fun `upsertProductVariants on 502 returns Error`() = runBlocking {
     server.enqueue(HttpStatusCode.BadGateway, "")
     val result =
@@ -206,7 +207,7 @@ class HttpMonolithServiceTest {
 
   // ---------- getProductVariantIds ----------
 
-  @org.junit.jupiter.api.Test
+  @Test
   fun `getProductVariantIds on 200 returns Ok with id list`() = runBlocking {
     server.enqueue(HttpStatusCode.OK, """{"product_variant_ids":[1,2,3]}""")
     val result = service().getProductVariantIds("acme")
@@ -217,7 +218,7 @@ class HttpMonolithServiceTest {
     assert(recorded.query["shopify_subdomain"] == listOf("acme"))
   }
 
-  @org.junit.jupiter.api.Test
+  @Test
   fun `getProductVariantIds on 404 returns NotFound`() = runBlocking {
     server.enqueue(HttpStatusCode.NotFound, "")
     val result = service().getProductVariantIds("acme")
@@ -226,7 +227,7 @@ class HttpMonolithServiceTest {
 
   // ---------- deleteProductVariants ----------
 
-  @org.junit.jupiter.api.Test
+  @Test
   fun `deleteProductVariants on 200 returns Ok with deleted count`() = runBlocking {
     server.enqueue(HttpStatusCode.OK, """{"deleted":2}""")
     val result =
@@ -241,7 +242,7 @@ class HttpMonolithServiceTest {
     assert("\"product_variant_ids\":[11,22]" in recorded.body)
   }
 
-  @org.junit.jupiter.api.Test
+  @Test
   fun `deleteProductVariants on 500 returns Error`() = runBlocking {
     server.enqueue(HttpStatusCode.InternalServerError, """{"error":"nope"}""")
     val result =
@@ -254,7 +255,7 @@ class HttpMonolithServiceTest {
 
   // ---------- MonolithErrorBody integration ----------
 
-  @org.junit.jupiter.api.Test
+  @Test
   fun `monolith trace_id is parsed and propagated through CreateOrderResult Error`() = runBlocking {
     server.enqueue(
       HttpStatusCode.InternalServerError,
@@ -270,7 +271,7 @@ class HttpMonolithServiceTest {
     assert(result.parsed?.code == "InternalError")
   }
 
-  @org.junit.jupiter.api.Test
+  @Test
   fun `monolith trace_id is parsed for getStore errors too`() = runBlocking {
     server.enqueue(
       HttpStatusCode.InternalServerError,
@@ -284,7 +285,7 @@ class HttpMonolithServiceTest {
 
   // ---------- url composition & auth header ----------
 
-  @org.junit.jupiter.api.Test
+  @Test
   fun `apiPathPrefix is inserted between baseUrl and path`() = runBlocking {
     server.enqueue(HttpStatusCode.OK, """{"store_id":1,"shopify_shop_id":99,"api_key":null}""")
     service(apiPrefix = "api/v1").getStore("acme")
@@ -292,7 +293,7 @@ class HttpMonolithServiceTest {
     assert(recorded.path == "/api/v1/stores")
   }
 
-  @org.junit.jupiter.api.Test
+  @Test
   fun `apiPathPrefix with surrounding slashes is normalised`() = runBlocking {
     server.enqueue(HttpStatusCode.OK, """{"store_id":1,"shopify_shop_id":99,"api_key":null}""")
     service(apiPrefix = "/api/v1/").getStore("acme")
@@ -300,7 +301,7 @@ class HttpMonolithServiceTest {
     assert(recorded.path == "/api/v1/stores")
   }
 
-  @org.junit.jupiter.api.Test
+  @Test
   fun `apiKey header behavior — null, blank, and non-blank`() = runBlocking {
     val cases = listOf<Pair<String?, String?>>(
       null to null,
@@ -319,7 +320,7 @@ class HttpMonolithServiceTest {
     }
   }
 
-  @org.junit.jupiter.api.Test
+  @Test
   fun `custom createOrderPath is honoured`() = runBlocking {
     server.enqueue(HttpStatusCode.OK, """{"shopify_order_id":1001}""")
     val req = orderToCreateShopifyOrderRequest("acme", minimalOrder())

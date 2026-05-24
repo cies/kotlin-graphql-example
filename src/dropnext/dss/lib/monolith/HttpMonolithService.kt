@@ -1,6 +1,5 @@
 package dropnext.dss.lib.monolith
 
-import dropnext.dss.path.OutBoundMonolithPaths
 import dropnext.dss.lib.json.MonolithJson
 import dropnext.dss.lib.dto.CreateShopifyOrderRequest
 import dropnext.dss.lib.dto.DeleteProductVariantsRequest
@@ -20,12 +19,13 @@ import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import java.io.IOException
-import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.KSerializer
 
 /**
  * Production [MonolithService]: real HTTP calls to the DropNext monolith over Ktor + OkHttp.
@@ -42,22 +42,8 @@ class HttpMonolithService(
   private val baseUrl: String,
   private val apiPathPrefix: String?,
   private val apiKey: String?,
-  private val createOrderPath: String = OutBoundMonolithPaths.ORDERS,
+  private val createOrderPath: String = OutBoundMonolithPaths.orders,
 ) : MonolithService {
-
-  private val createOrderJsonTopLevelKeys: Set<String> =
-    setOf(
-      "shopify_subdomain",
-      "shopify_order_id",
-      "name",
-      "financial_status",
-      "fulfillment_status",
-      "created_at",
-      "shipping_address",
-      "line_items",
-      "total_in_minor_units",
-      "currency",
-    )
 
   private val prefixedBase: String = run {
     val b = baseUrl.trimEnd('/')
@@ -70,23 +56,18 @@ class HttpMonolithService(
     return "$prefixedBase/$rel"
   }
 
-  private fun authHeader(block: HttpRequestBuilder) {
+  private fun HttpRequestBuilder.applyAuth() {
     if (!apiKey.isNullOrBlank()) {
-      block.header("Authorization", "Bearer $apiKey")
+      header("Authorization", "Bearer $apiKey")
     }
   }
 
-  override suspend fun postCreateOrder(request: CreateShopifyOrderRequest): CreateOrderResult {
-    val payloadResult = encodeCreateOrderPayload(request)
-    if (payloadResult is CreateOrderPayload.Invalid) {
-      return CreateOrderResult.Error(0, payloadResult.reason, null)
-    }
-    val payload = (payloadResult as CreateOrderPayload.Ok).json
-    return guardNetwork(onNetworkError = { CreateOrderResult.Error(0, it, null) }) {
+  override suspend fun postCreateOrder(request: CreateShopifyOrderRequest): CreateOrderResult =
+    guardNetwork(onNetworkError = { CreateOrderResult.Error(0, it, null) }) {
       val response = httpClient.post(url(createOrderPath)) {
         contentType(ContentType.Application.Json)
-        authHeader(this)
-        setBody(payload)
+        applyAuth()
+        setBody(MonolithJson.encodeToString(CreateShopifyOrderRequest.serializer(), request))
       }
       val body = response.bodyAsText()
       when (response.status) {
@@ -98,29 +79,24 @@ class HttpMonolithService(
         }
       }
     }
-  }
 
   override suspend fun putStoreApiKey(request: UpdateStoreApiKeyRequest): StoreApiKeyResult =
     guardNetwork(onNetworkError = { StoreApiKeyResult.Error(0, it, null) }) {
-      val response = httpClient.put(url(OutBoundMonolithPaths.STORES_API_KEY)) {
+      httpClient.put(url(OutBoundMonolithPaths.storesApiKey)) {
         contentType(ContentType.Application.Json)
-        authHeader(this)
+        applyAuth()
         setBody(MonolithJson.encodeToString(UpdateStoreApiKeyRequest.serializer(), request))
-      }
-      val body = response.bodyAsText()
-      if (response.status == HttpStatusCode.OK) {
-        val parsed = MonolithJson.decodeFromString(UpdateStoreApiKeyResponse.serializer(), body)
-        StoreApiKeyResult.Ok(storeId = parsed.storeId)
-      } else {
-        val (msg, parsed) = monolithError(response.status.value, body)
-        StoreApiKeyResult.Error(response.status.value, msg, parsed)
-      }
+      }.foldOkOrError(
+        UpdateStoreApiKeyResponse.serializer(),
+        onOk = { StoreApiKeyResult.Ok(storeId = it.storeId) },
+        onError = { status, msg, parsed -> StoreApiKeyResult.Error(status, msg, parsed) },
+      )
     }
 
   override suspend fun getStore(shopifySubdomain: String): GetStoreResult =
     guardNetwork(onNetworkError = { GetStoreResult.Error(0, it, null) }) {
-      val response = httpClient.get(url(OutBoundMonolithPaths.STORES)) {
-        authHeader(this)
+      val response = httpClient.get(url(OutBoundMonolithPaths.stores)) {
+        applyAuth()
         parameter("shopify_subdomain", shopifySubdomain)
       }
       val body = response.bodyAsText()
@@ -143,25 +119,21 @@ class HttpMonolithService(
 
   override suspend fun upsertProductVariants(request: UpsertProductVariantsRequest): UpsertVariantsResult =
     guardNetwork(onNetworkError = { UpsertVariantsResult.Error(0, it, null) }) {
-      val response = httpClient.post(url(OutBoundMonolithPaths.PRODUCT_VARIANTS)) {
+      httpClient.post(url(OutBoundMonolithPaths.productVariants)) {
         contentType(ContentType.Application.Json)
-        authHeader(this)
+        applyAuth()
         setBody(MonolithJson.encodeToString(UpsertProductVariantsRequest.serializer(), request))
-      }
-      val body = response.bodyAsText()
-      if (response.status == HttpStatusCode.OK) {
-        val parsed = MonolithJson.decodeFromString(UpsertProductVariantsResponse.serializer(), body)
-        UpsertVariantsResult.Ok(upserted = parsed.upserted)
-      } else {
-        val (msg, parsed) = monolithError(response.status.value, body)
-        UpsertVariantsResult.Error(response.status.value, msg, parsed)
-      }
+      }.foldOkOrError(
+        UpsertProductVariantsResponse.serializer(),
+        onOk = { UpsertVariantsResult.Ok(upserted = it.upserted) },
+        onError = { status, msg, parsed -> UpsertVariantsResult.Error(status, msg, parsed) },
+      )
     }
 
   override suspend fun getProductVariantIds(shopifySubdomain: String): GetVariantIdsResult =
     guardNetwork(onNetworkError = { GetVariantIdsResult.Error(0, it, null) }) {
-      val response = httpClient.get(url(OutBoundMonolithPaths.PRODUCT_VARIANTS)) {
-        authHeader(this)
+      val response = httpClient.get(url(OutBoundMonolithPaths.productVariants)) {
+        applyAuth()
         parameter("shopify_subdomain", shopifySubdomain)
       }
       val body = response.bodyAsText()
@@ -180,39 +152,34 @@ class HttpMonolithService(
 
   override suspend fun deleteProductVariants(request: DeleteProductVariantsRequest): DeleteVariantsResult =
     guardNetwork(onNetworkError = { DeleteVariantsResult.Error(0, it, null) }) {
-      val response = httpClient.delete(url(OutBoundMonolithPaths.PRODUCT_VARIANTS)) {
+      httpClient.delete(url(OutBoundMonolithPaths.productVariants)) {
         contentType(ContentType.Application.Json)
-        authHeader(this)
+        applyAuth()
         setBody(MonolithJson.encodeToString(DeleteProductVariantsRequest.serializer(), request))
-      }
-      val body = response.bodyAsText()
-      if (response.status == HttpStatusCode.OK) {
-        val parsed = MonolithJson.decodeFromString(DeleteProductVariantsResponse.serializer(), body)
-        DeleteVariantsResult.Ok(deleted = parsed.deleted)
-      } else {
-        val (msg, parsed) = monolithError(response.status.value, body)
-        DeleteVariantsResult.Error(response.status.value, msg, parsed)
-      }
-    }
-
-  private sealed interface CreateOrderPayload {
-    data class Ok(val json: String) : CreateOrderPayload
-    data class Invalid(val reason: String) : CreateOrderPayload
-  }
-
-  private fun encodeCreateOrderPayload(request: CreateShopifyOrderRequest): CreateOrderPayload {
-    val json = MonolithJson.encodeToString(CreateShopifyOrderRequest.serializer(), request)
-    val root = MonolithJson.parseToJsonElement(json)
-    if (root !is JsonObject) {
-      return CreateOrderPayload.Invalid("POST ${OutBoundMonolithPaths.ORDERS} body must be a JSON object")
-    }
-    if (root.keys != createOrderJsonTopLevelKeys) {
-      return CreateOrderPayload.Invalid(
-        "POST ${OutBoundMonolithPaths.ORDERS} body must only include monolith order fields; got keys=${root.keys.sorted()}",
+      }.foldOkOrError(
+        DeleteProductVariantsResponse.serializer(),
+        onOk = { DeleteVariantsResult.Ok(deleted = it.deleted) },
+        onError = { status, msg, parsed -> DeleteVariantsResult.Error(status, msg, parsed) },
       )
     }
-    return CreateOrderPayload.Ok(json)
+}
+
+/**
+ * Maps an HTTP response to a typed sealed outcome: deserialize the JSON body as [T] on `200 OK`,
+ * or surface [MonolithCallError]-shaped fields on any other status (the [monolithError] helper
+ * extracts the monolith's error body for richer log lines).
+ */
+private suspend inline fun <T : Any, R> HttpResponse.foldOkOrError(
+  serializer: KSerializer<T>,
+  onOk: (T) -> R,
+  onError: (status: Int, message: String, parsed: MonolithErrorBody?) -> R,
+): R {
+  val body = bodyAsText()
+  if (status == HttpStatusCode.OK) {
+    return onOk(MonolithJson.decodeFromString(serializer, body))
   }
+  val (msg, parsed) = monolithError(status.value, body)
+  return onError(status.value, msg, parsed)
 }
 
 /** Wraps a suspending block so a single [IOException] (network failure) becomes a typed [R] outcome via [onNetworkError]. */

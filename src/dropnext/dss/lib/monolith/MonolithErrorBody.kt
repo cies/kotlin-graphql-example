@@ -1,6 +1,7 @@
 package dropnext.dss.lib.monolith
 
 import dropnext.dss.lib.json.MonolithJson
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonPrimitive
@@ -49,7 +50,7 @@ fun parseMonolithErrorBody(rawBody: String): MonolithErrorBody {
   }
 }
 
-private fun parseErrorField(errorElement: kotlinx.serialization.json.JsonElement?): MonolithErrorBody {
+private fun parseErrorField(errorElement: JsonElement?): MonolithErrorBody {
   if (errorElement == null) {
     return MonolithErrorBody(message = null, code = null, monolithTraceId = null)
   }

@@ -44,18 +44,6 @@ class ShopifyOAuthServiceTest {
     assert("state=a+b%7Cc" in url)
   }
 
-  @Test
-  fun `randomState returns 32 hex chars`() {
-    val state = ShopifyOAuthService.randomState()
-    assert(state.length == 32)
-    assert(state.all { it in '0'..'9' || it in 'a'..'f' })
-  }
-
-  @Test
-  fun `randomState returns different values across calls`() {
-    assert(ShopifyOAuthService.randomState() != ShopifyOAuthService.randomState())
-  }
-
   // ---------- signed state ----------
 
   @Test
