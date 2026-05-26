@@ -2,7 +2,6 @@ package dropnext.dss.workflow
 
 import dropnext.dss.lib.monolith.dto.generated.Shipment
 import dropnext.dss.lib.monolith.dto.generated.SyncShipmentsWithFulfillmentsRequest
-import dropnext.dss.lib.monolith.dto.generated.SyncShipmentsWithFulfillmentsResponse
 import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlService
 import dropnext.dss.lib.shopify.graphql.fulfillment.FulfillmentResult
 import dropnext.dss.lib.shopify.graphql.fulfillment.ShipmentMatchResult
@@ -10,6 +9,7 @@ import dropnext.dss.lib.shopify.graphql.fulfillment.matchShipmentToFulfillmentOr
 import dropnext.dss.lib.shopify.legacyIdFromGid
 import dropnext.dss.lib.shopify.orderGid
 import dropnext.graphql.generated.getorderfordss.Order
+import dropnext.graphql.generated.inputs.FulfillmentOrderLineItemsInput
 import dropnext.graphql.generated.inputs.FulfillmentTrackingInput
 
 
@@ -24,7 +24,7 @@ import dropnext.graphql.generated.inputs.FulfillmentTrackingInput
 suspend fun syncShopifyShipmentsToFulfillments(
   shopify: ShopifyGraphqlService,
   payload: SyncShipmentsWithFulfillmentsRequest,
-): FulfillmentResult<SyncShipmentsWithFulfillmentsResponse> {
+): FulfillmentResult<Unit> {
   val orderGid = orderGid(payload.shopifyOrderId)
 
   val orderBefore = loadOrder(shopify, orderGid)
@@ -46,13 +46,11 @@ suspend fun syncShopifyShipmentsToFulfillments(
       ?: return FulfillmentResult.Err.NotFound("order not found after cancel")
   }
 
-  val newIds = payload.shipments.flatMap { shipment ->
-    when (val result = createFulfillmentForShipment(shopify, orderAfter, shipment)) {
-      is FulfillmentResult.Ok -> result.value
-      is FulfillmentResult.Err -> return result
-    }
+  payload.shipments.forEach { shipment ->
+    val result = createFulfillmentForShipment(shopify, orderAfter, shipment)
+    if (result is FulfillmentResult.Err) return result
   }
-  return FulfillmentResult.Ok(SyncShipmentsWithFulfillmentsResponse(newIds))
+  return FulfillmentResult.Ok(Unit)
 }
 
 private suspend fun loadOrder(shopify: ShopifyGraphqlService, orderGid: String): Order? {

@@ -24,6 +24,7 @@ import dropnext.graphql.generated.fulfillmenteventcreatemutation.FulfillmentEven
 import dropnext.graphql.generated.fulfillmenttrackinginfoupdatemutation.FulfillmentTrackingInfoUpdatePayload
 import dropnext.graphql.generated.getwebhooksubscriptions.WebhookSubscriptionConnection
 import dropnext.graphql.generated.inputs.FulfillmentEventInput
+import dropnext.graphql.generated.inputs.FulfillmentOrderLineItemsInput
 import dropnext.graphql.generated.inputs.FulfillmentTrackingInput
 import dropnext.graphql.generated.registerwebhook.WebhookSubscriptionCreatePayload
 import dropnext.graphql.generated.fulfillmentcreatewithtracking.FulfillmentCreatePayload as DemoCreatePayload
@@ -140,7 +141,7 @@ class FakeShopifyGraphqlService(
     )
 
   override suspend fun createFulfillmentWithLineItems(
-      lineItemsByFulfillmentOrder: List<FulfillmentOrderIdWithLineItems>,
+      lineItemsByFulfillmentOrder: List<FulfillmentOrderLineItemsInput>,
       tracking: FulfillmentTrackingInput,
       notifyCustomer: Boolean,
   ): GraphQLClientResponse<FulfillmentCreateWithLineItems.Result> =

@@ -236,17 +236,65 @@ private val openApiSpecFile: File =
     .let { if (it.isFile && it.canRead() && it.length() > 0L) it else null }
     ?: throw GradleException(
       """
-        OpenAPI spec not found. Expected one of (non-empty):
-          ${layout.projectDirectory.asFile.absolutePath}${File.separator}src${File.separator}resources${File.separator}openapi.json
-          ${layout.projectDirectory.asFile.absolutePath}${File.separator}openapi.json
-        Docker: COPY openapi.json alongside Gradle configs and/or COPY src before running Gradle.
+        OpenAPI spec not found. Expected (non-empty):
+          ${layout.projectDirectory.asFile.absolutePath}${File.separator}src${File.separator}resources${File.separator}monolith-dss-openapi.json
+        Docker: COPY src/resources/monolith-dss-openapi.json before running Gradle (see Dockerfile).
       """.trimIndent(),
     )
+
+// Path of the spec after `rewriteOpenApiSpecToV31` has migrated 3.0 nullability syntax
+// to 3.1 union types. `openApiGenerate` reads from this rewritten file, not the source.
+private val openApiSpecRewrittenFile: File =
+  layout.buildDirectory.file("generated/openapi-spec/monolith-dss-openapi.json").get().asFile
+
+// Why this task exists:
+//   The shared monolith↔DSS spec is authored as OpenAPI 3.0-style: nullable string fields use
+//   `{"type":"string","nullable":true}`. The spec's `openapi` version was bumped to `3.1.0` so
+//   the generator would accept the (3.1-only) `webhooks:` block. But OpenAPI 3.1 *dropped* the
+//   `nullable` keyword: in 3.1 you express nullability via a union type `{"type":["string","null"]}`.
+//   The openapi-generator's 3.1 codepath silently ignores stale `"nullable": true` flags, which
+//   regressed ~16 string fields across DTOs like `ShippingAddress` from nullable to non-null —
+//   a binary-incompatible contract change.
+//
+// What this does:
+//   Reads the source spec, rewrites every `{"type":"<scalar>","nullable":true}` into
+//   `{"type":["<scalar>","null"]}`, and writes the result under `build/generated/openapi-spec/`.
+//   `openApiGenerate` is then pointed at the rewritten file.
+//
+// When this can be removed:
+//   - The source spec adopts 3.1 union-type nullability throughout (i.e. the monolith side emits
+//     `["string","null"]` directly); OR
+//   - The spec no longer needs the 3.1-only `webhooks:` block (revert `openapi` to `3.0.0`, after
+//     which `"nullable": true` is valid again and the generator's 3.0 path handles it natively).
+val rewriteOpenApiSpecToV31 by tasks.registering {
+  group = "build"
+  description = "Migrates OpenAPI 3.0-style `nullable: true` flags to 3.1 union-type nullability."
+
+  // Captured into local vals so the doLast closure does not retain a reference to the Gradle
+  // script object (which the configuration cache cannot serialize).
+  val source = openApiSpecFile
+  val target = openApiSpecRewrittenFile
+
+  inputs.file(source)
+  outputs.file(target)
+
+  doLast {
+    // Matches `"type":"<scalar>","nullable":true` — note: order-sensitive. The shared spec is
+    // emitted by a single generator on the monolith side, so the field order is stable; if that
+    // ever changes, broaden the regex (or move to JSON-tree rewriting via the OpenAPI parser).
+    val nullableRewrite = Regex("""\"type\":\"([a-zA-Z]+)\",\"nullable\":true""")
+    val rewritten = nullableRewrite.replace(source.readText()) { match ->
+      "\"type\":[\"${match.groupValues[1]}\",\"null\"]"
+    }
+    target.parentFile.mkdirs()
+    target.writeText(rewritten)
+  }
+}
 
 openApiGenerate {
   generatorName.set("kotlin")
   // file: URI — required on Windows when validateSpec is enabled (absolute paths break $ref resolution).
-  inputSpec.set(openApiSpecFile.toURI().toString())
+  inputSpec.set(openApiSpecRewrittenFile.toURI().toString())
   skipValidateSpec.set(false)
   outputDir.set("${layout.buildDirectory.get()}/generated/openapi")
   modelPackage.set(monolithServiceGeneratedDtoPath.replace('/', '.'))
@@ -270,6 +318,10 @@ openApiGenerate {
 }
 
 sourceSets["main"].kotlin.srcDir("${layout.buildDirectory.get()}/generated/openapi/src/main/kotlin")
+
+tasks.named("openApiGenerate") {
+  dependsOn(rewriteOpenApiSpecToV31)
+}
 
 tasks.named("compileKotlin") {
   dependsOn(tasks.named("openApiGenerate"))

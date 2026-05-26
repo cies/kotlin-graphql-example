@@ -4,7 +4,6 @@ import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
 import dropnext.dss.lib.monolith.dto.generated.Shipment
 import dropnext.dss.lib.monolith.dto.generated.ShipmentLineItem
 import dropnext.dss.lib.monolith.dto.generated.SyncShipmentsWithFulfillmentsRequest
-import dropnext.dss.lib.monolith.dto.generated.SyncShipmentsWithFulfillmentsResponse
 import dropnext.dss.lib.shopify.ShopDomain
 import dropnext.dss.lib.shopify.graphql.HttpShopifyGraphqlService
 import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlService
@@ -86,8 +85,7 @@ class SyncShopifyShipmentsToFulfillmentsTest {
     fake.stubGetOrderForDss(order = minimalOrder().copy(fulfillments = emptyList()))
     fake.stubFulfillmentCreateOk(fulfillmentId = 5000L)
     val result = syncShopifyShipmentsToFulfillments(shopify, syncRequest())
-    val response = result.unwrapOk<SyncShipmentsWithFulfillmentsResponse>()
-    assert(response.newFulfillmentIds == listOf(5000L))
+    assert(result is FulfillmentResult.Ok<*>)
     assert(fake.calls.map { it.operationName } == listOf("GetOrderForDss", "FulfillmentCreateWithLineItems"))
     assert(fake.calls.first().authorization == "tok")
   }
@@ -111,8 +109,7 @@ class SyncShopifyShipmentsToFulfillmentsTest {
     fake.stubFulfillmentCancelUserError("Fulfillment is already canceled.")
     fake.stubFulfillmentCreateOk(fulfillmentId = 9001L)
     val result = syncShopifyShipmentsToFulfillments(shopify, syncRequest())
-    val response = result.unwrapOk<SyncShipmentsWithFulfillmentsResponse>()
-    assert(response.newFulfillmentIds == listOf(9001L))
+    assert(result is FulfillmentResult.Ok<*>)
   }
 
   @Test

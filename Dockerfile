@@ -24,11 +24,13 @@ RUN dnf install -y --setopt=install_weak_deps=False tar gzip findutils \
 WORKDIR /src
 
 # Prime the Gradle dependency cache. Copy only build configuration first so the cache layer
-# is reused as long as build files do not change. `openapi.json` is required at configure
+# is reused as long as build files do not change. The OpenAPI spec is required at configure
 # time because `openApiGenerate` resolves its input spec when the build script is evaluated
-# (see build.gradle.kts:openApiSpecFile).
+# (see build.gradle.kts:openApiSpecFile) — copy just that one file from `src/resources/`
+# so the rest of `src/` can land in a later, less frequently invalidated layer.
 COPY gradle ./gradle
-COPY gradlew settings.gradle.kts build.gradle.kts gradle.properties openapi.json ./
+COPY gradlew settings.gradle.kts build.gradle.kts gradle.properties ./
+COPY src/resources/monolith-dss-openapi.json ./src/resources/monolith-dss-openapi.json
 
 # Resolve dependencies into the BuildKit cache mount. `--no-daemon` because containers.
 RUN --mount=type=cache,target=/root/.gradle,sharing=locked \

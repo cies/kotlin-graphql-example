@@ -38,7 +38,7 @@ data class Config(
         monolith = monolith,
         dev = dev,
         webhook = WebhookConfig.fromEnv(),
-        monolithWebhookAuthSecret = EnvVars.optionalNormalized("DSS_INTERNAL_SECRET"),
+        monolithWebhookAuthSecret = optionalNormalized("DSS_INTERNAL_SECRET"),
       )
 
       val configIssues = computeRuntimeConfigIssues(dssConfig)
@@ -72,14 +72,14 @@ data class MonolithConfig(
 ) {
   companion object {
     fun fromEnv(): MonolithConfig? {
-      val baseUrl = EnvVars.optionalNormalized("MONOLITH_BASE_URL") ?: return null
-      val prefix = EnvVars.optionalNormalized("MONOLITH_API_PREFIX")
+      val baseUrl = optionalNormalized("MONOLITH_BASE_URL") ?: return null
+      val prefix = optionalNormalized("MONOLITH_API_PREFIX")
         ?.trim { it == '/' }?.takeIf { it.isNotEmpty() }
       return MonolithConfig(
         baseUrl = baseUrl,
         apiPrefix = prefix,
-        apiKey = EnvVars.optionalNormalized("MONOLITH_API_KEY"),
-        allowInsecureUrl = EnvVars.optionalBool("DSS_ALLOW_INSECURE_MONOLITH"),
+        apiKey = optionalNormalized("MONOLITH_API_KEY"),
+        allowInsecureUrl = optionalBool("DSS_ALLOW_INSECURE_MONOLITH"),
       )
     }
   }
@@ -96,9 +96,9 @@ data class DevConfig(
 ) {
   companion object {
     fun fromEnv(): DevConfig {
-      val testHarness = EnvVars.optionalBool("ENABLE_TEST_HARNESS")
+      val testHarness = optionalBool("ENABLE_TEST_HARNESS")
       return DevConfig(
-        enableDemoRoutes = EnvVars.optionalBool("ENABLE_DEMO_ROUTES") || testHarness,
+        enableDemoRoutes = optionalBool("ENABLE_DEMO_ROUTES") || testHarness,
         enableTestHarness = testHarness,
       )
     }
@@ -114,7 +114,7 @@ data class WebhookConfig(
 ) {
   companion object {
     fun fromEnv(): WebhookConfig = WebhookConfig(
-      syncOrderOnUpdated = EnvVars.optionalBool("DSS_SYNC_ORDER_ON_UPDATED"),
+      syncOrderOnUpdated = optionalBool("DSS_SYNC_ORDER_ON_UPDATED"),
     )
   }
 }
@@ -191,7 +191,7 @@ data class ShopifyConfig(
      */
     private fun resolveServerPort(): Int = resolveServerPort(
       System.getenv("PORT"),
-      EnvVars.optionalNormalized("PORT")?.toIntOrNull()?.takeIf { it in 1..65535 },
+      optionalNormalized("PORT")?.toIntOrNull()?.takeIf { it in 1..65535 },
     )
 
     /** Pure decision extracted for unit testing; see [resolveServerPort] for the env-bound caller. */
@@ -202,6 +202,6 @@ data class ShopifyConfig(
       else -> 8080
     }
 
-    private fun env(name: String): String? = EnvVars.optionalNormalized(name)
+    private fun env(name: String): String? = optionalNormalized(name)
   }
 }

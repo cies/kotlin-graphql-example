@@ -341,11 +341,15 @@ class HttpMonolithServiceTest {
       productHandle = "t-shirt",
       productStatus = ProductStatus.ACTIVE,
       productImages = emptyList(),
+      productPublishedAt = null,
       productCreatedAt = "2026-04-01T00:00:00Z",
       productUpdatedAt = "2026-04-01T00:00:00Z",
       title = "Default",
+      sku = null,
+      barcode = null,
       priceInMinorUnits = 1995L,
       priceCurrency = "USD",
       selectedOptions = emptyList(),
+      imageUrl = null,
     )
 }

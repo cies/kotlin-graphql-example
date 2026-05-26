@@ -4,8 +4,8 @@ import dropnext.dss.path.Paths
 import dropnext.dss.lib.monolith.MonolithService
 import dropnext.dss.lib.monolith.ShopAccessTokenCache
 import dropnext.dss.lib.monolith.ShopifyGraphqlServiceFactory
-import dropnext.dss.lib.monolith.dto.generated.PutShopAccessTokenRequest
-import dropnext.dss.lib.monolith.dto.generated.PutShopAccessTokenResponse
+import dropnext.dss.lib.monolith.dto.generated.UpdateStoreApiKeyRequest
+import dropnext.dss.lib.monolith.dto.generated.UpdateStoreApiKeyResponse
 import dropnext.dss.lib.monolith.dto.generated.Shipment
 import dropnext.dss.lib.monolith.dto.generated.ShipmentLineItem
 import dropnext.dss.lib.monolith.dto.generated.SyncShipmentsWithFulfillmentsRequest
@@ -138,7 +138,7 @@ class MonolithWebhookHandlersTest {
       val r = client.put(Paths.storesApiKey) {
         contentType(ContentType.Application.Json)
         setBody(
-          PutShopAccessTokenRequest(
+          UpdateStoreApiKeyRequest(
             shopifySubdomain = "acme",
             apiKey = "shpat_new_token",
             shopifyShopId = 99L,
@@ -146,8 +146,8 @@ class MonolithWebhookHandlersTest {
         )
       }
       assert(r.status == HttpStatusCode.OK)
-      val resp = r.body<PutShopAccessTokenResponse>()
-      assert(resp.shop == "acme.myshopify.com")
+      val resp = r.body<UpdateStoreApiKeyResponse>()
+      assert(resp.storeId == 1L) // FakeMonolithService.putStoreApiKeyStoreId default
       assert(tokens[acmeShop] == "shpat_new_token")
     }
   }
@@ -160,7 +160,7 @@ class MonolithWebhookHandlersTest {
       val r = client.put(Paths.storesApiKey) {
         contentType(ContentType.Application.Json)
         setBody(
-          PutShopAccessTokenRequest(
+          UpdateStoreApiKeyRequest(
             shopifySubdomain = "acme",
             apiKey = "shpat_new",
             shopifyShopId = 99L,
@@ -186,10 +186,10 @@ class MonolithWebhookHandlersTest {
       val r = client.put(Paths.storesApiKey) {
         contentType(ContentType.Application.Json)
         setBody(
-          PutShopAccessTokenRequest(
+          UpdateStoreApiKeyRequest(
             shopifySubdomain = "acme",
             apiKey = "shpat_x",
-            shopifyShopId = null,
+            shopifyShopId = 0L,
           ),
         )
       }
@@ -204,10 +204,10 @@ class MonolithWebhookHandlersTest {
     val r = client.put(Paths.storesApiKey) {
       contentType(ContentType.Application.Json)
       setBody(
-        PutShopAccessTokenRequest(
+        UpdateStoreApiKeyRequest(
           shopifySubdomain = "!!invalid!!",
           apiKey = "shpat",
-          shopifyShopId = null,
+          shopifyShopId = 0L,
         ),
       )
     }
@@ -221,10 +221,10 @@ class MonolithWebhookHandlersTest {
       val r = client.put(Paths.storesApiKey) {
         contentType(ContentType.Application.Json)
         setBody(
-          PutShopAccessTokenRequest(
+          UpdateStoreApiKeyRequest(
             shopifySubdomain = "acme",
             apiKey = "shpat_x",
-            shopifyShopId = null,
+            shopifyShopId = 0L,
           ),
         )
       }

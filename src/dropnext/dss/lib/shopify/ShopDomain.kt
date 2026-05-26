@@ -59,15 +59,13 @@ value class ShopDomain private constructor(val normalizedShopifyHost: String) {
     }
 
     private fun normalise(raw: String): String? {
-      val lowercaseTrimmed = raw.trim().lowercase()
-      if (lowercaseTrimmed.endsWith(".myshopify.com") || lowercaseTrimmed.endsWith(".myshopify.com/")) {
-        return lowercaseTrimmed
-          .removePrefix("https://")
-          .removePrefix("http://")
-          .substringBefore('/')
-      }
-      if (!lowercaseTrimmed.contains('.') && subdomainPartPattern.matches(lowercaseTrimmed)) {
-        return "$lowercaseTrimmed.myshopify.com"
+      val hostOnly = raw.trim().lowercase()
+        .removePrefix("https://")
+        .removePrefix("http://")
+        .substringBefore('/')
+      if (hostOnly.endsWith(".myshopify.com")) return hostOnly
+      if (!hostOnly.contains('.') && subdomainPartPattern.matches(hostOnly)) {
+        return "$hostOnly.myshopify.com"
       }
       return null
     }

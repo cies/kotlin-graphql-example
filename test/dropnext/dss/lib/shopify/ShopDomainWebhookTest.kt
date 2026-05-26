@@ -12,7 +12,7 @@ class ShopDomainWebhookTest {
 
   @Test
   fun `falls back to webhook body domain when header missing`() {
-    val shop = ShopDomain.fromWebhook(null, "acme.myshopify.com")
+    val shop = ShopDomain.fromWebhook(null, """{"domain":"acme.myshopify.com"}""")
     assert(shop?.normalizedShopifyHost == "acme.myshopify.com")
   }
 

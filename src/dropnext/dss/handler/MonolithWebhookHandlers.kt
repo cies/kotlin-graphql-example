@@ -1,11 +1,10 @@
 package dropnext.dss.handler
 
 import dropnext.dss.path.Paths
-import dropnext.dss.lib.monolith.dto.generated.PutShopAccessTokenRequest
-import dropnext.dss.lib.monolith.dto.generated.PutShopAccessTokenResponse
 import dropnext.dss.lib.monolith.dto.generated.SyncShipmentsWithFulfillmentsRequest
 import dropnext.dss.lib.monolith.dto.generated.TrackingUpdateRequest
 import dropnext.dss.lib.monolith.dto.generated.UpdateStoreApiKeyRequest
+import dropnext.dss.lib.monolith.dto.generated.UpdateStoreApiKeyResponse
 import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlService
 import dropnext.dss.lib.shopify.graphql.fulfillment.FulfillmentResult
 import dropnext.dss.lib.shopify.graphql.fulfillment.RequestValidation
@@ -24,6 +23,7 @@ import dropnext.dss.lib.shopify.ShopDomain
 import dropnext.dss.workflow.syncShopifyShipmentsToFulfillments
 import dropnext.dss.workflow.syncShopifyTrackingEvent
 import io.github.oshai.kotlinlogging.KotlinLogging
+import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.respond
 
@@ -85,7 +85,11 @@ class MonolithWebhookHandlers(
       return
     }
     when (val result = block(shopify)) {
-      is FulfillmentResult.Ok -> call.respond(result.value)
+      // `Unit` is the convention for "no response body" workflows (e.g. sync-shipments, where
+      // the monolith only checks the HTTP status). Anything else gets JSON-serialized.
+      is FulfillmentResult.Ok ->
+        if (result.value === Unit) call.respond(HttpStatusCode.OK)
+        else call.respond(result.value)
       is FulfillmentResult.Err -> {
         val mapped = result.toDssError()
         log.warn { "$operation failed shop=${shop.normalizedShopifyHost}: ${mapped.message}" }
@@ -96,7 +100,7 @@ class MonolithWebhookHandlers(
 
   /** `PUT` to [Paths.storesApiKey] — caches a Shopify Admin token and forwards it to the monolith. */
   suspend fun handlePutStoreApiKey(call: ApplicationCall) {
-    val body = call.receiveOr400<PutShopAccessTokenRequest>() ?: return
+    val body = call.receiveOr400<UpdateStoreApiKeyRequest>() ?: return
     val shop = call.normalizeShopOrRespond(body.shopifySubdomain) ?: return
 
     shopAccessTokenCache[shop] = body.apiKey
@@ -104,17 +108,21 @@ class MonolithWebhookHandlers(
 
     val apiKeyReq = UpdateStoreApiKeyRequest(
       shopifySubdomain = shop.subdomainOnly,
-      shopifyShopId = body.shopifyShopId ?: 0L,
+      shopifyShopId = body.shopifyShopId,
       apiKey = body.apiKey,
     )
-    when (val r = monolithService.putStoreApiKey(apiKeyReq)) {
-      is StoreApiKeyResult.Ok ->
+    val storeId = when (val r = monolithService.putStoreApiKey(apiKeyReq)) {
+      is StoreApiKeyResult.Ok -> {
         log.info { "Monolith store api-key updated storeId=${r.storeId} shop=${shop.normalizedShopifyHost}" }
-      is StoreApiKeyResult.Error ->
+        r.storeId
+      }
+      is StoreApiKeyResult.Error -> {
         logMonolithFailure("putStoreApiKey", r.status, r.parsed, "shop=${shop.normalizedShopifyHost}")
+        0L
+      }
     }
 
-    call.respond(PutShopAccessTokenResponse(shop = shop.normalizedShopifyHost))
+    call.respond(UpdateStoreApiKeyResponse(storeId = storeId))
   }
 
   /** Returns `true` when [validation] is valid; otherwise responds 400 with the accumulated messages and returns `false`. */
