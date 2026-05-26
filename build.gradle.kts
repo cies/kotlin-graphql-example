@@ -1,12 +1,9 @@
-import java.io.File
-import org.gradle.api.GradleException
+import com.expediagroup.graphql.plugin.gradle.config.GraphQLSerializer
+import com.expediagroup.graphql.plugin.gradle.graphql
 import org.gradle.api.JavaVersion.VERSION_25
-import org.gradle.testing.jacoco.tasks.JacocoReport
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_25
 import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
-import com.expediagroup.graphql.plugin.gradle.config.GraphQLSerializer
-import com.expediagroup.graphql.plugin.gradle.graphql
 
 
 plugins {
@@ -112,7 +109,9 @@ tasks.named("processResources") { dependsOn(generateVersionResource) }
 tasks {
   withType<KotlinJvmCompile>().configureEach {
     compilerOptions {
-      allWarningsAsErrors = true // better be strict; use suppressions to get rid of legitimate warnings
+      // Better be strict; use suppressions to get rid of legitimate warnings.
+      allWarningsAsErrors = true
+
       jvmTarget.set(JVM_25)
       freeCompilerArgs.addAll(
         "-opt-in=kotlin.uuid.ExperimentalUuidApi", // more specific than "-opt-in=kotlin.RequiresOptIn"
@@ -233,16 +232,14 @@ tasks.graphqlGenerateClient {
 }
 
 private val openApiSpecFile: File =
-  sequenceOf(
-    layout.projectDirectory.file("src/resources/openapi.json").asFile,
-    layout.projectDirectory.file("openapi.json").asFile,
-  ).firstOrNull { it.isFile && it.canRead() && it.length() > 0L }
+  layout.projectDirectory.file("src/resources/monolith-dss-openapi.json").asFile
+    .let { if (it.isFile && it.canRead() && it.length() > 0L) it else null }
     ?: throw GradleException(
       """
-      OpenAPI spec not found. Expected one of (non-empty):
-        ${layout.projectDirectory.asFile.absolutePath}${File.separator}src${File.separator}resources${File.separator}openapi.json
-        ${layout.projectDirectory.asFile.absolutePath}${File.separator}openapi.json
-      Docker: COPY openapi.json alongside Gradle configs and/or COPY src before running Gradle.
+        OpenAPI spec not found. Expected one of (non-empty):
+          ${layout.projectDirectory.asFile.absolutePath}${File.separator}src${File.separator}resources${File.separator}openapi.json
+          ${layout.projectDirectory.asFile.absolutePath}${File.separator}openapi.json
+        Docker: COPY openapi.json alongside Gradle configs and/or COPY src before running Gradle.
       """.trimIndent(),
     )
 
@@ -255,17 +252,21 @@ openApiGenerate {
   modelPackage.set(monolithServiceGeneratedDtoPath.replace('/', '.'))
   generateApiTests.set(false)
   generateModelTests.set(false)
-  globalProperties.set(mapOf(
-    "models" to "",
-    "apis" to "false",
-    "supportingFiles" to "false",
-  ))
-  configOptions.set(mapOf(
-    "library" to "jvm-ktor",
-    "serializationLibrary" to "kotlinx_serialization",
-    "dateLibrary" to "string",
-    "enumPropertyNaming" to "UPPERCASE",
-  ))
+  globalProperties.set(
+    mapOf(
+      "models" to "",
+      "apis" to "false",
+      "supportingFiles" to "false",
+    )
+  )
+  configOptions.set(
+    mapOf(
+      "library" to "jvm-ktor",
+      "serializationLibrary" to "kotlinx_serialization",
+      "dateLibrary" to "string",
+      "enumPropertyNaming" to "UPPERCASE",
+    )
+  )
 }
 
 sourceSets["main"].kotlin.srcDir("${layout.buildDirectory.get()}/generated/openapi/src/main/kotlin")

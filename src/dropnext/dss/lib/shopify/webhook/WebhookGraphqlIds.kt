@@ -22,19 +22,12 @@ fun graphqlResourceIdFromShopifyWebhook(topic: String, bodyUtf8: String): String
   root["admin_graphql_api_id"]?.jsonPrimitive?.contentOrNull?.let { return it }
   val idPrimitive = root["id"]?.jsonPrimitive ?: return null
   val numericId = idPrimitive.longOrNull ?: idPrimitive.content.toLongOrNull() ?: return null
-  val resource =
-    when {
-      topic.startsWith("products/") -> "Product"
-      topic.startsWith("orders/") -> "Order"
-      else -> return null
-    }
+  val resource = when {
+    topic.startsWith("products/") -> "Product"
+    topic.startsWith("orders/") -> "Order"
+    else -> return null
+  }
   return "gid://shopify/$resource/$numericId"
-}
-
-/** Reads `domain` from a Shopify webhook JSON body when the `X-Shopify-Shop-Domain` header is absent. */
-fun shopDomainFromWebhookBody(bodyUtf8: String): String? {
-  val root = parseWebhookBody(bodyUtf8) ?: return null
-  return root["domain"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
 }
 
 /**

@@ -16,7 +16,6 @@ import dropnext.graphql.generated.ShopIdentity
 import dropnext.graphql.generated.SyncProductsPage
 import dropnext.graphql.generated.enums.WebhookSubscriptionTopic
 import dropnext.graphql.generated.inputs.FulfillmentEventInput
-import dropnext.graphql.generated.inputs.FulfillmentOrderLineItemsInput
 import dropnext.graphql.generated.inputs.FulfillmentTrackingInput
 
 
@@ -88,7 +87,7 @@ interface ShopifyGraphqlService {
 
   /** `FulfillmentCreateWithLineItems` — creates one fulfillment spanning one or more fulfillment orders. */
   suspend fun createFulfillmentWithLineItems(
-    lineItemsByFulfillmentOrder: List<FulfillmentOrderLineItemsInput>,
+    lineItemsByFulfillmentOrder: List<FulfillmentOrderIdWithLineItems>,
     tracking: FulfillmentTrackingInput,
     notifyCustomer: Boolean,
   ): GraphQLClientResponse<FulfillmentCreateWithLineItems.Result>

@@ -57,6 +57,7 @@ private class MonolithWebhookAuthSecretProvider(
       context.principal(MONOLITH_WEBHOOK_AUTH_SECRET_KEY, UserIdPrincipal("dss-no-secret-configured"))
       return
     }
+    // TODO: replace with Bearer...
     val provided = context.call.request.headers["X-DSS-Internal-Secret"].orEmpty()
     if (constantTimeEquals(secret, provided)) {
       context.principal(MONOLITH_WEBHOOK_AUTH_SECRET_KEY, UserIdPrincipal("dss-internal"))

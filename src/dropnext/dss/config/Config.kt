@@ -9,6 +9,7 @@ import dropnext.dss.path.Paths
  * so each section owns its own [fromEnv] and tests;
  * [Config.fromEnv] just stitches them together and validates the result.
  */
+// TODO: why not flat?
 data class Config(
   val shopify: ShopifyConfig,
   val monolith: MonolithConfig,

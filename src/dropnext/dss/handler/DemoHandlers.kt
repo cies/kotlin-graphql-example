@@ -40,7 +40,7 @@ class DemoHandlers(
     runDemo(call, ctx) {
       val result = ctx.shopify.syncProductsPage(first, after)
       if (!result.errors.isNullOrEmpty()) {
-        log.warn { "[demo] ${ctx.routeLabel} — graphql_errors shop=${ctx.shopify.shop.host} errors=${result.errors}" }
+        log.warn { "[demo] ${ctx.routeLabel} — graphql_errors shop=${ctx.shopify.shop.normalizedShopifyHost} errors=${result.errors}" }
         call.respond(
           HttpStatusCode.BadRequest,
           ErrorResponse(error = result.errors.orEmpty().joinToString { it.message }.take(1_200)),
@@ -70,14 +70,14 @@ class DemoHandlers(
     }
     val ctx = prepareDemo(call, call.request.queryParameters["shop"], "GET ${Paths.demoOrder}") ?: return
     val orderGid = orderGidFromParam(idParam) ?: run {
-      log.warn { "[demo] ${ctx.routeLabel} — invalid_id shop=${ctx.shopify.shop.host} id=$idParam" }
+      log.warn { "[demo] ${ctx.routeLabel} — invalid_id shop=${ctx.shopify.shop.normalizedShopifyHost} id=$idParam" }
       return call.respondText("Invalid id", status = HttpStatusCode.BadRequest)
     }
     runDemo(call, ctx) {
       val result = ctx.shopify.getOrderById(orderGid)
       val order = result.data?.order
       if (order == null) {
-        log.warn { "[demo] ${ctx.routeLabel} — order_null shop=${ctx.shopify.shop.host} orderGid=$orderGid errors=${result.errors}" }
+        log.warn { "[demo] ${ctx.routeLabel} — order_null shop=${ctx.shopify.shop.normalizedShopifyHost} orderGid=$orderGid errors=${result.errors}" }
         return@runDemo call.respondText("Order not found or error: ${result.errors}", status = HttpStatusCode.NotFound)
       }
       val fos = order.fulfillmentOrders.edges.joinToString { e -> "${e.node.id} status=${e.node.status}" }
@@ -103,7 +103,7 @@ class DemoHandlers(
       )
       val userErrs = r.data?.fulfillmentCreate?.userErrors.orEmpty().joinToString { "${it.field}:${it.message}" }
       if (userErrs.isNotEmpty() || !r.errors.isNullOrEmpty()) {
-        log.warn { "[demo] ${ctx.routeLabel} — user_or_graphql_errors shop=${ctx.shopify.shop.host} userErrors=$userErrs graphql=${r.errors}" }
+        log.warn { "[demo] ${ctx.routeLabel} — user_or_graphql_errors shop=${ctx.shopify.shop.normalizedShopifyHost} userErrors=$userErrs graphql=${r.errors}" }
         call.respondText("Errors: $userErrs graphql=${r.errors}", status = HttpStatusCode.BadRequest)
       } else {
         call.respondText("Fulfillment created id=${r.data?.fulfillmentCreate?.fulfillment?.id}")
@@ -125,7 +125,7 @@ class DemoHandlers(
       val userErrs = r.data?.fulfillmentTrackingInfoUpdate?.userErrors.orEmpty()
         .joinToString { "${it.field}:${it.message}" }
       if (userErrs.isNotEmpty() || !r.errors.isNullOrEmpty()) {
-        log.warn { "[demo] ${ctx.routeLabel} — user_or_graphql_errors shop=${ctx.shopify.shop.host} userErrors=$userErrs graphql=${r.errors}" }
+        log.warn { "[demo] ${ctx.routeLabel} — user_or_graphql_errors shop=${ctx.shopify.shop.normalizedShopifyHost} userErrors=$userErrs graphql=${r.errors}" }
         call.respondText("Errors: $userErrs graphql=${r.errors}", status = HttpStatusCode.BadRequest)
       } else {
         call.respondText("Tracking updated id=${r.data?.fulfillmentTrackingInfoUpdate?.fulfillment?.id}")
@@ -160,7 +160,7 @@ class DemoHandlers(
       return null
     }
     val shopify = shopifyGraphqlServiceFactory.forShop(shop) ?: run {
-      log.warn { "[demo] $routeLabel — no_admin_token shop=${shop.host}" }
+      log.warn { "[demo] $routeLabel — no_admin_token shop=${shop.normalizedShopifyHost}" }
       call.respondText(MISSING_TOKEN_HINT, status = HttpStatusCode.Unauthorized)
       return null
     }
@@ -177,7 +177,7 @@ class DemoHandlers(
       block()
     } catch (e: Exception) {
       val msg = clientErrorMessage(e)
-      log.error(e) { "[demo] ${ctx.routeLabel} failed shop=${ctx.shopify.shop.host}: $msg" }
+      log.error(e) { "[demo] ${ctx.routeLabel} failed shop=${ctx.shopify.shop.normalizedShopifyHost}: $msg" }
       call.respond(HttpStatusCode.BadRequest, ErrorResponse(error = msg))
     }
   }

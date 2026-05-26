@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Production [ShopifyGraphqlServiceFactory]: resolves the Admin token via in-memory cache → monolith
- * fallback, caches a per-shop [GraphQLKtorClient] (cheap reuse on each call), and hands back an
+ * fallback, caches a per-shop [GraphQLKtorClient] (inexpensive reuse on each call), and hands back an
  * [HttpShopifyGraphqlService] bound to that token. Tokens themselves are never logged — only the
  * resolved shop subdomain.
  */
@@ -32,7 +32,7 @@ class HttpShopifyGraphqlServiceFactory(
 
   private suspend fun resolveToken(shop: ShopDomain): String? {
     tokens[shop]?.let { return it }
-    return when (val result = monolith.getStore(shop.subdomainShort)) {
+    return when (val result = monolith.getStore(shop.subdomainOnly)) {
       is GetStoreResult.Ok -> result.apiKey?.also { tokens[shop] = it }
       is GetStoreResult.NotFound -> null
       is GetStoreResult.Error -> {
@@ -40,7 +40,7 @@ class HttpShopifyGraphqlServiceFactory(
           "getStore",
           result.status,
           result.parsed,
-          "subdomain=${shop.subdomainShort}",
+          "subdomain=${shop.subdomainOnly}",
         )
         null
       }
@@ -64,7 +64,7 @@ private class GraphqlClientCache(private val httpClient: HttpClient) {
   private val cache = ConcurrentHashMap<String, GraphQLKtorClient>()
 
   fun forShop(shop: ShopDomain, apiVersion: String): GraphQLKtorClient =
-    cache.getOrPut("${shop.host}/$apiVersion") {
+    cache.getOrPut("${shop.normalizedShopifyHost}/$apiVersion") {
       GraphQLKtorClient(URI(shop.adminGraphqlUrl(apiVersion)).toURL(), httpClient)
     }
 }

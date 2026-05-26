@@ -1,18 +1,17 @@
 package dropnext.dss.handler
 
-import dropnext.dss.lib.monolith.dto.generated.DeleteProductVariantsRequest
-import dropnext.dss.lib.monolith.dto.generated.UpsertProductVariantsRequest
 import dropnext.dss.lib.monolith.DeleteVariantsResult
 import dropnext.dss.lib.monolith.MonolithService
 import dropnext.dss.lib.monolith.ShopifyGraphqlServiceFactory
 import dropnext.dss.lib.monolith.UpsertVariantsResult
+import dropnext.dss.lib.monolith.dto.generated.DeleteProductVariantsRequest
+import dropnext.dss.lib.monolith.dto.generated.UpsertProductVariantsRequest
 import dropnext.dss.lib.monolith.logMonolithFailure
 import dropnext.dss.lib.shopify.ShopDomain
 import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlService
 import dropnext.dss.lib.shopify.webhook.ShopifyHmacVerifierService
 import dropnext.dss.lib.shopify.webhook.ShopifyWebhookTopic
 import dropnext.dss.lib.shopify.webhook.graphqlResourceIdFromShopifyWebhook
-import dropnext.dss.lib.shopify.webhook.shopDomainFromWebhookBody
 import dropnext.dss.lib.shopify.webhook.variantLegacyIdsFromProductWebhook
 import dropnext.dss.shopify.toProductVariantItems
 import dropnext.dss.workflow.syncShopifyOrderToMonolith
@@ -25,9 +24,8 @@ import io.ktor.server.response.respond
 
 private val log = KotlinLogging.logger {}
 
-/** Handler for `POST` to [dropnext.dss.path.Paths.webhooksShopify] — verifies HMAC and dispatches per topic. */
 class ShopifyWebhookHandlers(
-  private val syncOrderOnUpdated: Boolean,
+  private val syncOrderOnUpdated: Boolean, // TODO: how to handle this?
   private val shopifyGraphqlServiceFactory: ShopifyGraphqlServiceFactory,
   private val monolithService: MonolithService,
   private val shopifyHmacVerifierService: ShopifyHmacVerifierService,
@@ -42,10 +40,10 @@ class ShopifyWebhookHandlers(
       call.respond(HttpStatusCode.Unauthorized)
       return
     }
-    val bodyStr = body.decodeToString()
+    val bodyString = body.decodeToString()
     log.info { "Webhook verified topic=${topic.raw} shopDomainHeader=$shopDomainHeader bodyBytes=${body.size}" }
 
-    val shop = ShopDomain.fromWebhook(shopDomainHeader, shopDomainFromWebhookBody(bodyStr))
+    val shop = ShopDomain.fromWebhook(shopDomainHeader, bodyString)
     val shopify = shop?.let { shopifyGraphqlServiceFactory.forShop(it) }
     if (shop == null || shopify == null) {
       log.error {
@@ -58,13 +56,13 @@ class ShopifyWebhookHandlers(
 
     when (topic) {
       ShopifyWebhookTopic.ProductsCreate, ShopifyWebhookTopic.ProductsUpdate ->
-        handleProductUpsert(shopify, bodyStr, topic.raw)
+        handleProductUpsert(shopify, bodyString, topic.raw)
       ShopifyWebhookTopic.ProductsDelete ->
-        handleProductDelete(shop, bodyStr)
+        handleProductDelete(shop, bodyString)
       ShopifyWebhookTopic.OrdersCreate ->
-        handleOrderWebhook(shopify, bodyStr, topic.raw, syncToMonolith = true)
+        handleOrderWebhook(shopify, bodyString, topic.raw, syncToMonolith = true)
       ShopifyWebhookTopic.OrdersUpdated ->
-        handleOrderWebhook(shopify, bodyStr, topic.raw, syncToMonolith = syncOrderOnUpdated)
+        handleOrderWebhook(shopify, bodyString, topic.raw, syncToMonolith = syncOrderOnUpdated)
       is ShopifyWebhookTopic.Other ->
         log.info { "Webhook topic not handled: ${topic.raw}" }
     }
@@ -91,12 +89,12 @@ class ShopifyWebhookHandlers(
     if (variantItems.isEmpty()) return
 
     val req = UpsertProductVariantsRequest(
-      shopifySubdomain = shopify.shop.subdomainShort,
+      shopifySubdomain = shopify.shop.subdomainOnly,
       productVariants = variantItems,
     )
     when (val result = monolithService.upsertProductVariants(req)) {
       is UpsertVariantsResult.Ok ->
-        log.info { "Monolith upsert variants ok: ${result.upserted} upserted shop=${shopify.shop.host}" }
+        log.info { "Monolith upsert variants ok: ${result.upserted} upserted shop=${shopify.shop.normalizedShopifyHost}" }
       is UpsertVariantsResult.Error -> {
         val msg = "Monolith upsert variants failed: status=${result.status} ${result.errorMessage}"
         if (result.status >= 500) log.error { msg } else log.warn { msg }
@@ -112,14 +110,14 @@ class ShopifyWebhookHandlers(
     if (variantIds.isEmpty()) return
 
     val req = DeleteProductVariantsRequest(
-      shopifySubdomain = shop.subdomainShort,
+      shopifySubdomain = shop.subdomainOnly,
       productVariantIds = variantIds,
     )
     when (val result = monolithService.deleteProductVariants(req)) {
       is DeleteVariantsResult.Ok ->
-        log.info { "Monolith delete variants ok: ${result.deleted} deleted shop=${shop.host}" }
+        log.info { "Monolith delete variants ok: ${result.deleted} deleted shop=${shop.normalizedShopifyHost}" }
       is DeleteVariantsResult.Error ->
-        logMonolithFailure("deleteProductVariants", result.status, result.parsed, "shop=${shop.host}")
+        logMonolithFailure("deleteProductVariants", result.status, result.parsed, "shop=${shop.normalizedShopifyHost}")
     }
   }
 

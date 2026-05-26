@@ -31,10 +31,10 @@ private val log = KotlinLogging.logger {}
 /** Handlers for the Shopify install / OAuth-callback flow. */
 class OAuthHandlers(
   private val shopifyPublicBaseUrl: String,
-  private val oauthClient: ShopifyOAuthService,
+  private val shopifyOAuthService: ShopifyOAuthService,
   private val shopifyGraphqlServiceFactory: ShopifyGraphqlServiceFactory,
   private val monolithService: MonolithService,
-  private val shopTokens: ShopAccessTokenCache,
+  private val shopAccessTokenCache: ShopAccessTokenCache,
   private val shopifyHmacVerifierService: ShopifyHmacVerifierService,
 ) {
 
@@ -43,8 +43,8 @@ class OAuthHandlers(
     val shop = ShopDomain.parse(rawShop) ?: return call.respondTextError(
       DssError.InvalidParameter("shop", "not a valid Shopify domain"),
     )
-    val state = oauthClient.signedState(shop)
-    call.respondRedirect(oauthClient.authorizeUrl(shop, state))
+    val state = shopifyOAuthService.signedState(shop)
+    call.respondRedirect(shopifyOAuthService.authorizeUrl(shop, state))
   }
 
   suspend fun handleOAuthCallback(call: ApplicationCall) {
@@ -59,13 +59,13 @@ class OAuthHandlers(
     if (!shopifyHmacVerifierService.verifyOAuthCallback(params, hmac)) {
       return call.respondTextError(DssError.InvalidSignature("Invalid HMAC"))
     }
-    if (!oauthClient.isSignedStateValid(state, shop)) {
+    if (!shopifyOAuthService.isSignedStateValid(state, shop)) {
       return call.respondTextError(DssError.InvalidSignature("Invalid or expired state"))
     }
 
-    val oauthResponse = oauthClient.exchangeCode(shop, code)
+    val oauthResponse = shopifyOAuthService.exchangeCode(shop, code)
       .getOrElse { e ->
-        log.warn { "OAuth code exchange failed for shop=${shop.host}: ${e.message}" }
+        log.warn { "OAuth code exchange failed for shop=${shop.normalizedShopifyHost}: ${e.message}" }
         return call.respondTextError(DssError.UpstreamFailure("OAuth failed: could not exchange authorization code"))
       }
 
@@ -78,20 +78,20 @@ class OAuthHandlers(
     val shopNode = identityResult.data?.shop
     val shopId = shopNode?.id?.let { legacyIdFromGid(it) } ?: 0L
     val domain = shopNode?.myshopifyDomain?.let { ShopDomain.parse(it) } ?: shop
-    shopTokens[domain] = oauthResponse.accessToken
-    log.info { "OAuth token cached in memory for shop=${domain.host}" }
+    shopAccessTokenCache[domain] = oauthResponse.accessToken
+    log.info { "OAuth token cached in memory for shop=${domain.normalizedShopifyHost}" }
 
     val monolithPersist = persistTokenToMonolith(domain, shopId, oauthResponse.accessToken)
 
     val syncResult = shopify.syncProductsPage(first = 3)
     val edgeCount = syncResult.data?.products?.edges?.size ?: 0
-    log.info { "SyncProductsPage after OAuth: shop=${shop.host} productEdges=$edgeCount" }
+    log.info { "SyncProductsPage after OAuth: shop=${shop.normalizedShopifyHost} productEdges=$edgeCount" }
 
     val callbackUrl = "$shopifyPublicBaseUrl${Paths.webhooksShopify}"
     val webhookReport = registerShopifyWebhooks(shopify, callbackUrl)
 
     val html = renderOAuthInstallPage(
-      shop = shop.host,
+      shop = shop.normalizedShopifyHost,
       shopId = shopId,
       monolithPersist = monolithPersist,
       productEdgeCount = edgeCount,
@@ -117,17 +117,17 @@ class OAuthHandlers(
     accessToken: String,
   ): MonolithPersistOutcome {
     val apiKeyReq = UpdateStoreApiKeyRequest(
-      shopifySubdomain = shop.subdomainShort,
+      shopifySubdomain = shop.subdomainOnly,
       shopifyShopId = shopId,
       apiKey = accessToken,
     )
     return when (val r = monolithService.putStoreApiKey(apiKeyReq)) {
       is StoreApiKeyResult.Ok -> {
-        log.info { "Monolith store api-key updated storeId=${r.storeId} shop=${shop.host}" }
+        log.info { "Monolith store api-key updated storeId=${r.storeId} shop=${shop.normalizedShopifyHost}" }
         MonolithPersistOutcome.Persisted(storeId = r.storeId)
       }
       is StoreApiKeyResult.Error -> {
-        logMonolithFailure("putStoreApiKey", r.status, r.parsed, "shop=${shop.host}")
+        logMonolithFailure("putStoreApiKey", r.status, r.parsed, "shop=${shop.normalizedShopifyHost}")
         MonolithPersistOutcome.Failed(httpStatus = r.status, detail = r.parsed?.message)
       }
     }

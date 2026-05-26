@@ -105,7 +105,7 @@ class ShopifyOAuthServiceTest {
 
   @Test
   fun `signedState rejects non-numeric expiry`() {
-    val state = "${shop.host}|notANumber|nonce|signature"
+    val state = "${shop.normalizedShopifyHost}|notANumber|nonce|signature"
     assert(!client.isSignedStateValid(state, shop, now))
   }
 

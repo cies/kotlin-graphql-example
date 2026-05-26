@@ -1,6 +1,5 @@
 package dropnext.dss.lib.shopify
 
-import dropnext.dss.lib.shopify.ShopDomain
 import kotlin.test.Test
 
 class ShopDomainWebhookTest {
@@ -8,13 +7,13 @@ class ShopDomainWebhookTest {
   @Test
   fun `prefers X-Shopify-Shop-Domain header`() {
     val shop = ShopDomain.fromWebhook("DropNext-Staging.myshopify.com", "other.myshopify.com")
-    assert(shop?.host == "dropnext-staging.myshopify.com")
+    assert(shop?.normalizedShopifyHost == "dropnext-staging.myshopify.com")
   }
 
   @Test
   fun `falls back to webhook body domain when header missing`() {
     val shop = ShopDomain.fromWebhook(null, "acme.myshopify.com")
-    assert(shop?.host == "acme.myshopify.com")
+    assert(shop?.normalizedShopifyHost == "acme.myshopify.com")
   }
 
   @Test

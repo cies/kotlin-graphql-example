@@ -45,7 +45,7 @@ class ShopifyOAuthService(
     val enc: (String) -> String = { URLEncoder.encode(it, StandardCharsets.UTF_8) }
     return buildString {
       append("https://")
-      append(shop.host)
+      append(shop.normalizedShopifyHost)
       append(OutBoundShopifyOAuthPaths.adminOAuthAuthorize)
       append("?client_id=").append(enc(config.appClientId))
       append("&scope=").append(enc(config.scopes))
@@ -62,7 +62,7 @@ class ShopifyOAuthService(
     val nonce = ByteArray(12).also { SecureRandom().nextBytes(it) }
     val noncePart = Base64.getUrlEncoder().withoutPadding().encodeToString(nonce)
     val expiresAt = now.epochSecond + OAUTH_STATE_TTL_SECONDS
-    val payload = "${shop.host}|$expiresAt|$noncePart"
+    val payload = "${shop.normalizedShopifyHost}|$expiresAt|$noncePart"
     val signature = hmacSha256Base64Url(config.appClientSecret, payload)
     return "$payload|$signature"
   }
@@ -79,7 +79,7 @@ class ShopifyOAuthService(
     val expiresAt = parts[1].toLongOrNull() ?: return false
     val nonce = parts[2]
     val signature = parts[3]
-    if (shop != expectedShop.host) return false
+    if (shop != expectedShop.normalizedShopifyHost) return false
     if (expiresAt < now.epochSecond) return false
     val payload = "$shop|$expiresAt|$nonce"
     val expected = hmacSha256Base64Url(config.appClientSecret, payload)
@@ -96,7 +96,7 @@ class ShopifyOAuthService(
    */
   suspend fun exchangeCode(shop: ShopDomain, code: String): Result<OAuthAccessTokenResponse> =
     runCatching {
-      val url = "https://${shop.host}${OutBoundShopifyOAuthPaths.adminOAuthAccessToken}"
+      val url = "https://${shop.normalizedShopifyHost}${OutBoundShopifyOAuthPaths.adminOAuthAccessToken}"
       httpClient.post(url) {
         contentType(ContentType.Application.Json)
         setBody(

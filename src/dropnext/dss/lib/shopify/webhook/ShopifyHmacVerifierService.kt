@@ -51,19 +51,18 @@ class ShopifyHmacVerifierService(private val clientSecret: String) {
     mac.init(SecretKeySpec(secret.toByteArray(StandardCharsets.UTF_8), "HmacSHA256"))
     return mac.doFinal(message)
   }
-}
 
-
-/** Decodes an ASCII hex string to bytes, returning `null` if it is malformed. */
-private fun hexToBytesOrNull(hex: String): ByteArray? {
-  val s = hex.trim()
-  if (s.length % 2 != 0 || s.isEmpty()) return null
-  val out = ByteArray(s.length / 2)
-  for (i in out.indices) {
-    val hi = Character.digit(s[i * 2], 16)
-    val lo = Character.digit(s[i * 2 + 1], 16)
-    if (hi < 0 || lo < 0) return null
-    out[i] = ((hi shl 4) or lo).toByte()
+  /** Decodes an ASCII hex string to bytes, returning `null` if it is malformed. */
+  private fun hexToBytesOrNull(hex: String): ByteArray? {
+    val s = hex.trim()
+    if (s.length % 2 != 0 || s.isEmpty()) return null
+    val out = ByteArray(s.length / 2)
+    for (i in out.indices) {
+      val hi = Character.digit(s[i * 2], 16)
+      val lo = Character.digit(s[i * 2 + 1], 16)
+      if (hi < 0 || lo < 0) return null
+      out[i] = ((hi shl 4) or lo).toByte()
+    }
+    return out
   }
-  return out
 }

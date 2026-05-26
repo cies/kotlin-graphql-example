@@ -86,7 +86,7 @@ class DiagnosticsHandlers(
 
     call.respond(
       ApiCheckResponse(
-        shop = shop.host,
+        shop = shop.normalizedShopifyHost,
         checks = ApiCheckDetails(
           hasTokenMappedForShop = hasMappedToken,
           demoRoutesEnabled = dssConfig.dev.enableDemoRoutes,

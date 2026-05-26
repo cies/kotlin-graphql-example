@@ -5,16 +5,17 @@ import dropnext.dss.lib.monolith.dto.generated.DeleteProductVariantsRequest
 import dropnext.dss.lib.monolith.dto.generated.UpdateStoreApiKeyRequest
 import dropnext.dss.lib.monolith.dto.generated.UpsertProductVariantsRequest
 
+
 /** Outbound calls to the main backend (monolith). Path constants in [OutBoundMonolithPaths]. */
 interface MonolithService {
   /**
    * `POST` to [OutBoundMonolithPaths.orders] — only from Shopify order webhooks. Body is exactly
    * [CreateShopifyOrderRequest] (those top-level JSON keys — no extras). Expects idempotent
-   * handling (e.g. 409 duplicate order).
+   * handling (e.g.: 409 duplicate order).
    */
   suspend fun postCreateOrder(request: CreateShopifyOrderRequest): CreateOrderResult
 
-  /** `PUT` to [OutBoundMonolithPaths.storesApiKey] — persist the Shopify access token after OAuth install. */
+  /** `PUT` to [OutBoundMonolithPaths.storesApiKey] — persist the Shopify access token after OAuth installation. */
   suspend fun putStoreApiKey(request: UpdateStoreApiKeyRequest): StoreApiKeyResult
 
   /** `GET` to [OutBoundMonolithPaths.stores] with `?shopify_subdomain=…` — look up a store by subdomain. */

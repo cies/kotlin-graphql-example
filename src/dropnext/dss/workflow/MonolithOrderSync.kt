@@ -28,7 +28,7 @@ suspend fun syncShopifyOrderToMonolith(
   }
   log.info { "Webhook order loaded id=${order.id} name=${order.name} errors=${result.errors}" }
   val variantBackedCount = order.lineItems.edges.count { it.node.variant != null }
-  val req = orderToCreateShopifyOrderRequest(shopify.shop.subdomainShort, order)
+  val req = orderToCreateShopifyOrderRequest(shopify.shop.subdomainOnly, order)
   if (variantBackedCount > req.lineItems.size) {
     log.warn {
       "Webhook $webhookTopic: omitted ${variantBackedCount - req.lineItems.size} line item(s) " +

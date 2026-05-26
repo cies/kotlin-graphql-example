@@ -269,7 +269,7 @@ class MonolithWebhookHandlersTest {
     MonolithWebhookHandlers(
       shopifyGraphqlServiceFactory = shopifyGraphqlServiceFactory,
       monolithService = monolith,
-      shopTokenCache = shopTokens,
+      shopAccessTokenCache = shopTokens,
     )
 
   private fun validSyncRequest(): SyncShipmentsWithFulfillmentsRequest =

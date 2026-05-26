@@ -38,11 +38,11 @@ suspend fun registerShopifyWebhooks(
     val wh = shopify.registerWebhook(topic, callbackUrl, includeFields)
     val combinedError = combineRegistrationErrors(wh)
     if (combinedError != null) {
-      log.warn { "Webhook registration failed shop=${shopify.shop.host} topic=$topic error=$combinedError" }
+      log.warn { "Webhook registration failed shop=${shopify.shop.normalizedShopifyHost} topic=$topic error=$combinedError" }
       failedTopics += topic to combinedError
     } else {
       log.info {
-        "Webhook registered shop=${shopify.shop.host} topic=$topic " +
+        "Webhook registered shop=${shopify.shop.normalizedShopifyHost} topic=$topic " +
           "id=${wh.data?.webhookSubscriptionCreate?.webhookSubscription?.id}"
       }
     }
@@ -79,7 +79,7 @@ private suspend fun fetchSubscriptions(
 ): List<WebhookSubscriptionStatus> {
   val result = shopify.getWebhookSubscriptions(topics, callbackUrl)
   if (!result.errors.isNullOrEmpty()) {
-    log.warn { "Webhook subscriptions query errors shop=${shopify.shop.host} errors=${result.errors}" }
+    log.warn { "Webhook subscriptions query errors shop=${shopify.shop.normalizedShopifyHost} errors=${result.errors}" }
   }
   val nodes = result.data?.webhookSubscriptions?.nodes ?: return emptyList()
   return nodes.map { node ->

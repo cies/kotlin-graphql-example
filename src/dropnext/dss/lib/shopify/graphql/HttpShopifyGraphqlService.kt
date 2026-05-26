@@ -18,7 +18,6 @@ import dropnext.graphql.generated.ShopIdentity
 import dropnext.graphql.generated.SyncProductsPage
 import dropnext.graphql.generated.enums.WebhookSubscriptionTopic
 import dropnext.graphql.generated.inputs.FulfillmentEventInput
-import dropnext.graphql.generated.inputs.FulfillmentOrderLineItemsInput
 import dropnext.graphql.generated.inputs.FulfillmentTrackingInput
 import io.ktor.client.request.header
 
@@ -97,7 +96,7 @@ class HttpShopifyGraphqlService(
     execute(FulfillmentCancelMutation(FulfillmentCancelMutation.Variables(fulfillmentGid)))
 
   override suspend fun createFulfillmentWithLineItems(
-    lineItemsByFulfillmentOrder: List<FulfillmentOrderLineItemsInput>,
+    lineItemsByFulfillmentOrder: List<FulfillmentOrderIdWithLineItems>,
     tracking: FulfillmentTrackingInput,
     notifyCustomer: Boolean,
   ): GraphQLClientResponse<FulfillmentCreateWithLineItems.Result> =

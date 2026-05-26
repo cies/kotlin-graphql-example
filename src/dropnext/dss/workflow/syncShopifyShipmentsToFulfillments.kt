@@ -10,7 +10,6 @@ import dropnext.dss.lib.shopify.graphql.fulfillment.matchShipmentToFulfillmentOr
 import dropnext.dss.lib.shopify.legacyIdFromGid
 import dropnext.dss.lib.shopify.orderGid
 import dropnext.graphql.generated.getorderfordss.Order
-import dropnext.graphql.generated.inputs.FulfillmentOrderLineItemsInput
 import dropnext.graphql.generated.inputs.FulfillmentTrackingInput
 
 
@@ -85,18 +84,20 @@ private suspend fun createFulfillmentForShipment(
   order: Order,
   shipment: Shipment,
 ): FulfillmentResult<List<Long>> {
-  val foGroups = when (val matchResult = matchShipmentToFulfillmentOrders(order, shipment)) {
-    is ShipmentMatchResult.Ok -> matchResult.groups
-    is ShipmentMatchResult.NotFound -> return FulfillmentResult.Err.NotFound(matchResult.detail)
-    is ShipmentMatchResult.UserError -> return FulfillmentResult.Err.UserError(matchResult.messages)
-  }
+  val fulfillmentOrderToLineItemMap =
+    when (val matchResult = matchShipmentToFulfillmentOrders(order, shipment)) {
+      is ShipmentMatchResult.Ok -> matchResult.groups
+      is ShipmentMatchResult.NotFound -> return FulfillmentResult.Err.NotFound(matchResult.detail)
+      is ShipmentMatchResult.UserError -> return FulfillmentResult.Err.UserError(matchResult.messages)
+    }
 
-  val lineItemsByFo = foGroups.entries.map { (fo, inputs) ->
-    FulfillmentOrderLineItemsInput(
-      fulfillmentOrderId = fo.id,
-      fulfillmentOrderLineItems = inputs,
-    )
-  }
+  val fulfillmentOrderIdWithLineItems =
+    fulfillmentOrderToLineItemMap.entries.map { (fulfillmentOrder, lineItems) ->
+      FulfillmentOrderLineItemsInput(
+        fulfillmentOrderId = fulfillmentOrder.id,
+        fulfillmentOrderLineItems = lineItems,
+      )
+    }
 
   val tracking = FulfillmentTrackingInput(
     company = shipment.carrier,
@@ -104,24 +105,25 @@ private suspend fun createFulfillmentForShipment(
     url = shipment.trackingUrl,
   )
 
-  val r = runCatching {
+  val response = runCatching {
     shopify.createFulfillmentWithLineItems(
-      lineItemsByFulfillmentOrder = lineItemsByFo,
+      lineItemsByFulfillmentOrder = fulfillmentOrderIdWithLineItems,
       tracking = tracking,
       notifyCustomer = false,
     )
-  }.getOrElse { e -> return FulfillmentResult.Err.Network(e.message ?: "network error") }
+  }.getOrElse { return FulfillmentResult.Err.Network(it.message ?: "network error") }
 
-  val createErrs = r.data?.fulfillmentCreate?.userErrors.orEmpty()
+  val createErrs = response.data?.fulfillmentCreate?.userErrors.orEmpty()
   if (createErrs.isNotEmpty()) {
     return FulfillmentResult.Err.UserError(createErrs.map { it.message })
   }
-  val graphqlErrors = r.errors
+  val graphqlErrors = response.errors
   if (!graphqlErrors.isNullOrEmpty()) {
     return FulfillmentResult.Err.GraphqlError(graphqlErrors.joinToString("; ") { it.message })
   }
 
-  val f = r.data?.fulfillmentCreate?.fulfillment
-  val idNum = f?.legacyResourceId?.toLongOrNull() ?: f?.id?.let { legacyIdFromGid(it) }
-  return FulfillmentResult.Ok(listOfNotNull(idNum))
+  val fulfillment = response.data?.fulfillmentCreate?.fulfillment
+  val fulfillmentId = fulfillment?.legacyResourceId?.toLongOrNull()
+    ?: fulfillment?.id?.let { legacyIdFromGid(it) }
+  return FulfillmentResult.Ok(listOfNotNull(fulfillmentId))
 }

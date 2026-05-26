@@ -18,40 +18,38 @@ fun renderOAuthInstallPage(
   activeSubscriptions: List<WebhookSubscriptionStatus>,
   addedSubscriptions: List<WebhookSubscriptionStatus>,
   failedTopics: List<Pair<WebhookSubscriptionTopic, String>>,
-): String {
-  return StringBuilder("<!DOCTYPE html>\n").appendHTML().html {
-    head {
-      meta { name = "robots"; content = "noindex, nofollow" }
+): String = StringBuilder("<!DOCTYPE html>\n").appendHTML().html {
+  head {
+    meta { name = "robots"; content = "noindex, nofollow" }
+  }
+  body {
+    h1 { +"App installed" }
+    p { +"Shop: $shop (id $shopId)" }
+    renderMonolithPersistBlock(monolithPersist)
+    p { +"SyncProductsPage (first 3) product edges: $productEdgeCount" }
+    p {
+      +"Webhook callback URL: "
+      code { +webhookCallbackUrl }
     }
-    body {
-      h1 { +"App installed" }
-      p { +"Shop: $shop (id $shopId)" }
-      renderMonolithPersistBlock(monolithPersist)
-      p { +"SyncProductsPage (first 3) product edges: $productEdgeCount" }
-      p {
-        +"Webhook callback URL: "
-        code { +webhookCallbackUrl }
-      }
-      p {
-        +"Active "
-        code { +"products/*" }
-        +" and "
-        code { +"orders/*" }
-        +" webhook subscriptions:"
-      }
-      renderSubscriptionList(activeSubscriptions)
-      p { +"Webhook subscriptions added in this install:" }
-      renderSubscriptionList(addedSubscriptions)
-      if (failedTopics.isNotEmpty()) {
-        renderFailedTopics(failedTopics)
-      }
-      val demoProductsHref = "${Paths.demoProducts}?shop=$shop"
-      val demoOrderHref = "${Paths.demoOrder}?shop=$shop&id=ORDER_GID"
-      p { a(demoProductsHref) { +demoProductsHref } }
-      p { a(demoOrderHref) { +"${Paths.demoOrder}?shop=$shop&id=..." } }
+    p {
+      +"Active "
+      code { +"products/*" }
+      +" and "
+      code { +"orders/*" }
+      +" webhook subscriptions:"
     }
-  }.toString()
-}
+    renderSubscriptionList(activeSubscriptions)
+    p { +"Webhook subscriptions added in this install:" }
+    renderSubscriptionList(addedSubscriptions)
+    if (failedTopics.isNotEmpty()) {
+      renderFailedTopics(failedTopics)
+    }
+    val demoProductsHref = "${Paths.demoProducts}?shop=$shop"
+    val demoOrderHref = "${Paths.demoOrder}?shop=$shop&id=ORDER_GID"
+    p { a(demoProductsHref) { +demoProductsHref } }
+    p { a(demoOrderHref) { +"${Paths.demoOrder}?shop=$shop&id=..." } }
+  }
+}.toString()
 
 private fun FlowContent.renderMonolithPersistBlock(outcome: MonolithPersistOutcome) {
   when (outcome) {
@@ -60,6 +58,7 @@ private fun FlowContent.renderMonolithPersistBlock(outcome: MonolithPersistOutco
       strong { +"Shopify token saved via monolith" }
       +" (store_id=${outcome.storeId}) and cached in memory — webhooks and routes can use this process immediately."
     }
+
     is MonolithPersistOutcome.Failed -> p {
       style = "color:#b91c1c"
       strong {
