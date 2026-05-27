@@ -44,7 +44,7 @@ Companion project: [`dropnext-monolith`](../dropnext/dropnext-monolith). Convent
 
 ### Development Environment
 
-- Copy `.env.example` to `.env` and fill in `SHOPIFY_APP_CLIENT_ID`, `SHOPIFY_APP_CLIENT_SECRET`, `SHOPIFY_SCOPES`, `PUBLIC_BASE_URL` (use [ngrok](https://ngrok.com/) or similar for HTTPS).
+- Copy `.env.example` to `.env` and fill in `SHOPIFY_APP_CLIENT_ID`, `SHOPIFY_APP_CLIENT_SECRET`, `SHOPIFY_SCOPES`, `DSS_BASE_URL` (use [ngrok](https://ngrok.com/) or similar for HTTPS).
 - Optional: `ENABLE_TEST_HARNESS=true` turns on the `/demo/*` routes and merges the sandbox token map (see [README.md](./README.md) for env-var details).
 - See the full env-var table in [README.md](./README.md).
 
@@ -128,7 +128,7 @@ TODO: document deduplication strategy for at-least-once webhook delivery in mult
 
 ### DSS internal REST
 
-The monolith-webhook routes (`installMonolithWebhookRoutes`) require header `X-DSS-Internal-Secret` when `DSS_INTERNAL_SECRET` is set (constant-time check by [`installMonolithWebhookAuthSecret`](src/dropnext/dss/lib/ktor/plugin/monolithWebhookAuthHeader.kt)). Per-shop calls resolve the Shopify Admin token through `ShopifyGraphqlServiceFactory.forShop` (cache → monolith `GET /stores` fallback); seed the cache via `DSS_SHOP_ACCESS_TOKENS`, complete the OAuth install, or `PUT /stores/api-key`. Canonical spec: [`openapi.json`](./openapi.json). DTOs are **generated** by `openApiGenerate` into `dropnext.dss.lib.dto` — do not hand-write them.
+The monolith-webhook routes (`installMonolithWebhookRoutes`) require header `X-DSS-Internal-Secret` when `DSS_API_KEY` is set (constant-time check by [`installMonolithWebhookAuthSecret`](src/dropnext/dss/lib/ktor/plugin/monolithWebhookAuthHeader.kt)). Per-shop calls resolve the Shopify Admin token through `ShopifyGraphqlServiceFactory.forShop` (cache → monolith `GET /stores` fallback); seed the cache via `DSS_SHOP_ACCESS_TOKENS`, complete the OAuth install, or `PUT /stores/api-key`. Canonical spec: [`openapi.json`](./openapi.json). DTOs are **generated** by `openApiGenerate` into `dropnext.dss.lib.dto` — do not hand-write them.
 
 TODO: list the current endpoints with one-line descriptions.
 

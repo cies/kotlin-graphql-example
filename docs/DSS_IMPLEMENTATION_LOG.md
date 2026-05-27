@@ -4,7 +4,7 @@ This document records what was implemented for the **DropNext Shopify Service (D
 
 ## Configuration
 
-- **`Config`** (`dropnext.dss.config`): composes `ShopifyConfig`, `MonolithConfig`, `DevConfig`, `WebhookConfig` plus `monolithWebhookAuthSecret`. Reads `MONOLITH_BASE_URL`, `MONOLITH_API_KEY`, `MONOLITH_CREATE_ORDER_PATH`, `DSS_INTERNAL_SECRET`, `DSS_SHOP_ACCESS_TOKENS`, `SANDBOX_SHOP`, `SANDBOX_ACCESS_TOKEN`, harness flags (see `README.md`).
+- **`Config`** (`dropnext.dss.config`): composes `ShopifyConfig`, `MonolithConfig`, `DevConfig`, `WebhookConfig` plus `monolithWebhookAuthSecret`. Reads `MONOLITH_BASE_URL`, `MONOLITH_API_KEY`, `MONOLITH_CREATE_ORDER_PATH`, `DSS_API_KEY`, `DSS_SHOP_ACCESS_TOKENS`, `SANDBOX_SHOP`, `SANDBOX_ACCESS_TOKEN`, harness flags (see `README.md`).
 - **Tokens**: Map `shop.myshopify.com` → Admin API token resolved server-side. Cache is seeded from env (`DSS_SHOP_ACCESS_TOKENS` as comma-separated `shop|token` pairs, merged with `SANDBOX_*` when the test harness is on), from the OAuth callback after a successful install, and from `PUT /stores/api-key` calls. A miss falls back to `MonolithService.getStore`. Tokens are never read from inbound request headers.
 
 ## REST API
@@ -12,7 +12,7 @@ This document records what was implemented for the **DropNext Shopify Service (D
 - **Canonical OpenAPI:** `openapi.json` (repo root, **3.0.0**): monolith **`paths`** DTO codegen + **`x-webhooks`** for DSS inbound URL contracts. `openApiGenerate` runs with **`skipValidateSpec=false`**; on Windows the spec path is passed as a **`file:` URI** so `$ref` resolution works.
 - Readable mirror / docs: **`docs/openapi/dss-api.yaml`** (paths + payloads aligned with `openapi.json`).
 - Routing vs handling: monolith-webhook routes wired by `dropnext.dss.routing.installMonolithWebhookRoutes`; **`POST /sync-shipments-with-fulfillments`** = **`SyncShipmentsWithFulfillmentsRequest`** → `MonolithWebhookHandlers.handleSyncShipments`; **`POST /tracking-update`** (and alias **`/tracking-updates`**) = **`TrackingUpdateRequest`** → `MonolithWebhookHandlers.handleTrackingUpdate`. **`/dummy1`/`/dummy2`** removed from routing.
-- When `DSS_INTERNAL_SECRET` is set, monolith-webhook routes require header `X-DSS-Internal-Secret` (see `installMonolithWebhookAuthSecret` in `lib/ktor/plugin/`).
+- When `DSS_API_KEY` is set, monolith-webhook routes require header `X-DSS-Internal-Secret` (see `installMonolithWebhookAuthSecret` in `lib/ktor/plugin/`).
 
 ## Monolith client
 

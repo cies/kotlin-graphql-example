@@ -7,13 +7,13 @@ class ConfigTest {
   private fun shopify(
     appClientId: String = "good-id",
     appClientSecret: String = "good-secret",
-    publicBaseUrl: String = "https://dss.example.org",
+    dssBaseUrl: String = "https://dss.example.org",
   ): ShopifyConfig =
     ShopifyConfig(
       appClientId = appClientId,
       appClientSecret = appClientSecret,
       scopes = "read_orders",
-      publicBaseUrl = publicBaseUrl,
+      dssBaseUrl = dssBaseUrl,
       oauthRedirectPath = "/oauth/callback",
       apiVersion = "2026-04",
       serverPort = 8080,
@@ -59,21 +59,21 @@ class ConfigTest {
   }
 
   @Test
-  fun `publicBaseUrl containing example dot com is flagged`() {
-    val issues = computeRuntimeConfigIssues(appConfig(shopify = shopify(publicBaseUrl = "https://app.example.com")))
-    assert(issues.any { "PUBLIC_BASE_URL is placeholder" in it })
+  fun `dssBaseUrl containing example dot com is flagged`() {
+    val issues = computeRuntimeConfigIssues(appConfig(shopify = shopify(dssBaseUrl = "https://app.example.com")))
+    assert(issues.any { "DSS_BASE_URL is placeholder" in it })
   }
 
   @Test
-  fun `publicBaseUrl with http is flagged`() {
-    val issues = computeRuntimeConfigIssues(appConfig(shopify = shopify(publicBaseUrl = "http://dss.local")))
-    assert(issues.any { "PUBLIC_BASE_URL should use https" in it })
+  fun `dssBaseUrl with http is flagged`() {
+    val issues = computeRuntimeConfigIssues(appConfig(shopify = shopify(dssBaseUrl = "http://dss.local")))
+    assert(issues.any { "DSS_BASE_URL should use https" in it })
   }
 
   @Test
   fun `placeholder dssInternalSecret value is flagged`() {
     val issues = computeRuntimeConfigIssues(appConfig(dssInternalSecret = "change_this_placeholder_now_xxxxxx"))
-    assert(issues.any { "DSS_INTERNAL_SECRET is still the placeholder value" in it })
+    assert(issues.any { "DSS_API_KEY is still the placeholder value" in it })
   }
 
   @Test
@@ -112,7 +112,7 @@ class ConfigTest {
   fun `multiple issues accumulate`() {
     val issues = computeRuntimeConfigIssues(
       appConfig(
-        shopify = shopify(appClientId = "your_id", publicBaseUrl = "http://example.com"),
+        shopify = shopify(appClientId = "your_id", dssBaseUrl = "http://example.com"),
         dssInternalSecret = "short",
       ),
     )

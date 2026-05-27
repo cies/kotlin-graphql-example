@@ -16,8 +16,6 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 
 
-// TODO: make this use HTTP header "Bearer: <token>" -- more clear more common
-// rename file to requireDssAuthHeader (and rename relevant symbols in this file alike)
 
 const val MONOLITH_WEBHOOK_AUTH_SECRET_KEY = "monolith-webhook-auth-secret"
 
@@ -58,6 +56,11 @@ private class MonolithWebhookAuthSecretProvider(
       return
     }
     // TODO: replace with Bearer...
+
+    // TODO(or better): replace shared-secret comparison with Stripe-style HMAC verification:
+    // monolith signs (timestamp + body) with the shared key; DSS verifies the signature
+    // and rejects timestamps outside a small skew window. Avoids leaking the secret
+    // over the wire even once, and gives us replay protection for free.
     val provided = context.call.request.headers["X-DSS-Internal-Secret"].orEmpty()
     if (constantTimeEquals(secret, provided)) {
       context.principal(MONOLITH_WEBHOOK_AUTH_SECRET_KEY, UserIdPrincipal("dss-internal"))

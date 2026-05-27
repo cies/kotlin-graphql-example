@@ -66,7 +66,7 @@ class DiagnosticsHandlers(
       ApiStatusResponse(
         status = "ok",
         bind = "0.0.0.0:${shopifyConfig.serverPort}",
-        publicBaseUrl = shopifyConfig.publicBaseUrl,
+        dssBaseUrl = shopifyConfig.dssBaseUrl,
         oauthRedirectPath = shopifyConfig.oauthRedirectPath,
       ),
     )
@@ -113,7 +113,7 @@ class DiagnosticsHandlers(
 private data class ApiStatusResponse(
   val status: String,
   val bind: String,
-  val publicBaseUrl: String,
+  val dssBaseUrl: String,
   val oauthRedirectPath: String,
 )
 

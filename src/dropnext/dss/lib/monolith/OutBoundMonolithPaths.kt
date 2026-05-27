@@ -3,14 +3,11 @@ package dropnext.dss.lib.monolith
 /**
  * Outbound paths the DSS calls on the DropNext monolith. Appended to
  * `MonolithConfig.baseUrl` (+ optional `MonolithConfig.apiPrefix`) by `HttpMonolithService`.
- *
- * The order-create path defaults to [orders] but is overridable via env
- * `MONOLITH_CREATE_ORDER_PATH` (see [dropnext.dss.config.MonolithConfig.createOrderPath]).
  */
 // TODO: can we not get these from the API spec (openapi.json)?
 @Suppress("ConstPropertyName") // Less shouty field names.
 object OutBoundMonolithPaths {
-  /** `POST /orders` — create a Shopify order in the monolith. Default for [dropnext.dss.config.MonolithConfig.createOrderPath]. */
+  /** `POST /orders` — create a Shopify order in the monolith. */
   const val orders = "/orders"
 
   /** `GET /stores` — look up a store by `shopify_subdomain`. */

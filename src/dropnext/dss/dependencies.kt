@@ -96,7 +96,7 @@ fun dssDependencies(
   diagnosticsHandlers = DiagnosticsHandlers(config, shopTokens),
   demoHandlers = DemoHandlers(config, shopifyGraphqlServiceFactory),
   oauthHandlers = OAuthHandlers(
-    config.shopify.publicBaseUrl,
+    config.shopify.dssBaseUrl,
     oauthClient,
     shopifyGraphqlServiceFactory,
     monolithService,

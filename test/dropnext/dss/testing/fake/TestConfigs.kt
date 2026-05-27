@@ -14,7 +14,7 @@ fun testShopifyConfig(
     appClientId = "client-id-test",
     appClientSecret = appClientSecret,
     scopes = "read_orders",
-    publicBaseUrl = "https://dss.test",
+    dssBaseUrl = "https://dss.test",
     oauthRedirectPath = "/oauth/callback",
     apiVersion = apiVersion,
     serverPort = 0,

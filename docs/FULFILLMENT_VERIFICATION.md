@@ -5,7 +5,7 @@ Checklist for verifying **supplier shipment → Shopify fulfillment** via the mo
 ## Prerequisites
 
 - Shopify app scopes include `write_merchant_managed_fulfillment_orders` (and read fulfillment orders).
-- Monolith and DSS share `DSS_INTERNAL_SECRET` when configured: the monolith sends it as `X-DSS-Internal-Secret` on `POST /sync-shipments-with-fulfillments`, `POST /tracking-update`, and `PUT /stores/api-key`; the matching auth guard is `installMonolithWebhookAuthSecret`.
+- Monolith and DSS share `DSS_API_KEY` when configured: the monolith sends it as `X-DSS-Internal-Secret` on `POST /sync-shipments-with-fulfillments`, `POST /tracking-update`, and `PUT /stores/api-key`; the matching auth guard is `installMonolithWebhookAuthSecret`.
 - Shopify Admin token resolvable for the shop — seed `DSS_SHOP_ACCESS_TOKENS`, complete OAuth, or have the monolith persist one via `PUT /stores/api-key` (a miss falls back to `MonolithService.getStore`).
 - `MONOLITH_BASE_URL` set on DSS for order/product webhooks (Shopify → monolith).
 

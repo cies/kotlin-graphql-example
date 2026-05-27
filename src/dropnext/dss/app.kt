@@ -59,7 +59,7 @@ fun main() {
 private fun logConfigSummary(config: Config) {
   val shopify = config.shopify
   log.info {
-    "[http] Listening on 0.0.0.0:${shopify.serverPort}; PUBLIC_BASE_URL=${shopify.publicBaseUrl} — " +
+    "[http] Listening on 0.0.0.0:${shopify.serverPort} with DSS_BASE_URL=${shopify.dssBaseUrl} — " +
       "reverse-proxy target port must equal ${shopify.serverPort} (unset PORT locally → 8080; empty PORT in Docker → 9999)."
   }
   if (config.dev.enableTestHarness) {

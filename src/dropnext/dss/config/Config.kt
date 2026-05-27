@@ -18,7 +18,7 @@ data class Config(
 
   /**
    * When set, monolith-webhook routes (see [dropnext.dss.routing.installMonolithWebhookRoutes])
-   * require header `X-DSS-Internal-Secret`. Sourced from env `DSS_INTERNAL_SECRET`. Other
+   * require header `X-DSS-Internal-Secret`. Sourced from env `DSS_API_KEY`. Other
    * inbound routes (health, install, oauth callback, Shopify webhooks, demo) ignore this value.
    */
   val monolithWebhookAuthSecret: String?,
@@ -26,7 +26,7 @@ data class Config(
   companion object {
     fun fromEnv(): Config {
       val shopify = ShopifyConfig.fromEnv() ?: error(
-        "Set env vars: SHOPIFY_APP_CLIENT_ID (or SHOPIFY_API_KEY), SHOPIFY_APP_CLIENT_SECRET (or SHOPIFY_API_SECRET), SHOPIFY_SCOPES, PUBLIC_BASE_URL",
+        "Set env vars: SHOPIFY_APP_CLIENT_ID (or SHOPIFY_API_KEY), SHOPIFY_APP_CLIENT_SECRET (or SHOPIFY_API_SECRET), SHOPIFY_SCOPES, DSS_BASE_URL",
       )
       val monolith = MonolithConfig.fromEnv() ?: error(
         "Set env var MONOLITH_BASE_URL (point it at a stub URL if you do not have a real DropNext monolith running).",
@@ -38,7 +38,7 @@ data class Config(
         monolith = monolith,
         dev = dev,
         webhook = WebhookConfig.fromEnv(),
-        monolithWebhookAuthSecret = optionalNormalized("DSS_INTERNAL_SECRET"),
+        monolithWebhookAuthSecret = optionalNormalized("DSS_API_KEY"),
       )
 
       val configIssues = computeRuntimeConfigIssues(dssConfig)
@@ -128,17 +128,17 @@ internal fun computeRuntimeConfigIssues(dssConfig: Config): List<String> = build
   if (isPlaceholder(shopify.appClientSecret)) {
     add("SHOPIFY_APP_CLIENT_SECRET (or SHOPIFY_API_SECRET) is placeholder")
   }
-  if (isPlaceholder(shopify.publicBaseUrl) || shopify.publicBaseUrl.contains("example.com", ignoreCase = true)) {
-    add("PUBLIC_BASE_URL is placeholder")
+  if (isPlaceholder(shopify.dssBaseUrl) || shopify.dssBaseUrl.contains("example.com", ignoreCase = true)) {
+    add("DSS_BASE_URL is placeholder")
   }
-  if (!shopify.publicBaseUrl.startsWith("https://", ignoreCase = true)) {
-    add("PUBLIC_BASE_URL should use https://")
+  if (!shopify.dssBaseUrl.startsWith("https://", ignoreCase = true)) {
+    add("DSS_BASE_URL should use https://")
   }
   if (dssConfig.monolithWebhookAuthSecret?.contains("change_this") == true) {
-    add("DSS_INTERNAL_SECRET is still the placeholder value — set a real secret")
+    add("DSS_API_KEY is still the placeholder value — set a real secret")
   }
   if (dssConfig.monolithWebhookAuthSecret != null && dssConfig.monolithWebhookAuthSecret.length < 32) {
-    add("DSS_INTERNAL_SECRET should be at least 32 characters")
+    add("DSS_API_KEY should be at least 32 characters")
   }
   val monolithBaseUrl = dssConfig.monolith.baseUrl
   if (monolithBaseUrl.startsWith("http:", ignoreCase = true) && !dssConfig.monolith.allowInsecureUrl) {
@@ -154,28 +154,28 @@ data class ShopifyConfig(
   val appClientId: String,
   val appClientSecret: String,
   val scopes: String,
-  val publicBaseUrl: String,
+  val dssBaseUrl: String,
   val oauthRedirectPath: String,
   val apiVersion: String,
   val serverPort: Int,
 ) {
   val redirectUrl: String
-    get() = publicBaseUrl.trimEnd('/') + oauthRedirectPath
+    get() = dssBaseUrl.trimEnd('/') + oauthRedirectPath
 
   companion object {
     fun fromEnv(): ShopifyConfig? {
       val appClientId = env("SHOPIFY_APP_CLIENT_ID") ?: env("SHOPIFY_API_KEY")
       val appClientSecret = env("SHOPIFY_APP_CLIENT_SECRET") ?: env("SHOPIFY_API_SECRET")
       val scopes = env("SHOPIFY_SCOPES")
-      val publicBaseUrl = env("PUBLIC_BASE_URL")
+      val dssBaseUrl = env("DSS_BASE_URL")
 
-      if (appClientId == null || appClientSecret == null || scopes == null || publicBaseUrl == null) return null
+      if (appClientId == null || appClientSecret == null || scopes == null || dssBaseUrl == null) return null
 
       return ShopifyConfig(
         appClientId = appClientId,
         appClientSecret = appClientSecret,
         scopes = scopes,
-        publicBaseUrl = publicBaseUrl.trimEnd('/'),
+        dssBaseUrl = dssBaseUrl.trimEnd('/'),
         oauthRedirectPath = (env("OAUTH_REDIRECT_PATH") ?: "")
           .ifBlank { Paths.defaultOAuthCallback },
         apiVersion = (env("SHOPIFY_API_VERSION") ?: "").ifBlank { "2026-04" },

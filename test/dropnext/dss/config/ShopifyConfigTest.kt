@@ -26,12 +26,12 @@ class ShopifyConfigTest {
   }
 
   @Test
-  fun `redirectUrl trims trailing slash from publicBaseUrl`() {
+  fun `redirectUrl trims trailing slash from dssBaseUrl`() {
     val config = ShopifyConfig(
       appClientId = "id",
       appClientSecret = "secret",
       scopes = "read_orders",
-      publicBaseUrl = "https://dss.example.com",
+      dssBaseUrl = "https://dss.example.com",
       oauthRedirectPath = "/oauth/callback",
       apiVersion = "2026-04",
       serverPort = 8080,

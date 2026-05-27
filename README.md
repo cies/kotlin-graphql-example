@@ -79,7 +79,7 @@ See [docs/setup-intellij-idea.md](./docs/setup-intellij-idea.md) for IntelliJ ID
 ### Running the project for development
 
 1. Copy `.env.example` to `.env` and fill in the required Shopify credentials.
-2. Expose the server with HTTPS (e.g. [ngrok](https://ngrok.com/)) and set `PUBLIC_BASE_URL` to that origin (no trailing slash). Shopify requires HTTPS for OAuth and webhook callbacks.
+2. Expose the server with HTTPS (e.g. [ngrok](https://ngrok.com/)) and set `DSS_BASE_URL` to that origin (no trailing slash). Shopify requires HTTPS for OAuth and webhook callbacks.
 3. Run the app:
 
    ```sh
@@ -152,7 +152,7 @@ point the IDE plugin at the committed `src/graphql-schema/schema.graphql`.
 
 ### Shopify Partner app
 
-* Create or use a Partner app and set **Allowed redirection URL(s)** to exactly `{PUBLIC_BASE_URL}{OAUTH_REDIRECT_PATH}`
+* Create or use a Partner app and set **Allowed redirection URL(s)** to exactly `{DSS_BASE_URL}{OAUTH_REDIRECT_PATH}`
 (default path `/oauth/callback`).
 * Suggested scopes (trim to what your app actually needs; mirror in the Partner Dashboard):
   * `read_products` — catalog sync and product webhooks
@@ -165,7 +165,7 @@ point the IDE plugin at the committed `src/graphql-schema/schema.graphql`.
 
 ### Hosted deployment
 
-* **App URL**: `PUBLIC_BASE_URL` must be the HTTPS origin Shopify uses to reach this service.
+* **App URL**: `DSS_BASE_URL` must be the HTTPS origin Shopify uses to reach this service.
 * **Listen address**: binds `0.0.0.0` so it works in containers and typical PaaS hosting.
 * **Access tokens**: the server is **stateless** — it does not persist Admin API tokens.
 After OAuth, the success page shows how to set `DSS_SHOP_ACCESS_TOKENS` so a future cold start can re-resolve the token without OAuth. Webhooks, `/demo/*`, and internal REST routes resolve the per-shop Admin token through the in-memory cache (filled by OAuth, `DSS_SHOP_ACCESS_TOKENS`, or `PUT /stores/api-key`), falling back to a monolith `GET /stores` lookup.
@@ -173,7 +173,7 @@ After OAuth, the success page shows how to set `DSS_SHOP_ACCESS_TOKENS` so a fut
 
 ### Webhooks registered on install
 
-Subscriptions all use the same HTTPS callback: `{PUBLIC_BASE_URL}/webhooks/shopify`.
+Subscriptions all use the same HTTPS callback: `{DSS_BASE_URL}/webhooks/shopify`.
 
 * `PRODUCTS_CREATE`, `PRODUCTS_UPDATE`, `PRODUCTS_DELETE`
 * `ORDERS_CREATE`, `ORDERS_UPDATED`
@@ -193,14 +193,14 @@ OpenAPI (human-readable mirror): [`docs/openapi/dss-api.yaml`](docs/openapi/dss-
 * `POST /tracking-updates` — alias for `/tracking-update`, same payload.
 * `PUT /stores/api-key` — accepts `PutShopAccessTokenRequest`; caches the Shopify Admin token in memory and forwards it to the monolith when `MONOLITH_BASE_URL` is set.
 
-The per-shop Admin token is resolved server-side via the in-memory cache (filled by OAuth, `DSS_SHOP_ACCESS_TOKENS`, or `PUT /stores/api-key`) with a fallback to monolith `GET /stores`. When `DSS_INTERNAL_SECRET` is set, all four routes also require header `X-DSS-Internal-Secret`.
+The per-shop Admin token is resolved server-side via the in-memory cache (filled by OAuth, `DSS_SHOP_ACCESS_TOKENS`, or `PUT /stores/api-key`) with a fallback to monolith `GET /stores`. When `DSS_API_KEY` is set, all four routes also require header `X-DSS-Internal-Secret`.
 
 
 ### Security notes (production)
 
 * Use **HTTPS** everywhere between clients, monolith, and this service;
 set `DSS_ALLOW_INSECURE_MONOLITH=true` only on developer machines.
-* Set `DSS_INTERNAL_SECRET` so internal REST is not open on the network;
+* Set `DSS_API_KEY` so internal REST is not open on the network;
 the header is compared in **constant time** to reduce timing leaks.
 * **Secrets in env**: `DSS_SHOP_ACCESS_TOKENS` and `SANDBOX_ACCESS_TOKEN` are as sensitive as passwords —
 use a secrets manager in production, not committed `.env` files.
@@ -215,7 +215,7 @@ Unhandled server errors return a generic message; details stay in server logs on
 | `SHOPIFY_APP_CLIENT_ID` | yes | App Client ID (OAuth client id used for install flow) |
 | `SHOPIFY_APP_CLIENT_SECRET` | yes | App secret (OAuth HMAC, token exchange, webhook HMAC) |
 | `SHOPIFY_SCOPES` | yes | Comma-separated scopes (see above) |
-| `PUBLIC_BASE_URL` | yes | Public https origin of this server (tunnel URL in dev) |
+| `DSS_BASE_URL` | yes | Public https origin of this server (tunnel URL in dev) |
 | `OAUTH_REDIRECT_PATH` | no | Default `/oauth/callback` (must match Partner redirect URL) |
 | `SHOPIFY_API_VERSION` | no | Default `2026-04` (keep in sync with `build.gradle.kts` / `graphql.config.yml`) |
 | `PORT` | no | Default `8080` |
@@ -224,7 +224,7 @@ Unhandled server errors return a generic message; details stay in server logs on
 | `MONOLITH_API_PREFIX` | no | Inserted **after** base: `{BASE}/{PREFIX}/stores/api-key`. Example env `MONOLITH_API_PREFIX=api/v1`. Omit slashes at edges; empty (default) uses paths directly under base. |
 | `MONOLITH_API_KEY` | no | Optional Bearer token for monolith requests (`Authorization`). |
 | `MONOLITH_CREATE_ORDER_PATH` | no | Default `/orders` (relative URL segment after `{BASE}` and prefix) |
-| `DSS_INTERNAL_SECRET` | no | If set, DSS REST routes require `X-DSS-Internal-Secret` |
+| `DSS_API_KEY` | no | If set, DSS REST routes require `X-DSS-Internal-Secret` |
 | `DSS_ALLOW_INSECURE_MONOLITH` | no | Set `true` only for local dev so `MONOLITH_BASE_URL` may use `http://`. Production should use `https://` (default: insecure URLs are rejected at startup). |
 | `DSS_SYNC_ORDER_ON_UPDATED` | no | Default `false`. When `true`, `orders/updated` webhooks also POST to the monolith (in addition to `orders/create`). |
 | `ENABLE_DEMO_ROUTES` | no | Set `true` to expose `/demo/*` without the HTML harness. **If `ENABLE_TEST_HARNESS=true`, demo routes are always turned on** for local testing. |
@@ -237,13 +237,13 @@ Legacy compatibility: `SHOPIFY_API_KEY` and `SHOPIFY_API_SECRET` are still accep
 
 ### Troubleshooting
 
-* **Startup exits quickly**: verify required vars `SHOPIFY_APP_CLIENT_ID` and `SHOPIFY_APP_CLIENT_SECRET` (or legacy `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET`), plus `SHOPIFY_SCOPES` and `PUBLIC_BASE_URL`.
-* **OAuth callback mismatch in Shopify**: ensure `{PUBLIC_BASE_URL}{OAUTH_REDIRECT_PATH}` exactly matches the Partner Dashboard redirect URL.
-* **DSS auth failures (`401`)**: ensure a Shopify Admin token is resolvable for the shop — seed `DSS_SHOP_ACCESS_TOKENS`, complete OAuth, or `PUT /stores/api-key`; include `X-DSS-Internal-Secret` when `DSS_INTERNAL_SECRET` is set.
+* **Startup exits quickly**: verify required vars `SHOPIFY_APP_CLIENT_ID` and `SHOPIFY_APP_CLIENT_SECRET` (or legacy `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET`), plus `SHOPIFY_SCOPES` and `DSS_BASE_URL`.
+* **OAuth callback mismatch in Shopify**: ensure `{DSS_BASE_URL}{OAUTH_REDIRECT_PATH}` exactly matches the Partner Dashboard redirect URL.
+* **DSS auth failures (`401`)**: ensure a Shopify Admin token is resolvable for the shop — seed `DSS_SHOP_ACCESS_TOKENS`, complete OAuth, or `PUT /stores/api-key`; include `X-DSS-Internal-Secret` when `DSS_API_KEY` is set.
 * **`DSS_SHOP_ACCESS_TOKENS` parse issues**: use comma-separated `shop.myshopify.com|shpat_...` pairs.
 * **`[monolith] MONOLITH_BASE_URL is unset` despite being configured**: duplicate `MONOLITH_BASE_URL` / `MONOLITH_API_KEY` lines (often empty trailing blocks pasted from templates) cause **last value wins**. Remove the trailing empties so only one assignment remains; redeploy/restart.
 * **`Monolith store api-key … status=404` with HTML `<h1>Not Found`**: DSS hit `{MONOLITH_BASE_URL}/stores/api-key` (before optional prefix). Use the REST API domain (often `api.…`), or set `MONOLITH_API_PREFIX` if routes live under a path (`api/v1`). Confirm with `curl -i -X PUT https://your-api…/stores/api-key` (+ Bearer header) outside DSS.
-* **502 Bad Gateway on `PUBLIC_BASE_URL`**: the reverse proxy forwards to the wrong container port. The JVM binds `PORT` (see `[http] Listening …` startup line). Dockerfile sets `ENV PORT=9999`, but dashboards that add an empty `PORT=` override that with blank. Set `PORT=9999` explicitly or remove the `PORT` key so the image default wins; Traefik/nginx must target the **same** port.
+* **502 Bad Gateway on `DSS_BASE_URL`**: the reverse proxy forwards to the wrong container port. The JVM binds `PORT` (see `[http] Listening …` startup line). Dockerfile sets `ENV PORT=9999`, but dashboards that add an empty `PORT=` override that with blank. Set `PORT=9999` explicitly or remove the `PORT` key so the image default wins; Traefik/nginx must target the **same** port.
 * **Insecure monolith URL rejected**: set `DSS_ALLOW_INSECURE_MONOLITH=true` only for local development; production should remain HTTPS.
 
 IDE-specific troubleshooting lives in [docs/setup-intellij-idea.md](./docs/setup-intellij-idea.md).

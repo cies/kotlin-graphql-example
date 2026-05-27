@@ -8,7 +8,7 @@ info:
     The service is **stateless**: it does not persist shop rows or tokens. The per-shop Shopify Admin token is
     resolved server-side from an in-memory cache populated by env **`DSS_SHOP_ACCESS_TOKENS`**
     (`shop.myshopify.com|shpat_…` pairs, comma-separated), the OAuth install callback, and **`PUT /stores/api-key`**;
-    a cache miss falls back to a monolith **`GET /stores`** lookup. Optional **`DSS_INTERNAL_SECRET`** still gates these routes.
+    a cache miss falls back to a monolith **`GET /stores`** lookup. Optional **`DSS_API_KEY`** still gates these routes.
 
     **Canonical machine-readable specification:** **`openapi.json`** at the repository root (`x-webhooks` map tells the monolith
     where to POST). Gradle **`openApiGenerate`** uses that JSON to generate Kotlin DTOs (`build.gradle.kts`).
@@ -102,7 +102,7 @@ paths:
 
         - Saves the token to the monolith via `PUT /stores/api-key` (requires `MONOLITH_BASE_URL`).
         - Caches the token in the in-memory map immediately — no restart needed.
-        - Requires `X-DSS-Internal-Secret` header if `DSS_INTERNAL_SECRET` is set.
+        - Requires `X-DSS-Internal-Secret` header if `DSS_API_KEY` is set.
       parameters:
         - $ref: "#/components/parameters/DssInternalSecret"
       requestBody:
@@ -463,5 +463,5 @@ paths:
       schema:
         type: string
       description: |
-        If whoever deployed the server set the `DSS_INTERNAL_SECRET` environment variable,
+        If whoever deployed the server set the `DSS_API_KEY` environment variable,
         every request must send this header with that same value - like a shared password between services.
