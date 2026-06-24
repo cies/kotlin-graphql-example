@@ -2,7 +2,6 @@ package dropnext.dss
 
 import dropnext.dss.config.Config
 import dropnext.dss.config.shopAccessTokensFromEnv
-import dropnext.dss.handler.DemoHandlers
 import dropnext.dss.handler.DiagnosticsHandlers
 import dropnext.dss.handler.MonolithWebhookHandlers
 import dropnext.dss.handler.OAuthHandlers
@@ -37,7 +36,6 @@ data class DssDependencies(
   val diagnosticsHandlers: DiagnosticsHandlers,
   val oauthHandlers: OAuthHandlers,
   val shopifyWebhookHandlers: ShopifyWebhookHandlers,
-  val demoHandlers: DemoHandlers,
   val monolithWebhookHandlers: MonolithWebhookHandlers,
 ) {
   /** Closes both HTTP clients with [runCatching] so a single failure doesn't skip the others. */
@@ -72,31 +70,30 @@ fun dssDependencies(
   httpClient: HttpClient = createSharedHttpClient(),
   monolithHttpClient: HttpClient = createMonolithHttpClient(httpClient),
   shopTokens: ShopAccessTokenCache =
-    ShopAccessTokenCache(shopAccessTokensFromEnv(enableTestHarness = config.dev.enableTestHarness)),
+    ShopAccessTokenCache(shopAccessTokensFromEnv()),
   monolithService: MonolithService = HttpMonolithService(
     httpClient = monolithHttpClient,
-    baseUrl = config.monolith.baseUrl,
-    apiPathPrefix = config.monolith.apiPrefix,
-    apiKey = config.monolith.apiKey,
+    baseUrl = config.monolithBaseUrl,
+    apiPathPrefix = config.monolithApiPrefix,
+    apiKey = config.monolithApiKey,
     createOrderPath = OutBoundMonolithPaths.orders,
   ),
   shopifyGraphqlServiceFactory: ShopifyGraphqlServiceFactory = HttpShopifyGraphqlServiceFactory(
     httpClient = httpClient,
     tokens = shopTokens,
     monolith = monolithService,
-    apiVersion = config.shopify.apiVersion,
+    apiVersion = config.apiVersion,
   ),
-  oauthClient: ShopifyOAuthService = ShopifyOAuthService(httpClient, config.shopify),
-  shopifyHmacVerifierService: ShopifyHmacVerifierService = ShopifyHmacVerifierService(config.shopify.appClientSecret),
+  oauthClient: ShopifyOAuthService = ShopifyOAuthService(httpClient, config),
+  shopifyHmacVerifierService: ShopifyHmacVerifierService = ShopifyHmacVerifierService(config.appClientSecret),
 ): DssDependencies = DssDependencies(
   config = config,
   httpClient = httpClient,
   monolithHttpClient = monolithHttpClient,
   monolithService = monolithService,
   diagnosticsHandlers = DiagnosticsHandlers(config, shopTokens),
-  demoHandlers = DemoHandlers(config, shopifyGraphqlServiceFactory),
   oauthHandlers = OAuthHandlers(
-    config.shopify.dssBaseUrl,
+    config.dssBaseUrl,
     oauthClient,
     shopifyGraphqlServiceFactory,
     monolithService,
@@ -104,7 +101,6 @@ fun dssDependencies(
     shopifyHmacVerifierService,
   ),
   shopifyWebhookHandlers = ShopifyWebhookHandlers(
-    config.webhook.syncOrderOnUpdated,
     shopifyGraphqlServiceFactory,
     monolithService,
     shopifyHmacVerifierService

@@ -21,7 +21,7 @@ object Paths {
   // --- Shopify OAuth ---
   const val install = "/install"
 
-  /** Default OAuth callback path; the actual value comes from `ShopifyConfig.oauthRedirectPath` (env `OAUTH_REDIRECT_PATH`). */
+  /** Default OAuth callback path; the actual value comes from `Config.oauthRedirectPath` (env `OAUTH_REDIRECT_PATH`). */
   const val defaultOAuthCallback = "/oauth/callback"
 
   // --- Shopify webhooks ---
@@ -30,12 +30,5 @@ object Paths {
   // --- DSS internal REST (called by monolith) ---
   const val storesApiKey = "/stores/api-key"
   const val syncShipmentsWithFulfillments = "/sync-shipments-with-fulfillments"
-  const val trackingUpdates = "/tracking-updates"
   const val trackingUpdate = "/tracking-update"
-
-  // --- Demo / smoke-test routes (only when enableDemoRoutes) ---
-  const val demoProducts = "/demo/products"
-  const val demoOrder = "/demo/order"
-  const val demoFulfillmentCreate = "/demo/fulfillment/create"
-  const val demoFulfillmentTracking = "/demo/fulfillment/tracking"
 }

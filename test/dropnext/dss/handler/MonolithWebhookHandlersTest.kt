@@ -20,6 +20,7 @@ import dropnext.dss.testing.fake.FakeShopifyGraphqlServiceFactory
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation as ClientContentNegotiation
+import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.put
@@ -37,6 +38,7 @@ import kotlin.test.Test
 
 
 private val acmeShop = ShopDomain.parse("acme.myshopify.com")!!
+private val defaultInternalSecret = "z".repeat(32)
 
 
 class MonolithWebhookHandlersTest {
@@ -47,7 +49,10 @@ class MonolithWebhookHandlersTest {
   fun `sync-shipments returns 401 when internal secret is required and not provided`() {
     val secret = "y".repeat(32)
     runDssApp(handlers(), secret = secret) { client ->
-      val r = client.post(Paths.syncShipmentsWithFulfillments) {
+      val unauthenticatedClient = createClient {
+        install(ClientContentNegotiation) { json(AppJson) }
+      }
+      val r = unauthenticatedClient.post(Paths.syncShipmentsWithFulfillments) {
         contentType(ContentType.Application.Json)
         setBody(validSyncRequest())
       }
@@ -66,7 +71,7 @@ class MonolithWebhookHandlersTest {
     val secret = "y".repeat(32)
     runDssApp(handlers(), secret = secret) { client ->
       val r = client.post(Paths.syncShipmentsWithFulfillments) {
-        header("X-DSS-Internal-Secret", secret)
+        header("Authorization", "Bearer $secret")
         contentType(ContentType.Application.Json)
         setBody(validSyncRequest())
       }
@@ -218,7 +223,10 @@ class MonolithWebhookHandlersTest {
   @Test
   fun `PUT stores api-key requires internal secret when configured`() =
     runDssApp(handlers(), secret = "z".repeat(32)) { client ->
-      val r = client.put(Paths.storesApiKey) {
+      val unauthenticatedClient = createClient {
+        install(ClientContentNegotiation) { json(AppJson) }
+      }
+      val r = unauthenticatedClient.put(Paths.storesApiKey) {
         contentType(ContentType.Application.Json)
         setBody(
           UpdateStoreApiKeyRequest(
@@ -235,21 +243,22 @@ class MonolithWebhookHandlersTest {
 
   /**
    * Mounts production routing + auth + content-negotiation inside Ktor's in-memory test engine.
-   * When [secret] is non-blank, every DSS-internal route requires `X-DSS-Internal-Secret` to match.
+   * Every DSS-internal route requires `Authorization: Bearer <secret>` to match.
    */
   private fun runDssApp(
     handlers: MonolithWebhookHandlers,
-    secret: String? = null,
+    secret: String = defaultInternalSecret,
     block: suspend ApplicationTestBuilder.(HttpClient) -> Unit,
   ) = testApplication {
     application { dssRoutesOnly(handlers, secret) }
     val client = createClient {
       install(ClientContentNegotiation) { json(AppJson) }
+      defaultRequest { header("Authorization", "Bearer $secret") }
     }
     block(client)
   }
 
-  private fun Application.dssRoutesOnly(handlers: MonolithWebhookHandlers, secret: String?) {
+  private fun Application.dssRoutesOnly(handlers: MonolithWebhookHandlers, secret: String) {
     installJsonContentNegotiation()
     installMonolithWebhookAuth(secret)
     routing { installMonolithWebhookRoutes(handlers) }

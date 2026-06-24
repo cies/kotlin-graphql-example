@@ -1,6 +1,6 @@
 package dropnext.dss.lib.shopify.oauth
 
-import dropnext.dss.config.ShopifyConfig
+import dropnext.dss.config.Config
 import dropnext.dss.lib.shopify.ShopDomain
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
@@ -8,7 +8,7 @@ import java.time.Instant
 import kotlin.test.Test
 
 
-private val testConfig = ShopifyConfig(
+private val testConfig = Config(
   appClientId = "client-id-123",
   appClientSecret = "client-secret-xyz",
   scopes = "read_orders,write_products",
@@ -16,6 +16,11 @@ private val testConfig = ShopifyConfig(
   oauthRedirectPath = "/oauth/callback",
   apiVersion = "2026-04",
   serverPort = 8080,
+  monolithBaseUrl = "https://monolith.example.com",
+  monolithApiPrefix = null,
+  monolithApiKey = null,
+  allowInsecureMonolithUrl = false,
+  monolithWebhookAuthSecret = "x".repeat(32),
 )
 
 private val shop = ShopDomain.parse("acme.myshopify.com")!!

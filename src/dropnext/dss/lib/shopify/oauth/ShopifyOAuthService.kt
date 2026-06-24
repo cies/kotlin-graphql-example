@@ -1,6 +1,6 @@
 package dropnext.dss.lib.shopify.oauth
 
-import dropnext.dss.config.ShopifyConfig
+import dropnext.dss.config.Config
 import dropnext.dss.lib.shopify.ShopDomain
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -33,12 +33,12 @@ private const val OAUTH_STATE_TTL_SECONDS = 300L
  *  - [exchangeCode] — trades the authorization `code` Shopify returns at the redirect for a
  *    permanent Admin API access token.
  *
- * Stateless aside from the injected [HttpClient] and [ShopifyConfig], so a single instance is
+ * Stateless aside from the injected [HttpClient] and [Config], so a single instance is
  * safe to share across requests.
  */
 class ShopifyOAuthService(
   private val httpClient: HttpClient,
-  private val config: ShopifyConfig,
+  private val config: Config,
 ) {
   /** Builds the OAuth authorize redirect URL for [shop] with a signed [state]. */
   fun authorizeUrl(shop: ShopDomain, state: String): String {

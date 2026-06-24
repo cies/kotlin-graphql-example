@@ -351,8 +351,7 @@ class ArchitectureTest {
     // Tests the install confirmation view rendered by `presentation/renderOAuthInstallPage.kt`;
     // the test predates a rename of the source file (was `OAuthInstallView.kt`).
     "/test/dropnext/dss/presentation/OAuthInstallViewTest.kt",
-    // ShopifyConfig now lives inline in `config/DssAppConfig.kt` alongside the other config
-    // groups (MonolithConfig, DevConfig, WebhookConfig). The test keeps its name for clarity.
+    // Port/redirect tests remain in ShopifyConfigTest.kt for clarity even after config flattening.
     "/test/dropnext/dss/config/ShopifyConfigTest.kt",
   )
 

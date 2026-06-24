@@ -7,10 +7,7 @@ import dropnext.dss.lib.shopify.ShopDomain
 import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlService
 import dropnext.graphql.generated.FulfillmentCancelMutation
 import dropnext.graphql.generated.FulfillmentCreateWithLineItems
-import dropnext.graphql.generated.FulfillmentCreateWithTracking
 import dropnext.graphql.generated.FulfillmentEventCreateMutation
-import dropnext.graphql.generated.FulfillmentTrackingInfoUpdateMutation
-import dropnext.graphql.generated.GetOrderById
 import dropnext.graphql.generated.GetOrderForDss
 import dropnext.graphql.generated.GetProductById
 import dropnext.graphql.generated.GetWebhookSubscriptions
@@ -21,13 +18,11 @@ import dropnext.graphql.generated.enums.WebhookSubscriptionTopic
 import dropnext.graphql.generated.fulfillmentcancelmutation.FulfillmentCancelPayload
 import dropnext.graphql.generated.fulfillmentcreatewithlineitems.FulfillmentCreatePayload
 import dropnext.graphql.generated.fulfillmenteventcreatemutation.FulfillmentEventCreatePayload
-import dropnext.graphql.generated.fulfillmenttrackinginfoupdatemutation.FulfillmentTrackingInfoUpdatePayload
 import dropnext.graphql.generated.getwebhooksubscriptions.WebhookSubscriptionConnection
 import dropnext.graphql.generated.inputs.FulfillmentEventInput
 import dropnext.graphql.generated.inputs.FulfillmentOrderLineItemsInput
 import dropnext.graphql.generated.inputs.FulfillmentTrackingInput
 import dropnext.graphql.generated.registerwebhook.WebhookSubscriptionCreatePayload
-import dropnext.graphql.generated.fulfillmentcreatewithtracking.FulfillmentCreatePayload as DemoCreatePayload
 import dropnext.graphql.generated.getproductbyid.Shop as GetProductByIdShop
 import dropnext.graphql.generated.shopidentity.Shop as ShopIdentityShop
 import dropnext.graphql.generated.syncproductspage.PageInfo
@@ -94,42 +89,10 @@ class FakeShopifyGraphqlService(
     return getProductByIdResponse
   }
 
-  override suspend fun getOrderById(orderGid: String): GraphQLClientResponse<GetOrderById.Result> =
-    okResponse(GetOrderById.Result(order = null))
-
   override suspend fun loadOrderForDss(orderGid: String): GraphQLClientResponse<GetOrderForDss.Result> {
     loadOrderForDssCalls.add(orderGid)
     return loadOrderForDssResponse
   }
-
-  override suspend fun demoCreateFulfillmentWithTracking(
-    fulfillmentOrderId: String,
-    company: String?,
-    trackingNumber: String?,
-    trackingUrl: String?,
-    notifyCustomer: Boolean,
-  ): GraphQLClientResponse<FulfillmentCreateWithTracking.Result> =
-    okResponse(
-      FulfillmentCreateWithTracking.Result(
-        fulfillmentCreate = DemoCreatePayload(fulfillment = null, userErrors = emptyList()),
-      ),
-    )
-
-  override suspend fun demoUpdateFulfillmentTracking(
-    fulfillmentId: String,
-    company: String?,
-    trackingNumber: String?,
-    trackingUrl: String?,
-    notifyCustomer: Boolean?,
-  ): GraphQLClientResponse<FulfillmentTrackingInfoUpdateMutation.Result> =
-    okResponse(
-      FulfillmentTrackingInfoUpdateMutation.Result(
-        fulfillmentTrackingInfoUpdate = FulfillmentTrackingInfoUpdatePayload(
-          fulfillment = null,
-          userErrors = emptyList(),
-        ),
-      ),
-    )
 
   override suspend fun cancelFulfillment(
     fulfillmentGid: String,

@@ -6,10 +6,7 @@ import com.expediagroup.graphql.client.types.GraphQLClientResponse
 import dropnext.dss.lib.shopify.ShopDomain
 import dropnext.graphql.generated.FulfillmentCancelMutation
 import dropnext.graphql.generated.FulfillmentCreateWithLineItems
-import dropnext.graphql.generated.FulfillmentCreateWithTracking
 import dropnext.graphql.generated.FulfillmentEventCreateMutation
-import dropnext.graphql.generated.FulfillmentTrackingInfoUpdateMutation
-import dropnext.graphql.generated.GetOrderById
 import dropnext.graphql.generated.GetOrderForDss
 import dropnext.graphql.generated.GetProductById
 import dropnext.graphql.generated.GetWebhookSubscriptions
@@ -24,7 +21,7 @@ import io.ktor.client.request.header
 
 
 /**
- * Production [ShopifyGraphqlService] — speaks real Graphql to a shop's Admin API endpoint over
+ * Production [ShopifyGraphqlService] - speaks real Graphql to a shop's Admin API endpoint over
  * the shared [GraphQLKtorClient], injecting the per-shop [accessToken] on every request.
  *
  * Instances are created by [dropnext.dss.lib.monolith.HttpShopifyGraphqlServiceFactory]; the OAuth
@@ -51,45 +48,8 @@ class HttpShopifyGraphqlService(
   override suspend fun getProductById(productGid: String): GraphQLClientResponse<GetProductById.Result> =
     execute(GetProductById(GetProductById.Variables(productGid)))
 
-  override suspend fun getOrderById(orderGid: String): GraphQLClientResponse<GetOrderById.Result> =
-    execute(GetOrderById(GetOrderById.Variables(orderGid)))
-
   override suspend fun loadOrderForDss(orderGid: String): GraphQLClientResponse<GetOrderForDss.Result> =
     execute(GetOrderForDss(GetOrderForDss.Variables(orderGid)))
-
-  override suspend fun demoCreateFulfillmentWithTracking(
-    fulfillmentOrderId: String,
-    company: String?,
-    trackingNumber: String?,
-    trackingUrl: String?,
-    notifyCustomer: Boolean,
-  ): GraphQLClientResponse<FulfillmentCreateWithTracking.Result> =
-    execute(
-      FulfillmentCreateWithTracking(
-        FulfillmentCreateWithTracking.Variables(
-          fulfillmentOrderId = fulfillmentOrderId,
-          tracking = FulfillmentTrackingInput(company = company, number = trackingNumber, url = trackingUrl),
-          notifyCustomer = notifyCustomer,
-        ),
-      ),
-    )
-
-  override suspend fun demoUpdateFulfillmentTracking(
-    fulfillmentId: String,
-    company: String?,
-    trackingNumber: String?,
-    trackingUrl: String?,
-    notifyCustomer: Boolean?,
-  ): GraphQLClientResponse<FulfillmentTrackingInfoUpdateMutation.Result> =
-    execute(
-      FulfillmentTrackingInfoUpdateMutation(
-        FulfillmentTrackingInfoUpdateMutation.Variables(
-          fulfillmentId = fulfillmentId,
-          trackingInfoInput = FulfillmentTrackingInput(company = company, number = trackingNumber, url = trackingUrl),
-          notifyCustomer = notifyCustomer,
-        ),
-      ),
-    )
 
   override suspend fun cancelFulfillment(
     fulfillmentGid: String,

@@ -13,7 +13,6 @@ import dropnext.dss.testing.fake.FakeShopifyGraphqlServiceFactory
 import dropnext.dss.testing.fake.okResponse
 import dropnext.dss.testing.fake.shopifyRewritingHttpClient
 import dropnext.dss.testing.fake.testConfig
-import dropnext.dss.testing.fake.testShopifyConfig
 import dropnext.graphql.generated.ShopIdentity
 import dropnext.graphql.generated.shopidentity.Shop as ShopIdentityShop
 import io.ktor.client.HttpClient
@@ -195,8 +194,7 @@ class OAuthHandlersTest {
         // syncProductsPageResponse default (empty page) and registerStandardWebhooksResult
         // default (empty report) are fine here — the assertions don't touch them.
       }
-      val shopifyConfig = testShopifyConfig(appClientSecret = secret)
-      val dssConfig = testConfig(shopify = shopifyConfig)
+      val dssConfig = testConfig(appClientSecret = secret)
       current = dssDependencies(
         config = dssConfig,
         httpClient = rewritingClient,
@@ -208,7 +206,7 @@ class OAuthHandlersTest {
       // The test signs a state with the same secret the handler will verify against, so it
       // builds its own [ShopifyOAuthService] from the same config (one extra line is cheaper
       // than exposing the handler's internal collaborator).
-      val state = ShopifyOAuthService(rewritingClient, shopifyConfig).signedState(shopDomain)
+      val state = ShopifyOAuthService(rewritingClient, dssConfig).signedState(shopDomain)
       val code = "abc-code"
       val query = Parameters.build {
         append("shop", shop)
@@ -249,7 +247,7 @@ class OAuthHandlersTest {
   // ---------- helpers ----------
 
   private fun handlers(): OAuthHandlers = dssDependencies(
-    config = testConfig(shopify = testShopifyConfig(appClientSecret = "oauth-test-secret")),
+    config = testConfig(appClientSecret = "oauth-test-secret"),
     httpClient = client,
     monolithService = FakeMonolithService(),
   ).oauthHandlers

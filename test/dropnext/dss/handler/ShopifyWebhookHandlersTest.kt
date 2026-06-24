@@ -9,7 +9,6 @@ import dropnext.dss.testing.fake.FakeShopifyGraphqlService
 import dropnext.dss.testing.fake.FakeShopifyGraphqlServiceFactory
 import dropnext.dss.testing.fake.okResponse
 import dropnext.dss.testing.fake.testConfig
-import dropnext.dss.testing.fake.testShopifyConfig
 import dropnext.dss.workflow.minimalOrder
 import dropnext.graphql.generated.GetOrderForDss
 import dropnext.graphql.generated.GetProductById
@@ -189,25 +188,6 @@ class ShopifyWebhookHandlersTest {
     assert(shopify.loadOrderForDssCalls.single() == "gid://shopify/Order/1001")
   }
 
-  @Test
-  fun `orders_updated with syncOrderOnUpdated true POSTs to the monolith`() = runBlocking {
-    val monolith = FakeMonolithService()
-    val shopify = FakeShopifyGraphqlService().apply {
-      loadOrderForDssResponse = okResponse(GetOrderForDss.Result(order = minimalOrder()))
-    }
-    currentHandlers = handlers(monolith = monolith, shopify = shopify, syncOnUpdated = true)
-    val body = """{"id":1001,"admin_graphql_api_id":"gid://shopify/Order/1001","domain":"acme.myshopify.com"}"""
-    val r = httpClient.post("$baseUrl${Paths.webhooksShopify}") {
-      header("X-Shopify-Topic", "orders/updated")
-      header("X-Shopify-Shop-Domain", "acme.myshopify.com")
-      header("X-Shopify-Hmac-Sha256", base64HmacSha256(secret, body.toByteArray(StandardCharsets.UTF_8)))
-      setBody(body)
-    }
-    assert(r.status == HttpStatusCode.OK)
-    assert(monolith.createOrderCallCount == 1)
-    assert(monolith.lastCreateOrder?.shopifyOrderId == 1001L)
-  }
-
   // ---------- product webhook flows ----------
 
   @Test
@@ -313,10 +293,10 @@ class ShopifyWebhookHandlersTest {
   }
 
   @Test
-  fun `orders_updated with syncOrderOnUpdated false does not POST to the monolith`() = runBlocking {
+  fun `orders_updated does not POST to the monolith`() = runBlocking {
     val monolith = FakeMonolithService()
     val shopify = FakeShopifyGraphqlService()
-    currentHandlers = handlers(monolith = monolith, shopify = shopify, syncOnUpdated = false)
+    currentHandlers = handlers(monolith = monolith, shopify = shopify)
     val body = """{"id":1001,"admin_graphql_api_id":"gid://shopify/Order/1001","domain":"acme.myshopify.com"}"""
     val r = httpClient.post("$baseUrl${Paths.webhooksShopify}") {
       header("X-Shopify-Topic", "orders/updated")
@@ -340,11 +320,9 @@ class ShopifyWebhookHandlersTest {
   private fun handlers(
     monolith: MonolithService = FakeMonolithService(),
     shopify: FakeShopifyGraphqlService? = null,
-    syncOnUpdated: Boolean = false,
   ): ShopifyWebhookHandlers = dssDependencies(
     config = testConfig(
-      shopify = testShopifyConfig(appClientSecret = secret),
-      syncOrderOnUpdated = syncOnUpdated,
+      appClientSecret = secret,
     ),
     httpClient = httpClient,
     monolithService = monolith,

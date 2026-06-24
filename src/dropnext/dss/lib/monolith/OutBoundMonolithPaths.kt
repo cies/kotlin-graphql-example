@@ -2,9 +2,11 @@ package dropnext.dss.lib.monolith
 
 /**
  * Outbound paths the DSS calls on the DropNext monolith. Appended to
- * `MonolithConfig.baseUrl` (+ optional `MonolithConfig.apiPrefix`) by `HttpMonolithService`.
+ * `Config.monolithBaseUrl` (+ optional `Config.monolithApiPrefix`) by `HttpMonolithService`.
+ *
+ * These constants are kept here on purpose. OpenAPI codegen is configured in models-only mode
+ * (`apis=false`), so path constants are not generated from the spec.
  */
-// TODO: can we not get these from the API spec (openapi.json)?
 @Suppress("ConstPropertyName") // Less shouty field names.
 object OutBoundMonolithPaths {
   /** `POST /orders` — create a Shopify order in the monolith. */

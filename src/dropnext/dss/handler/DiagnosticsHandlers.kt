@@ -21,40 +21,29 @@ class DiagnosticsHandlers(
   private val dssConfig: Config,
   private val shopTokens: ShopAccessTokenCache,
 ) {
-  private val shopifyConfig = dssConfig.shopify
-
   suspend fun handleIndex(call: ApplicationCall) {
-    val demoNote =
-      if (dssConfig.dev.enableDemoRoutes) " (enabled)" else " (disabled — set ENABLE_DEMO_ROUTES=true)"
     call.respondText(
       """
       API is running.
 
       --- Infrastructure / diagnostics ---
         GET  ${Paths.index.padEnd(26)}This index
-        GET  ${Paths.health.padEnd(26)}Liveness probe — returns "ok"
+        GET  ${Paths.health.padEnd(26)}Liveness probe - returns "ok"
         GET  ${Paths.api.padEnd(26)}JSON diagnostic info (config, URLs, issues)
         GET  ${Paths.apiCheck.padEnd(20)}?shop=  Readiness for a specific shop (token + feature flags)
         GET  ${Paths.apiRedirectUrl.padEnd(26)}Full OAuth redirect URL
 
       --- Shopify OAuth ---
-        GET  ${Paths.install.padEnd(20)}?shop=  Start OAuth — redirects to Shopify authorize URL
-        GET  ${shopifyConfig.oauthRedirectPath.padEnd(26)}OAuth callback — code exchange, saves token, registers webhooks
+        GET  ${Paths.install.padEnd(20)}?shop=  Start OAuth - redirects to Shopify authorize URL
+        GET  ${dssConfig.oauthRedirectPath.padEnd(26)}OAuth callback - code exchange, saves token, registers webhooks
 
       --- Webhooks ---
         POST ${Paths.webhooksShopify.padEnd(26)}Shopify webhook receiver (products/*, orders/*)
 
-      --- DSS Internal API (X-DSS-Internal-Secret header required if configured) ---
+      --- DSS Internal API (Authorization: Bearer <DSS_API_KEY> required) ---
         PUT  ${Paths.storesApiKey.padEnd(40)} Set Shopify Admin token (see repo openapi.json)
-        POST ${Paths.syncShipmentsWithFulfillments.padEnd(40)} Monolith webhook: SyncShipmentsWithFulfillmentsRequest → sync Shopify fulfillments
-        POST ${Paths.trackingUpdate.padEnd(40)} Monolith webhook: TrackingUpdateRequest → Shopify FulfillmentEvent
-        POST ${Paths.trackingUpdates.padEnd(40)} Alias for ${Paths.trackingUpdate} (same TrackingUpdateRequest body)
-
-      --- Demo routes$demoNote ---
-        GET  ${Paths.demoProducts.padEnd(28)}?shop=     List products via Shopify Graphql
-        GET  ${Paths.demoOrder.padEnd(28)}?shop=&id=  Load a single order by GID or numeric ID
-        POST ${Paths.demoFulfillmentCreate.padEnd(40)} Create a fulfillment with tracking
-        POST ${Paths.demoFulfillmentTracking.padEnd(40)} Update fulfillment tracking info
+        POST ${Paths.syncShipmentsWithFulfillments.padEnd(40)} Monolith webhook: SyncShipmentsWithFulfillmentsRequest -> sync Shopify fulfillments
+        POST ${Paths.trackingUpdate.padEnd(40)} Monolith webhook: TrackingUpdateRequest -> Shopify FulfillmentEvent
       """.trimIndent(),
       ContentType.Text.Plain,
       HttpStatusCode.OK,
@@ -65,9 +54,9 @@ class DiagnosticsHandlers(
     call.respond(
       ApiStatusResponse(
         status = "ok",
-        bind = "0.0.0.0:${shopifyConfig.serverPort}",
-        dssBaseUrl = shopifyConfig.dssBaseUrl,
-        oauthRedirectPath = shopifyConfig.oauthRedirectPath,
+        bind = "0.0.0.0:${dssConfig.serverPort}",
+        dssBaseUrl = dssConfig.dssBaseUrl,
+        oauthRedirectPath = dssConfig.oauthRedirectPath,
       ),
     )
   }
@@ -89,8 +78,6 @@ class DiagnosticsHandlers(
         shop = shop.normalizedShopifyHost,
         checks = ApiCheckDetails(
           hasTokenMappedForShop = hasMappedToken,
-          demoRoutesEnabled = dssConfig.dev.enableDemoRoutes,
-          testHarnessEnabled = dssConfig.dev.enableTestHarness,
         ),
       ),
     )
@@ -104,7 +91,7 @@ class DiagnosticsHandlers(
   }
 
   suspend fun handleRedirectUrl(call: ApplicationCall) {
-    call.respondText(shopifyConfig.redirectUrl, ContentType.Text.Plain, HttpStatusCode.OK)
+    call.respondText(dssConfig.redirectUrl, ContentType.Text.Plain, HttpStatusCode.OK)
   }
 }
 
@@ -126,6 +113,4 @@ private data class ApiCheckResponse(
 @Serializable
 private data class ApiCheckDetails(
   val hasTokenMappedForShop: Boolean,
-  val demoRoutesEnabled: Boolean,
-  val testHarnessEnabled: Boolean,
 )

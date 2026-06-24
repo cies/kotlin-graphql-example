@@ -18,27 +18,6 @@ services:
       - "${PORT:-8080}:${PORT:-8080}"
     restart: unless-stopped
 
-  app-harness:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: kotlin-shopify-app:local
-    profiles: ["harness"]
-    env_file:
-      - .env
-    environment:
-      SHOPIFY_APP_CLIENT_ID: ${SHOPIFY_APP_CLIENT_ID:-}
-      SHOPIFY_APP_CLIENT_SECRET: ${SHOPIFY_APP_CLIENT_SECRET:-}
-      PORT: ${PORT:-8080}
-      MONOLITH_BASE_URL: ${MONOLITH_BASE_URL:-}
-      MONOLITH_API_PREFIX: ${MONOLITH_API_PREFIX:-}
-      MONOLITH_API_KEY: ${MONOLITH_API_KEY:-}
-      MONOLITH_CREATE_ORDER_PATH: ${MONOLITH_CREATE_ORDER_PATH:-/orders}
-      ENABLE_TEST_HARNESS: "true"
-    ports:
-      - "${PORT:-8080}:${PORT:-8080}"
-    restart: unless-stopped
-
   app-local-monolith:
     build:
       context: .

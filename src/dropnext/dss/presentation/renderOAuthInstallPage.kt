@@ -2,7 +2,6 @@ package dropnext.dss.presentation
 
 import dropnext.dss.domain.MonolithPersistOutcome
 import dropnext.dss.lib.shopify.graphql.webhookregistration.WebhookSubscriptionStatus
-import dropnext.dss.path.Paths
 import dropnext.graphql.generated.enums.WebhookSubscriptionTopic
 import kotlinx.html.*
 import kotlinx.html.stream.appendHTML
@@ -44,10 +43,6 @@ fun renderOAuthInstallPage(
     if (failedTopics.isNotEmpty()) {
       renderFailedTopics(failedTopics)
     }
-    val demoProductsHref = "${Paths.demoProducts}?shop=$shop"
-    val demoOrderHref = "${Paths.demoOrder}?shop=$shop&id=ORDER_GID"
-    p { a(demoProductsHref) { +demoProductsHref } }
-    p { a(demoOrderHref) { +"${Paths.demoOrder}?shop=$shop&id=..." } }
   }
 }.toString()
 
@@ -56,7 +51,7 @@ private fun FlowContent.renderMonolithPersistBlock(outcome: MonolithPersistOutco
     is MonolithPersistOutcome.Persisted -> p {
       style = "color:green"
       strong { +"Shopify token saved via monolith" }
-      +" (store_id=${outcome.storeId}) and cached in memory — webhooks and routes can use this process immediately."
+      +" (store_id=${outcome.storeId}) and cached in memory - webhooks and routes can use this process immediately."
     }
 
     is MonolithPersistOutcome.Failed -> p {
@@ -64,7 +59,7 @@ private fun FlowContent.renderMonolithPersistBlock(outcome: MonolithPersistOutco
       strong {
         +"Monolith PUT /orders failed"
       }
-      +" (HTTP status ${outcome.httpStatus}). Token is cached in this server’s memory only."
+      +" (HTTP status ${outcome.httpStatus}). Token is cached in this server's memory only."
       if (!outcome.detail.isNullOrBlank()) {
         +" Details: "
         code { +outcome.detail.take(400) }
@@ -81,7 +76,7 @@ private fun FlowContent.renderSubscriptionList(subs: List<WebhookSubscriptionSta
       subs.forEach { sub ->
         li {
           code { +sub.topic.name }
-          +" → "
+          +" -> "
           code { +sub.uri }
           +" (id "
           code { +sub.id }

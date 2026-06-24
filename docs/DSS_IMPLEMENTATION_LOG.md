@@ -12,7 +12,7 @@ This document records what was implemented for the **DropNext Shopify Service (D
 - **Canonical OpenAPI:** `openapi.json` (repo root, **3.0.0**): monolith **`paths`** DTO codegen + **`x-webhooks`** for DSS inbound URL contracts. `openApiGenerate` runs with **`skipValidateSpec=false`**; on Windows the spec path is passed as a **`file:` URI** so `$ref` resolution works.
 - Readable mirror / docs: **`docs/openapi/dss-api.yaml`** (paths + payloads aligned with `openapi.json`).
 - Routing vs handling: monolith-webhook routes wired by `dropnext.dss.routing.installMonolithWebhookRoutes`; **`POST /sync-shipments-with-fulfillments`** = **`SyncShipmentsWithFulfillmentsRequest`** → `MonolithWebhookHandlers.handleSyncShipments`; **`POST /tracking-update`** (and alias **`/tracking-updates`**) = **`TrackingUpdateRequest`** → `MonolithWebhookHandlers.handleTrackingUpdate`. **`/dummy1`/`/dummy2`** removed from routing.
-- When `DSS_API_KEY` is set, monolith-webhook routes require header `X-DSS-Internal-Secret` (see `installMonolithWebhookAuthSecret` in `lib/ktor/plugin/`).
+- Monolith-webhook routes require `Authorization: Bearer <DSS_API_KEY>` (see `installMonolithWebhookAuth` in `lib/ktor/plugin/`).
 
 ## Monolith client
 
@@ -38,6 +38,6 @@ This document records what was implemented for the **DropNext Shopify Service (D
 
 ## Operational / security practices (implemented)
 
-- **Internal API secret:** `X-DSS-Internal-Secret` compared with `MessageDigest.isEqual` (constant-time).
+- **Internal API secret:** `Authorization: Bearer` token compared with `MessageDigest.isEqual` (constant-time).
 - **Outbound HTTP:** No Ktor client body logging; timeouts configured. Monolith error bodies truncated in exceptions.
 - **Errors:** Global handler returns generic “internal error”; webhook logs omit JSON bodies (size only).

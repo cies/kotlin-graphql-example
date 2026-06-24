@@ -25,7 +25,6 @@ import io.ktor.server.response.respond
 private val log = KotlinLogging.logger {}
 
 class ShopifyWebhookHandlers(
-  private val syncOrderOnUpdated: Boolean, // TODO: how to handle this?
   private val shopifyGraphqlServiceFactory: ShopifyGraphqlServiceFactory,
   private val monolithService: MonolithService,
   private val shopifyHmacVerifierService: ShopifyHmacVerifierService,
@@ -62,7 +61,7 @@ class ShopifyWebhookHandlers(
       ShopifyWebhookTopic.OrdersCreate ->
         handleOrderWebhook(shopify, bodyString, topic.raw, syncToMonolith = true)
       ShopifyWebhookTopic.OrdersUpdated ->
-        handleOrderWebhook(shopify, bodyString, topic.raw, syncToMonolith = syncOrderOnUpdated)
+        handleOrderWebhook(shopify, bodyString, topic.raw, syncToMonolith = false)
       is ShopifyWebhookTopic.Other ->
         log.info { "Webhook topic not handled: ${topic.raw}" }
     }

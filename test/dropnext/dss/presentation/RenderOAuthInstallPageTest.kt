@@ -130,13 +130,6 @@ class RenderOAuthInstallPageTest {
   }
 
   @Test
-  fun `demo links include shop query parameter`() {
-    val html = renderBase(shop = "acme.myshopify.com")
-    assert("/demo/products?shop=acme.myshopify.com" in html)
-    assert("/demo/order?shop=acme.myshopify.com" in html)
-  }
-
-  @Test
   fun `robots meta is set to noindex nofollow`() {
     val html = renderBase()
     assert("robots" in html)

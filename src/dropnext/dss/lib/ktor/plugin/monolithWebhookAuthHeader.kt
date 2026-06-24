@@ -27,41 +27,34 @@ fun Route.requireMonolithWebhookAuthHeader(build: Route.() -> Unit) {
 
 /**
  * Installs an [Authentication] provider named [MONOLITH_WEBHOOK_AUTH_SECRET_KEY] that requires every
- * request inside a [requireMonolithWebhookAuthHeader] scope to carry a matching `X-DSS-Internal-Secret`
- * header (constant-time compared against [secret]).
- *
- * When [secret] is `null` or blank, the provider accepts every call — handy for local dev without a configured secret.
- * // TODO: should this be how it works? why the dangerous escape hatch?
+ * request inside a [requireMonolithWebhookAuthHeader] scope to carry
+ * `Authorization: Bearer <secret>` (constant-time compared against [secret]).
  *
  * Handlers never have to call an auth helper themselves:
  * a missing/invalid header short-circuits with `401 unauthorized` JSON before the route handler runs.
  */
-fun Application.installMonolithWebhookAuth(secret: String?) {
+fun Application.installMonolithWebhookAuth(secret: String) {
   install(Authentication) {
     monolithWebhookAuthSecret(secret)
   }
 }
 
-private fun AuthenticationConfig.monolithWebhookAuthSecret(secret: String?) {
+private fun AuthenticationConfig.monolithWebhookAuthSecret(secret: String) {
   register(MonolithWebhookAuthSecretProvider(secret))
 }
 
 private class MonolithWebhookAuthSecretProvider(
-  private val secret: String?,
+  private val secret: String,
 ) : AuthenticationProvider(Config(MONOLITH_WEBHOOK_AUTH_SECRET_KEY)) {
 
   override suspend fun onAuthenticate(context: AuthenticationContext) {
-    if (secret.isNullOrBlank()) {
-      context.principal(MONOLITH_WEBHOOK_AUTH_SECRET_KEY, UserIdPrincipal("dss-no-secret-configured"))
-      return
+    val authHeader = context.call.request.headers["Authorization"].orEmpty()
+    val bearerPrefix = "Bearer "
+    val provided = if (authHeader.startsWith(bearerPrefix)) {
+      authHeader.removePrefix(bearerPrefix)
+    } else {
+      ""
     }
-    // TODO: replace with Bearer...
-
-    // TODO(or better): replace shared-secret comparison with Stripe-style HMAC verification:
-    // monolith signs (timestamp + body) with the shared key; DSS verifies the signature
-    // and rejects timestamps outside a small skew window. Avoids leaking the secret
-    // over the wire even once, and gives us replay protection for free.
-    val provided = context.call.request.headers["X-DSS-Internal-Secret"].orEmpty()
     if (constantTimeEquals(secret, provided)) {
       context.principal(MONOLITH_WEBHOOK_AUTH_SECRET_KEY, UserIdPrincipal("dss-internal"))
     } else {
@@ -72,5 +65,7 @@ private class MonolithWebhookAuthSecretProvider(
     }
   }
 
+  // Follow-up hardening option: use Stripe-style HMAC signatures with timestamp + body
+  // to add replay protection and avoid sending the shared secret in plaintext.
   private class Config(name: String) : AuthenticationProvider.Config(name)
 }
