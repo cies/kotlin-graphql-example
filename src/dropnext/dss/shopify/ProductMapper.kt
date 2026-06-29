@@ -3,6 +3,7 @@ package dropnext.dss.shopify
 import dropnext.dss.lib.monolith.dto.generated.ProductStatus
 import dropnext.dss.lib.monolith.dto.generated.ProductVariantItem
 import dropnext.dss.lib.monolith.dto.generated.SelectedOption
+import dropnext.dss.shopify.shopifyMoneyAmountForWire
 import dropnext.graphql.generated.getproductbyid.Media
 import dropnext.graphql.generated.getproductbyid.MediaImage
 import dropnext.graphql.generated.getproductbyid.Product
@@ -22,7 +23,6 @@ fun Product.toProductVariantItems(currencyCode: String): List<ProductVariantItem
   return variants.edges.mapNotNull { variantEdge ->
     val v = variantEdge.node
     val variantLegacyId = v.legacyResourceId.toLongOrNull() ?: return@mapNotNull null
-    val priceMinor = shopifyDecimalToMinorUnits(v.price)
     ProductVariantItem(
       productVariantId = variantLegacyId,
       productId = productLegacyId,
@@ -41,7 +41,7 @@ fun Product.toProductVariantItems(currencyCode: String): List<ProductVariantItem
       title = v.title,
       sku = v.sku,
       barcode = v.barcode,
-      priceInMinorUnits = priceMinor,
+      priceAsString = shopifyMoneyAmountForWire(v.price),
       priceCurrency = currencyCode,
       selectedOptions = v.selectedOptions.map { opt -> SelectedOption(opt.name, opt.value) },
       imageUrl = v.variantImageUrlOrNull(),

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="MonolithPathsGeneratorTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-06-29T09:11:31.950Z" hostname="DESKTOP-3PNBDQF" time="0.12">
+  <properties/>
+  <testcase name="generate rejects absolute server URLs()" classname="MonolithPathsGeneratorTest" time="0.087"/>
+  <testcase name="generate writes OutBoundMonolithPaths from a minimal valid spec()" classname="MonolithPathsGeneratorTest" time="0.009"/>
+  <testcase name="openApiPathToConstName converts kebab-case paths to camelCase constants()" classname="MonolithPathsGeneratorTest" time="0.002"/>
+  <testcase name="generate rejects empty paths object()" classname="MonolithPathsGeneratorTest" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -6,7 +6,9 @@ package dropnext.dss.path
  * log strings, UI text, and the `/webhooks/shopify` callback URL we register with Shopify.
  *
  * Canonical contract for DSS-internal endpoints: repo root **`openapi.json`**.
- * Keep these in sync with the spec — see [dropnext.dss.lib.monolith.OutBoundMonolithPaths] and [dropnext.dss.lib.shopify.oauth.OutBoundShopifyOAuthPaths]
+ * Keep these in sync with the spec — [dropnext.dss.lib.monolith.OutBoundMonolithPaths] is generated
+ * from `monolith-dss-openapi.json`; see [dropnext.dss.lib.shopify.oauth.OutBoundShopifyOAuthPaths]
+ * for other outbound paths.
  * for the outbound counterparts.
  */
 @Suppress("ConstPropertyName") // Less shouty field names.

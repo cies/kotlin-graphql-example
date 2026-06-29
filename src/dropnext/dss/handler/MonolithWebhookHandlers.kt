@@ -85,8 +85,8 @@ class MonolithWebhookHandlers(
       return
     }
     when (val result = block(shopify)) {
-      // `Unit` is the convention for "no response body" workflows (e.g. sync-shipments, where
-      // the monolith only checks the HTTP status). Anything else gets JSON-serialized.
+      // Workflows that return no body use `Unit` (e.g. legacy no-op responses). Typed responses
+      // (e.g. sync-shipments `new_fulfillment_ids`, tracking-update `fulfillment_event_id`) are JSON-serialized.
       is FulfillmentResult.Ok ->
         if (result.value === Unit) call.respond(HttpStatusCode.OK)
         else call.respond(result.value)

@@ -659,13 +659,17 @@ interface Publishable {
   """
   The list of resources that are either published or staged to be published to a
   [publication](https://shopify.dev/docs/api/admin-graphql/latest/objects/Publication).
+  By default, only publications to `APP` catalog types are returned.
+  For `Product` and `ProductVariant`, use the `catalogType` argument to retrieve
+  publications for other catalog types, such as `COMPANY_LOCATION` (B2B) or `MARKET`.
+  `Collection` only supports publications to `APP` catalog types.
   """
   resourcePublicationsV2(
     "The elements that come after the specified [cursor](https://shopify.dev/api/usage/pagination-graphql)."
     after: String,
     "The elements that come before the specified [cursor](https://shopify.dev/api/usage/pagination-graphql)."
     before: String,
-    "Filter publications by catalog type."
+    "Filter publications by catalog type. When not specified, defaults to APP. Has no effect on Collection, which only supports APP."
     catalogType: CatalogType,
     "The first `n` elements from the [paginated list](https://shopify.dev/api/usage/pagination-graphql)."
     first: Int,
@@ -1140,12 +1144,12 @@ type AbandonedCheckout implements Navigable & Node {
   abandonedCheckoutUrl: URL!
   """
   The billing address provided by the buyer.
-  Null if the user did not provide a billing address.
+  Null if the user didn't provide a billing address.
   """
   billingAddress: MailingAddress
   """
   The date and time when the buyer completed the checkout.
-  Null if the checkout has not been completed.
+  Null if the checkout hasn't been completed.
   """
   completedAt: DateTime
   "The date and time when the checkout was created."
@@ -1184,7 +1188,7 @@ type AbandonedCheckout implements Navigable & Node {
   note: String!
   """
   The shipping address to where the line items will be shipped.
-  Null if the user did not provide a shipping address.
+  Null if the user didn't provide a shipping address.
   """
   shippingAddress: MailingAddress
   "The sum of all items in the checkout, including discounts but excluding shipping, taxes and tips."
@@ -1625,7 +1629,7 @@ type App implements Node {
   installUrl: URL
   """
   Corresponding AppInstallation for this shop and App.
-  Returns null if the App is not installed.
+  Returns null if the App isn't installed.
   """
   installation: AppInstallation
   "Whether the app is the [post purchase](https://shopify.dev/apps/checkout/post-purchase) app in use."
@@ -4782,7 +4786,7 @@ type Channel implements Node {
     | published_at | time | Filter by the date and time when the product was published to the online store and other sales channels. | | | - `published_at:>2020-10-21T23:39:20Z`<br/> - `published_at:<now`<br/> - `published_at:<=2024` |
     | published_status | string | Filter resources by their visibility and publication state on a channel. Online store channel filtering: - `online_store_channel`: Returns all resources in the online store channel, regardless of publication status. - `published`/`visible`: Returns resources that are published to the online store. - `unpublished`: Returns resources that are not published to the online store. Channel-specific filtering using a channel ID, channel handle, [channel `app` ID](https://shopify.dev/api/admin-graphql/latest/objects/Channel#app-price) (`Channel.app.id`), or app handle with suffixes: - `{id_or_handle}-published`: Returns resources published to the specified channel. - `{id_or_handle}-visible`: Same as `{id_or_handle}-published` (kept for backwards compatibility). - `{id_or_handle}-intended`: Returns resources added to the channel but not yet published. - `{id_or_handle}-hidden`: Returns resources not added to the channel or not published. Other: - `unavailable`: Returns resources not published to any channel. | - `online_store_channel`<br/> - `published`<br/> - `visible`<br/> - `unpublished`<br/> - `* {channel_id_or_handle}-published`<br/> - `* {channel_id_or_handle}-visible`<br/> - `* {channel_id_or_handle}-intended`<br/> - `* {channel_id_or_handle}-hidden`<br/> - `* {channel_app_id_or_handle}-published`<br/> - `* {channel_app_id_or_handle}-visible`<br/> - `* {channel_app_id_or_handle}-intended`<br/> - `* {channel_app_id_or_handle}-hidden`<br/> - `unavailable` | | - `published_status:online_store_channel`<br/> - `published_status:published`<br/> - `published_status:580111-published`<br/> - `published_status:580111-hidden`<br/> - `published_status:my-channel-handle-published`<br/> - `published_status:unavailable` |
     | sku | string | Filter by the product variant [`sku`](https://shopify.dev/api/admin-graphql/latest/objects/ProductVariant#field-sku) field. [Learn more about SKUs](https://help.shopify.com/manual/products/details/sku). | | | - `sku:XYZ-12345` |
-    | status | string | Filter by a comma-separated list of statuses. You can use statuses to manage inventory. Shopify only displays products with an `ACTIVE` status in online stores, sales channels, and apps. | - `active`<br/> - `archived`<br/> - `draft` | `active` | - `status:active,draft` |
+    | status | string | Filter by a comma-separated list of statuses. You can use statuses to manage inventory. Shopify only displays products with an `ACTIVE` status in online stores, sales channels, and apps. | - `active`<br/> - `archived`<br/> - `draft`<br/> - `unlisted` | `active` | - `status:active,draft` |
     | tag | string | Filter objects by the `tag` field. | | | - `tag:my_tag` |
     | tag_not | string | Filter by objects that don’t have the specified tag. | | | - `tag_not:my_tag` |
     | title | string | Filter by the product [`title`](https://shopify.dev/api/admin-graphql/latest/objects/Product#field-title) field. | | | - `title:The Minimal Snowboard` |
@@ -4834,7 +4838,7 @@ type ChannelCreateUserError implements DisplayableError {
 """
 A specific selling surface within a [sales channel](https://shopify.dev/docs/apps/build/sales-channels) platform. A channel definition identifies where products can be sold. Definitions can represent entire platforms (like Facebook or TikTok) or specific sales channels within those platforms, such as Instagram Shops, Instagram Shopping, or TikTok Live.
 
-Each definition includes the parent [`Channel`](https://shopify.dev/docs/api/admin-graphql/latest/objects/Channel) name and subchannel name to indicate the selling surface hierarchy. The marketplace flag identifies whether this surface represents a marketplace channel such as shops on Facebook, Instagram, or Buy on Google.
+Each definition includes the parent [`Channel`](https://shopify.dev/docs/api/admin-graphql/latest/objects/Channel) name and subchannel name to indicate the selling surface hierarchy.
 """
 type ChannelDefinition implements Node {
   "Name of the channel that this sub channel belongs to."
@@ -6455,11 +6459,6 @@ Collections serve as the primary way to categorize and display products across
 [online stores](https://shopify.dev/docs/apps/build/online-store),
 [sales channels](https://shopify.dev/docs/apps/build/sales-channels), and marketing campaigns.
 
-There are two types of collections:
-
-- **[Custom (manual) collections](https://help.shopify.com/manual/products/collections/manual-shopify-collection)**: You specify the products to include in a collection.
-- **[Smart (automated) collections](https://help.shopify.com/manual/products/collections/automated-collections)**: You define rules, and products matching those rules are automatically included in the collection.
-
 The `Collection` object provides information to:
 
 - Organize products by category, season, or promotion.
@@ -6478,7 +6477,7 @@ and can be customized with [template suffixes](https://shopify.dev/docs/storefro
 for unique layouts. They also support advanced features like translated content, resource feedback,
 and contextual publication for location-based catalogs.
 
-Learn about [using metafields with smart collections](https://shopify.dev/docs/apps/build/custom-data/metafields/use-metafield-capabilities).
+Learn about [using metafields with collection conditions](https://shopify.dev/docs/apps/build/custom-data/metafields/use-metafield-capabilities).
 """
 type Collection implements HasEvents & HasMetafieldDefinitions & HasMetafields & HasPublishedTranslations & Node & Publishable {
   "Collection duplicate operations involving this collection, either as a source (copying products from this collection to another) or a target (copying products to this collection from another)."
@@ -6710,13 +6709,17 @@ type Collection implements HasEvents & HasMetafieldDefinitions & HasMetafields &
   """
   The list of resources that are either published or staged to be published to a
   [publication](https://shopify.dev/docs/api/admin-graphql/latest/objects/Publication).
+  By default, only publications to `APP` catalog types are returned.
+  For `Product` and `ProductVariant`, use the `catalogType` argument to retrieve
+  publications for other catalog types, such as `COMPANY_LOCATION` (B2B) or `MARKET`.
+  `Collection` only supports publications to `APP` catalog types.
   """
   resourcePublicationsV2(
     "The elements that come after the specified [cursor](https://shopify.dev/api/usage/pagination-graphql)."
     after: String,
     "The elements that come before the specified [cursor](https://shopify.dev/api/usage/pagination-graphql)."
     before: String,
-    "Filter publications by catalog type."
+    "Filter publications by catalog type. When not specified, defaults to APP. Has no effect on Collection, which only supports APP."
     catalogType: CatalogType,
     "The first `n` elements from the [paginated list](https://shopify.dev/api/usage/pagination-graphql)."
     first: Int,
@@ -6727,7 +6730,7 @@ type Collection implements HasEvents & HasMetafieldDefinitions & HasMetafields &
     "Reverse the order of the underlying list."
     reverse: Boolean = false
   ): ResourcePublicationV2Connection!
-  "For a smart (automated) collection, specifies the rules that determine whether a product is included."
+  "Specifies the rules that determine whether a product is included."
   ruleSet: CollectionRuleSet
   "If the default SEO fields for page title and description have been modified, contains the modified information."
   seo: SEO!
@@ -6991,19 +6994,19 @@ type CollectionRuleCategoryCondition {
 }
 
 """
-Defines the available columns and relationships that can be used when creating rules for smart collections. This provides the schema for building automated collection logic based on product attributes.
+Defines the available columns and relationships that can be used when creating rules for collections. This provides the schema for building automated collection logic based on product attributes.
 
 For example, merchants can create rules like "product type equals 'Shirts'" or "vendor contains 'Nike'" using the conditions defined in this object to automatically populate collections.
 
 Use `CollectionRuleConditions` to:
-- Discovering valid field options for smart collection rule interfaces
+- Discovering valid field options for collection rule interfaces
 - Understanding which conditions are available for automated collections
 - Exploring available product attributes for collection automation
 - Learning about proper field relationships for rule implementation
 
-The conditions define which product fields can be used in smart collection rules and what types of comparisons are allowed for each field.
+The conditions define which product fields can be used in collection rules and what types of comparisons are allowed for each field.
 
-Learn more about [smart collections](https://shopify.dev/docs/api/admin-graphql/latest/objects/Collection).
+Learn more about [collections with conditions](https://shopify.dev/docs/api/admin-graphql/latest/objects/Collection).
 """
 type CollectionRuleConditions {
   "Allowed relations of the rule."
@@ -7016,7 +7019,7 @@ type CollectionRuleConditions {
   ruleType: CollectionRuleColumn!
 }
 
-"Identifies a metafield definition used as a rule for the smart collection."
+"Identifies a metafield definition used as a rule for the collection."
 type CollectionRuleMetafieldCondition {
   "The metafield definition associated with the condition."
   metafieldDefinition: MetafieldDefinition!
@@ -7878,10 +7881,7 @@ type CompanyContactRevokeRolesPayload {
 type CompanyContactRole implements Node {
   "A globally-unique ID."
   id: ID!
-  """
-  The name of a role.
-  For example, `admin` or `buyer`.
-  """
+  "The name of a role. For example, `admin` or `buyer`."
   name: String!
   "A note for the role."
   note: String
@@ -9401,13 +9401,16 @@ type CustomerMergeError {
 type CustomerMergePayload {
   "The asynchronous job for merging the customers."
   job: Job
-  "The ID of the customer resulting from the merge."
+  "The ID of the customer that's kept after the merge. Treat this ID as authoritative."
   resultingCustomerId: ID
   "The list of errors that occurred from executing the mutation."
   userErrors: [CustomerMergeUserError!]!
 }
 
-"A preview of the results of a customer merge request."
+"""
+A preview of the results of a customer merge request. Use `resultingCustomerId` to check which customer
+would be kept before running `customerMerge`.
+"""
 type CustomerMergePreview {
   "The fields that can be used to override the default fields."
   alternateFields: CustomerMergePreviewAlternateFields
@@ -9417,7 +9420,7 @@ type CustomerMergePreview {
   customerMergeErrors: [CustomerMergeError!]
   "The fields that will be kept if the two customers are merged."
   defaultFields: CustomerMergePreviewDefaultFields
-  "The resulting customer ID if the two customers are merged."
+  "The ID of the customer that would be kept if the two customers were merged."
   resultingCustomerId: ID
 }
 
@@ -9552,7 +9555,7 @@ type CustomerMergeRequest {
   customerMergeErrors: [CustomerMergeError!]!
   "The UUID of the merge job."
   jobId: ID
-  "The ID of the customer resulting from the merge."
+  "The ID of the customer that was kept after the merge. Treat this ID as authoritative."
   resultingCustomerId: ID!
   "The status of the customer merge request."
   status: CustomerMergeRequestStatus!
@@ -9835,24 +9838,24 @@ type CustomerPaypalBillingAgreement {
 "A phone number."
 type CustomerPhoneNumber {
   "The source from which the SMS marketing information for the customer was collected."
-  marketingCollectedFrom: CustomerConsentCollectedFrom
+  marketingCollectedFrom: CustomerConsentCollectedFrom @deprecated(reason : "Use `smsMarketingConsent.collectedFrom` instead.")
   """
   The marketing subscription opt-in level, as described by the M3AAWG best practices guidelines,
   received when the marketing consent was updated.
   """
-  marketingOptInLevel: CustomerMarketingOptInLevel
+  marketingOptInLevel: CustomerMarketingOptInLevel @deprecated(reason : "Use `smsMarketingConsent.optInLevel` instead.")
   "Whether the customer has subscribed to SMS marketing material."
-  marketingState: CustomerSmsMarketingState!
+  marketingState: CustomerSmsMarketingState! @deprecated(reason : "Use `smsMarketingConsent.state` instead.")
   """
   The date and time at which the marketing consent was updated.
   
   No date is provided if the email address never updated its marketing consent.
   """
-  marketingUpdatedAt: DateTime
+  marketingUpdatedAt: DateTime @deprecated(reason : "Use `smsMarketingConsent.updatedAt` instead.")
   "A customer's phone number."
   phoneNumber: String!
   "The location where the customer consented to receive marketing material by SMS."
-  sourceLocation: Location
+  sourceLocation: Location @deprecated(reason : "Use `smsMarketingConsent.sourceLocation` instead.")
 }
 
 "Return type for `customerRemoveTaxExemptions` mutation."
@@ -13895,7 +13898,7 @@ type DraftOrderDiscountNotAppliedWarning implements DraftOrderWarning {
   "The warning message."
   message: String!
   "The price rule that can't be applied."
-  priceRule: PriceRule
+  priceRule: PriceRule @deprecated(reason : "Use discountCode and discountTitle instead. This field will be removed in 2026-10.")
 }
 
 "Return type for `draftOrderDuplicate` mutation."
@@ -16192,6 +16195,7 @@ type FulfillmentTrackingInfo {
     * Sendle
     * SF Express
     * SFC Fulfillment
+    * ShipBob
     * SHREE NANDAN COURIER
     * Singapore Post
     * Southwest Air Cargo
@@ -18803,7 +18807,7 @@ type MailingAddress implements Node {
   "The time zone of the address."
   timeZone: String
   """
-  The validation status that is leveraged by the address validation feature in the Shopify Admin.
+  The validation status that's leveraged by the address validation feature in the Shopify Admin.
   See ["Validating addresses in your Shopify admin"](https://help.shopify.com/manual/fulfillment/managing-orders/validating-order-address) for more details.
   """
   validationResultSummary: MailingAddressValidationResult
@@ -21481,7 +21485,7 @@ type Mutation {
   """
   Creates and runs a [bulk operation](https://shopify.dev/docs/api/admin-graphql/latest/objects/BulkOperation) to import data asynchronously. This mutation executes a specified GraphQL mutation multiple times using input data from a [JSONL](http://jsonlines.org/) file that you've uploaded to Shopify.
   
-  The operation processes each line in your JSONL file as a separate mutation execution. The operation delivers results in a JSONL file when it completes. You can run one bulk mutation operation at a time per shop, though a [`bulkOperationRunQuery`](https://shopify.dev/docs/api/admin-graphql/latest/mutations/bulkoperationrunquery) operation can run simultaneously.
+  The operation processes each line in your JSONL file as a separate mutation execution. The operation delivers results in a JSONL file when it completes. Bulk mutation operations and [`bulkOperationRunQuery`](https://shopify.dev/docs/api/admin-graphql/latest/mutations/bulkoperationrunquery) operations can run at the same time per shop. The number of concurrent operations that an app can run depends on the API version. For the applicable concurrency limits, refer to the [bulk operations guide](https://shopify.dev/docs/api/usage/bulk-operations/imports).
   
   Learn more about [bulk importing data](https://shopify.dev/docs/api/usage/bulk-operations/imports).
   """
@@ -21496,7 +21500,7 @@ type Mutation {
   """
   Creates and runs a [bulk operation](https://shopify.dev/docs/api/admin-graphql/latest/objects/BulkOperation) to fetch data asynchronously. The operation processes your GraphQL query in the background and returns results in a [JSONL](http://jsonlines.org/) file when complete.
   
-  Apps can run one bulk query operation and one bulk mutation operation at a time per shop. The query must include at least one connection field and supports up to five connections with a maximum nesting depth of two levels.
+  Bulk query and bulk mutation operations can run at the same time per shop. The number of concurrent operations that an app can run depends on the API version. For the applicable concurrency limits, refer to the [bulk operations guide](https://shopify.dev/docs/api/usage/bulk-operations/queries). The query must include at least one connection field and supports up to five connections with a maximum nesting depth of two levels.
   
   > Note: Results remain available for seven days after completion.
   
@@ -21751,12 +21755,10 @@ type Mutation {
   
   The mutation processes multiple product additions and returns success status along with any errors encountered during the operation. Products are added to the collection while preserving existing collection settings.
   
-  This operation only works with manual collections where merchants explicitly choose which products to include. It will return an error if used with smart collections that automatically include products based on conditions.
-  
   Learn more about [collection management](https://shopify.dev/docs/api/admin-graphql/latest/objects/Collection).
   """
   collectionAddProducts(
-    "The ID of the collection that's being updated. This can't be a smart collection."
+    "The ID of the collection that's being updated."
     id: ID!,
     """
     The IDs of the products that are being added to the collection.
@@ -21764,7 +21766,7 @@ type Mutation {
     then an error is raised and no products are added.
     """
     productIds: [ID!]!
-  ): CollectionAddProductsPayload
+  ): CollectionAddProductsPayload @deprecated(reason : "Use `collectionUpdate` with inclusion.selectionsToAdd instead.")
   """
   Adds products to a [`Collection`](https://shopify.dev/docs/api/admin-graphql/latest/objects/Collection) asynchronously and returns a [`Job`](https://shopify.dev/docs/api/admin-graphql/latest/objects/Job) to track the operation's progress. This mutation handles large product sets efficiently by processing them in the background.
   
@@ -21778,7 +21780,7 @@ type Mutation {
     id: ID!,
     "The IDs of the products that are being added to the collection. If the collection's sort order is manual, the products will be added in the order in which they are provided."
     productIds: [ID!]!
-  ): CollectionAddProductsV2Payload
+  ): CollectionAddProductsV2Payload @deprecated(reason : "Use `collectionUpdate` with inclusion.selectionsToAdd instead.")
   """
   Creates a [collection](https://shopify.dev/docs/api/admin-graphql/latest/objects/Collection)
   to group [products](https://shopify.dev/docs/api/admin-graphql/latest/objects/Product) together
@@ -21786,24 +21788,35 @@ type Mutation {
   other [sales channels](https://shopify.dev/docs/apps/build/sales-channels).
   For example, an athletics store might create different collections for running attire, shoes, and accessories.
   
-  There are two types of collections:
-  
-  - **[Custom (manual) collections](https://help.shopify.com/manual/products/collections/manual-shopify-collection)**: You specify the products to include in a collection.
-  - **[Smart (automated) collections](https://help.shopify.com/manual/products/collections/automated-collections)**: You define rules, and products matching those rules are automatically
-  included in the collection.
-  
   Use the `collectionCreate` mutation when you need to:
   
   - Create a new collection for a product launch or campaign
   - Organize products by category, season, or promotion
-  - Automate product grouping using rules (for example, by tag, type, or price)
+  - Automate product grouping using conditions (for example, by tag, type, or price)
+  
+  Collections can include products manually and can also include products automatically based on rules, sources,
+  or conditions.
+  
+  **Defining a collection's membership**
+  
+  Define membership with `sources` on the `collection` argument
+  ([`CollectionCreateInput`](https://shopify.dev/docs/api/admin-graphql/latest/input-objects/CollectionCreateInput)).
+  Each source adds products through `conditions` (such as product tag, title, or metafield—see
+  [`CollectionSourceInclusionConditionInput`](https://shopify.dev/docs/api/admin-graphql/latest/input-objects/CollectionSourceInclusionConditionInput)
+  for the full list) and through manual `selections`.
+  
+  > Note:
+  > The `input` argument and its `ruleSet` field are deprecated. Existing integrations should migrate to
+  `collection` and `sources` — a `ruleSet` rule maps to an equivalent source `condition` (for example, a
+  tag rule becomes a `productTag` condition). If both `collection` and `input` are provided, `collection`
+  is used.
   
   > Note:
   > The created collection is unpublished by default. To make it available to customers,
   use the [`publishablePublish`](https://shopify.dev/docs/api/admin-graphql/latest/mutations/publishablePublish)
   mutation after creation.
   
-  Learn more about [using metafields with smart collections](https://shopify.dev/docs/apps/build/custom-data/metafields/use-metafield-capabilities).
+  Learn more about [using metafields with collection conditions](https://shopify.dev/docs/apps/build/custom-data/metafields/use-metafield-capabilities).
   """
   collectionCreate(
     "The properties to use when creating the collection."
@@ -21849,7 +21862,7 @@ type Mutation {
     input: CollectionPublishInput!
   ): CollectionPublishPayload @deprecated(reason : "Use `publishablePublish` instead.")
   """
-  Removes multiple products from a collection in a single operation. This mutation can process large product sets (up to 250 products) and may take significant time to complete for collections with many products.
+  Removes multiple manually included products from a collection in a single operation. This mutation can process large product sets (up to 250 products) and may take significant time to complete for collections with many products.
   
   For example, when ending a seasonal promotion, merchants can remove all sale items from a "Summer Clearance" collection at once rather than editing each product individually.
   
@@ -21863,11 +21876,11 @@ type Mutation {
   Learn more about [collection management](https://shopify.dev/docs/api/admin-graphql/latest/objects/Collection).
   """
   collectionRemoveProducts(
-    "The ID of the collection to remove products from. The ID must reference an existing manual collection."
+    "The ID of the collection to remove products from. The ID must reference an existing collection."
     id: ID!,
     "The IDs of products to remove from the collection. The mutation doesn't validate that the products belong to the collection or whether the products exist."
     productIds: [ID!]!
-  ): CollectionRemoveProductsPayload
+  ): CollectionRemoveProductsPayload @deprecated(reason : "Use `collectionUpdate` with inclusions.selectionsToRemove instead.")
   """
   Asynchronously reorders products within a specified collection. Instead of returning an updated collection, this mutation returns a job, which should be [polled](https://shopify.dev/api/admin-graphql/latest/queries/job). The [`Collection.sortOrder`](https://shopify.dev/api/admin-graphql/latest/objects/Collection#field-collection-sortorder) must be `MANUAL`.
   
@@ -21914,21 +21927,19 @@ type Mutation {
   
   - Updating collection details, like title, description, or image
   - Modifying SEO metadata for better search visibility
-  - Changing which products are included (using rule updates for smart collections)
-  - Publishing or unpublishing collections across different sales channels
+  - Changing which products are included in a collection by updating its rules, sources, or conditions
   - Updating custom data using [metafields](https://shopify.dev/docs/apps/build/custom-data/metafields)
   
-  There are two types of collections with different update capabilities:
-  
-  - **[Custom (manual) collections](https://help.shopify.com/manual/products/collections/manual-shopify-collection)**: You can update collection properties, but rule sets can't be modified since products are manually selected.
-  - **[Smart (automated) collections](https://help.shopify.com/manual/products/collections/automated-collections)**: You can update both collection properties and the rules that automatically determine which products are included.
-  When updating [rule sets](https://shopify.dev/docs/api/admin-graphql/latest/objects/CollectionRuleConditions) for smart collections, the operation might be processed asynchronously. In these cases, the mutation returns a [`job`](https://shopify.dev/docs/api/admin-graphql/latest/objects/Job) object that you can use to track the progress of the update.
+  Collections can include products manually and can also include products automatically based on rules, sources,
+  or conditions. When product membership is updated through rules, sources, or conditions, the operation might
+  be processed asynchronously. In these cases, the mutation returns a [`job`](https://shopify.dev/docs/api/admin-graphql/latest/objects/Job) object
+  that you can use to track the progress of the update.
   
   To publish or unpublish collections to specific sales channels, use the dedicated
   [`publishablePublish`](https://shopify.dev/docs/api/admin-graphql/latest/mutations/publishablePublish) and
   [`publishableUnpublish`](https://shopify.dev/docs/api/admin-graphql/latest/mutations/publishableUnpublish) mutations.
   
-  Learn more about [using metafields with smart collections](https://shopify.dev/docs/apps/build/custom-data/metafields/use-metafield-capabilities).
+  Learn more about [using metafields with collection conditions](https://shopify.dev/docs/apps/build/custom-data/metafields/use-metafield-capabilities).
   """
   collectionUpdate(
     "The updated properties for the collection."
@@ -22360,13 +22371,27 @@ type Mutation {
     "The ID of the customer that the URL is generated for."
     customerId: ID!
   ): CustomerGenerateAccountActivationUrlPayload
-  "Merges two customers."
+  """
+  Merges two customers.
+  
+  The `customerOneId` and `customerTwoId` arguments don't guarantee which customer is kept. Shopify
+  selects the resulting customer in this order:
+  1. If `overrideFields.customerIdOfEmailToKeep` is provided and valid, then the selected customer is kept.
+  2. If exactly one customer has an email address, then that customer is kept.
+  3. If both customers have email addresses, then account state and email marketing consent determine
+     the customer that's kept: an `enabled` account wins over other account states; otherwise, an
+     `invited` account can win when consent doesn't already prefer `subscribed` or `pending`; otherwise
+     the consent result is used. If those rules don't prefer either customer, then `customerTwoId` is kept.
+  4. If neither customer has an email address, then `customerTwoId` is kept.
+  
+  Use `customerMergePreview` and `resultingCustomerId` to check which customer will be kept before merging.
+  """
   customerMerge(
-    "The ID of the first customer that will be merged."
+    "The ID of one customer to merge. This customer isn't guaranteed to be kept."
     customerOneId: ID!,
-    "The ID of the second customer that will be merged."
+    "The ID of another customer to merge. This customer is kept when neither customer has an email address."
     customerTwoId: ID!,
-    "The fields to override the default customer merge rules."
+    "The field-specific overrides for default customer merge rules."
     overrideFields: CustomerMergeOverrideFields
   ): CustomerMergePayload
   """
@@ -24561,7 +24586,7 @@ type Mutation {
   marketingActivityCreateExternal(
     "The input field for creating an external marketing activity."
     input: MarketingActivityCreateExternalInput!
-  ): MarketingActivityCreateExternalPayload
+  ): MarketingActivityCreateExternalPayload @deprecated(reason : "Use `marketingActivityUpsertExternal` instead.")
   "Deletes an external marketing activity."
   marketingActivityDeleteExternal(
     "The ID of the marketing activity. A marketing activity ID or remote ID must be provided."
@@ -27393,17 +27418,27 @@ type Mutation {
     "The input fields required to update the URL redirect."
     urlRedirect: UrlRedirectInput!
   ): UrlRedirectUpdatePayload
-  "Creates a validation."
+  """
+  Creates a cart and checkout validation: a server-side rule enforced before a customer can complete checkout. Each validation is powered by a cart and checkout validation function that you provide using `functionId` or `functionHandle`.
+  
+  Use `validationCreate` to apply custom rules at checkout, such as limiting item quantities, enforcing order minimums or maximums, or blocking checkout for restricted shipping addresses. Validations run on Shopify's servers and are enforced throughout checkout, so they can't be bypassed by the client.
+  
+  Validation errors always block checkout progress. The `blockOnFailure` field controls whether runtime exceptions, such as timeouts, also block checkout.
+  """
   validationCreate(
     "The input fields for a new validation."
     validation: ValidationCreateInput!
   ): ValidationCreatePayload
-  "Deletes a validation."
+  "Deletes a cart and checkout validation, removing its rule from the shop's checkout. Once deleted, its cart and checkout validation function no longer runs during checkout."
   validationDelete(
     "The ID representing the installed validation."
     id: ID!
   ): ValidationDeletePayload
-  "Update a validation."
+  """
+  Updates a cart and checkout validation. Use `validationUpdate` to rename it, toggle whether it's enabled at checkout, change its `blockOnFailure` behavior, or update its metafields.
+  
+  Validation errors always block checkout progress. The `blockOnFailure` field controls whether runtime exceptions, such as timeouts, also block checkout.
+  """
   validationUpdate(
     "The ID representing the validation to update."
     id: ID!,
@@ -27786,7 +27821,7 @@ type Order implements CommentEventSubject & HasEvents & HasLocalizationExtension
   Details about the sales channel that created the order, such as the [channel app type](https://shopify.dev/docs/api/admin-graphql/latest/objects/channel#field-Channel.fields.channelType)
   and [channel name](https://shopify.dev/docs/api/admin-graphql/latest/objects/ChannelDefinition#field-ChannelDefinition.fields.channelName), which helps to track order sources.
   """
-  channelInformation: ChannelInformation
+  channelInformation: ChannelInformation @deprecated(reason : "Use `attribution` instead.")
   "The IP address of the customer who placed the order. Useful for fraud detection and geographic analysis."
   clientIp: String
   "Whether an order is closed. An order is considered closed if all its line items have been fulfilled or canceled, and all financial transactions are complete."
@@ -31330,7 +31365,7 @@ type Product implements HasEvents & HasMetafieldDefinitions & HasMetafields & Ha
     | published_at | time | Filter by the date and time when the product was published to the online store and other sales channels. | | | - `published_at:>2020-10-21T23:39:20Z`<br/> - `published_at:<now`<br/> - `published_at:<=2024` |
     | published_status | string | Filter resources by their visibility and publication state on a channel. Online store channel filtering: - `online_store_channel`: Returns all resources in the online store channel, regardless of publication status. - `published`/`visible`: Returns resources that are published to the online store. - `unpublished`: Returns resources that are not published to the online store. Channel-specific filtering using a channel ID, channel handle, [channel `app` ID](https://shopify.dev/api/admin-graphql/latest/objects/Channel#app-price) (`Channel.app.id`), or app handle with suffixes: - `{id_or_handle}-published`: Returns resources published to the specified channel. - `{id_or_handle}-visible`: Same as `{id_or_handle}-published` (kept for backwards compatibility). - `{id_or_handle}-intended`: Returns resources added to the channel but not yet published. - `{id_or_handle}-hidden`: Returns resources not added to the channel or not published. Other: - `unavailable`: Returns resources not published to any channel. | - `online_store_channel`<br/> - `published`<br/> - `visible`<br/> - `unpublished`<br/> - `* {channel_id_or_handle}-published`<br/> - `* {channel_id_or_handle}-visible`<br/> - `* {channel_id_or_handle}-intended`<br/> - `* {channel_id_or_handle}-hidden`<br/> - `* {channel_app_id_or_handle}-published`<br/> - `* {channel_app_id_or_handle}-visible`<br/> - `* {channel_app_id_or_handle}-intended`<br/> - `* {channel_app_id_or_handle}-hidden`<br/> - `unavailable` | | - `published_status:online_store_channel`<br/> - `published_status:published`<br/> - `published_status:580111-published`<br/> - `published_status:580111-hidden`<br/> - `published_status:my-channel-handle-published`<br/> - `published_status:unavailable` |
     | sku | string | Filter by the product variant [`sku`](https://shopify.dev/api/admin-graphql/latest/objects/ProductVariant#field-sku) field. [Learn more about SKUs](https://help.shopify.com/manual/products/details/sku). | | | - `sku:XYZ-12345` |
-    | status | string | Filter by a comma-separated list of statuses. You can use statuses to manage inventory. Shopify only displays products with an `ACTIVE` status in online stores, sales channels, and apps. | - `active`<br/> - `archived`<br/> - `draft` | `active` | - `status:active,draft` |
+    | status | string | Filter by a comma-separated list of statuses. You can use statuses to manage inventory. Shopify only displays products with an `ACTIVE` status in online stores, sales channels, and apps. | - `active`<br/> - `archived`<br/> - `draft`<br/> - `unlisted` | `active` | - `status:active,draft` |
     | tag | string | Filter objects by the `tag` field. | | | - `tag:my_tag` |
     | tag_not | string | Filter by objects that don’t have the specified tag. | | | - `tag_not:my_tag` |
     | title | string | Filter by the product [`title`](https://shopify.dev/api/admin-graphql/latest/objects/Product#field-title) field. | | | - `title:The Minimal Snowboard` |
@@ -31465,13 +31500,17 @@ type Product implements HasEvents & HasMetafieldDefinitions & HasMetafields & Ha
   """
   The list of resources that are either published or staged to be published to a
   [publication](https://shopify.dev/docs/api/admin-graphql/latest/objects/Publication).
+  By default, only publications to `APP` catalog types are returned.
+  For `Product` and `ProductVariant`, use the `catalogType` argument to retrieve
+  publications for other catalog types, such as `COMPANY_LOCATION` (B2B) or `MARKET`.
+  `Collection` only supports publications to `APP` catalog types.
   """
   resourcePublicationsV2(
     "The elements that come after the specified [cursor](https://shopify.dev/api/usage/pagination-graphql)."
     after: String,
     "The elements that come before the specified [cursor](https://shopify.dev/api/usage/pagination-graphql)."
     before: String,
-    "Filter publications by catalog type."
+    "Filter publications by catalog type. When not specified, defaults to APP. Has no effect on Collection, which only supports APP."
     catalogType: CatalogType,
     "The first `n` elements from the [paginated list](https://shopify.dev/api/usage/pagination-graphql)."
     first: Int,
@@ -32694,7 +32733,7 @@ type ProductVariant implements HasEvents & HasMetafieldDefinitions & HasMetafiel
     | published_at | time | Filter by the date and time when the product was published to the online store and other sales channels. | | | - `published_at:>2020-10-21T23:39:20Z`<br/> - `published_at:<now`<br/> - `published_at:<=2024` |
     | published_status | string | Filter resources by their visibility and publication state on a channel. Online store channel filtering: - `online_store_channel`: Returns all resources in the online store channel, regardless of publication status. - `published`/`visible`: Returns resources that are published to the online store. - `unpublished`: Returns resources that are not published to the online store. Channel-specific filtering using a channel ID, channel handle, [channel `app` ID](https://shopify.dev/api/admin-graphql/latest/objects/Channel#app-price) (`Channel.app.id`), or app handle with suffixes: - `{id_or_handle}-published`: Returns resources published to the specified channel. - `{id_or_handle}-visible`: Same as `{id_or_handle}-published` (kept for backwards compatibility). - `{id_or_handle}-intended`: Returns resources added to the channel but not yet published. - `{id_or_handle}-hidden`: Returns resources not added to the channel or not published. Other: - `unavailable`: Returns resources not published to any channel. | - `online_store_channel`<br/> - `published`<br/> - `visible`<br/> - `unpublished`<br/> - `* {channel_id_or_handle}-published`<br/> - `* {channel_id_or_handle}-visible`<br/> - `* {channel_id_or_handle}-intended`<br/> - `* {channel_id_or_handle}-hidden`<br/> - `* {channel_app_id_or_handle}-published`<br/> - `* {channel_app_id_or_handle}-visible`<br/> - `* {channel_app_id_or_handle}-intended`<br/> - `* {channel_app_id_or_handle}-hidden`<br/> - `unavailable` | | - `published_status:online_store_channel`<br/> - `published_status:published`<br/> - `published_status:580111-published`<br/> - `published_status:580111-hidden`<br/> - `published_status:my-channel-handle-published`<br/> - `published_status:unavailable` |
     | sku | string | Filter by the product variant [`sku`](https://shopify.dev/api/admin-graphql/latest/objects/ProductVariant#field-sku) field. [Learn more about SKUs](https://help.shopify.com/manual/products/details/sku). | | | - `sku:XYZ-12345` |
-    | status | string | Filter by a comma-separated list of statuses. You can use statuses to manage inventory. Shopify only displays products with an `ACTIVE` status in online stores, sales channels, and apps. | - `active`<br/> - `archived`<br/> - `draft` | `active` | - `status:active,draft` |
+    | status | string | Filter by a comma-separated list of statuses. You can use statuses to manage inventory. Shopify only displays products with an `ACTIVE` status in online stores, sales channels, and apps. | - `active`<br/> - `archived`<br/> - `draft`<br/> - `unlisted` | `active` | - `status:active,draft` |
     | tag | string | Filter objects by the `tag` field. | | | - `tag:my_tag` |
     | tag_not | string | Filter by objects that don’t have the specified tag. | | | - `tag_not:my_tag` |
     | title | string | Filter by the product [`title`](https://shopify.dev/api/admin-graphql/latest/objects/Product#field-title) field. | | | - `title:The Minimal Snowboard` |
@@ -33170,7 +33209,7 @@ type Publication implements Node {
     | published_at | time | Filter by the date and time when the product was published to the online store and other sales channels. | | | - `published_at:>2020-10-21T23:39:20Z`<br/> - `published_at:<now`<br/> - `published_at:<=2024` |
     | published_status | string | Filter resources by their visibility and publication state on a channel. Online store channel filtering: - `online_store_channel`: Returns all resources in the online store channel, regardless of publication status. - `published`/`visible`: Returns resources that are published to the online store. - `unpublished`: Returns resources that are not published to the online store. Channel-specific filtering using a channel ID, channel handle, [channel `app` ID](https://shopify.dev/api/admin-graphql/latest/objects/Channel#app-price) (`Channel.app.id`), or app handle with suffixes: - `{id_or_handle}-published`: Returns resources published to the specified channel. - `{id_or_handle}-visible`: Same as `{id_or_handle}-published` (kept for backwards compatibility). - `{id_or_handle}-intended`: Returns resources added to the channel but not yet published. - `{id_or_handle}-hidden`: Returns resources not added to the channel or not published. Other: - `unavailable`: Returns resources not published to any channel. | - `online_store_channel`<br/> - `published`<br/> - `visible`<br/> - `unpublished`<br/> - `* {channel_id_or_handle}-published`<br/> - `* {channel_id_or_handle}-visible`<br/> - `* {channel_id_or_handle}-intended`<br/> - `* {channel_id_or_handle}-hidden`<br/> - `* {channel_app_id_or_handle}-published`<br/> - `* {channel_app_id_or_handle}-visible`<br/> - `* {channel_app_id_or_handle}-intended`<br/> - `* {channel_app_id_or_handle}-hidden`<br/> - `unavailable` | | - `published_status:online_store_channel`<br/> - `published_status:published`<br/> - `published_status:580111-published`<br/> - `published_status:580111-hidden`<br/> - `published_status:my-channel-handle-published`<br/> - `published_status:unavailable` |
     | sku | string | Filter by the product variant [`sku`](https://shopify.dev/api/admin-graphql/latest/objects/ProductVariant#field-sku) field. [Learn more about SKUs](https://help.shopify.com/manual/products/details/sku). | | | - `sku:XYZ-12345` |
-    | status | string | Filter by a comma-separated list of statuses. You can use statuses to manage inventory. Shopify only displays products with an `ACTIVE` status in online stores, sales channels, and apps. | - `active`<br/> - `archived`<br/> - `draft` | `active` | - `status:active,draft` |
+    | status | string | Filter by a comma-separated list of statuses. You can use statuses to manage inventory. Shopify only displays products with an `ACTIVE` status in online stores, sales channels, and apps. | - `active`<br/> - `archived`<br/> - `draft`<br/> - `unlisted` | `active` | - `status:active,draft` |
     | tag | string | Filter objects by the `tag` field. | | | - `tag:my_tag` |
     | tag_not | string | Filter by objects that don’t have the specified tag. | | | - `tag_not:my_tag` |
     | title | string | Filter by the product [`title`](https://shopify.dev/api/admin-graphql/latest/objects/Product#field-title) field. | | | - `title:The Minimal Snowboard` |
@@ -33228,7 +33267,7 @@ type Publication implements Node {
     | published_at | time | Filter by the date and time when the product was published to the online store and other sales channels. | | | - `published_at:>2020-10-21T23:39:20Z`<br/> - `published_at:<now`<br/> - `published_at:<=2024` |
     | published_status | string | Filter resources by their visibility and publication state on a channel. Online store channel filtering: - `online_store_channel`: Returns all resources in the online store channel, regardless of publication status. - `published`/`visible`: Returns resources that are published to the online store. - `unpublished`: Returns resources that are not published to the online store. Channel-specific filtering using a channel ID, channel handle, [channel `app` ID](https://shopify.dev/api/admin-graphql/latest/objects/Channel#app-price) (`Channel.app.id`), or app handle with suffixes: - `{id_or_handle}-published`: Returns resources published to the specified channel. - `{id_or_handle}-visible`: Same as `{id_or_handle}-published` (kept for backwards compatibility). - `{id_or_handle}-intended`: Returns resources added to the channel but not yet published. - `{id_or_handle}-hidden`: Returns resources not added to the channel or not published. Other: - `unavailable`: Returns resources not published to any channel. | - `online_store_channel`<br/> - `published`<br/> - `visible`<br/> - `unpublished`<br/> - `* {channel_id_or_handle}-published`<br/> - `* {channel_id_or_handle}-visible`<br/> - `* {channel_id_or_handle}-intended`<br/> - `* {channel_id_or_handle}-hidden`<br/> - `* {channel_app_id_or_handle}-published`<br/> - `* {channel_app_id_or_handle}-visible`<br/> - `* {channel_app_id_or_handle}-intended`<br/> - `* {channel_app_id_or_handle}-hidden`<br/> - `unavailable` | | - `published_status:online_store_channel`<br/> - `published_status:published`<br/> - `published_status:580111-published`<br/> - `published_status:580111-hidden`<br/> - `published_status:my-channel-handle-published`<br/> - `published_status:unavailable` |
     | sku | string | Filter by the product variant [`sku`](https://shopify.dev/api/admin-graphql/latest/objects/ProductVariant#field-sku) field. [Learn more about SKUs](https://help.shopify.com/manual/products/details/sku). | | | - `sku:XYZ-12345` |
-    | status | string | Filter by a comma-separated list of statuses. You can use statuses to manage inventory. Shopify only displays products with an `ACTIVE` status in online stores, sales channels, and apps. | - `active`<br/> - `archived`<br/> - `draft` | `active` | - `status:active,draft` |
+    | status | string | Filter by a comma-separated list of statuses. You can use statuses to manage inventory. Shopify only displays products with an `ACTIVE` status in online stores, sales channels, and apps. | - `active`<br/> - `archived`<br/> - `draft`<br/> - `unlisted` | `active` | - `status:active,draft` |
     | tag | string | Filter objects by the `tag` field. | | | - `tag:my_tag` |
     | tag_not | string | Filter by objects that don’t have the specified tag. | | | - `tag_not:my_tag` |
     | title | string | Filter by the product [`title`](https://shopify.dev/api/admin-graphql/latest/objects/Product#field-title) field. | | | - `title:The Minimal Snowboard` |
@@ -33306,7 +33345,7 @@ type Publication implements Node {
     | published_at | time | Filter by the date and time when the product was published to the online store and other sales channels. | | | - `published_at:>2020-10-21T23:39:20Z`<br/> - `published_at:<now`<br/> - `published_at:<=2024` |
     | published_status | string | Filter resources by their visibility and publication state on a channel. Online store channel filtering: - `online_store_channel`: Returns all resources in the online store channel, regardless of publication status. - `published`/`visible`: Returns resources that are published to the online store. - `unpublished`: Returns resources that are not published to the online store. Channel-specific filtering using a channel ID, channel handle, [channel `app` ID](https://shopify.dev/api/admin-graphql/latest/objects/Channel#app-price) (`Channel.app.id`), or app handle with suffixes: - `{id_or_handle}-published`: Returns resources published to the specified channel. - `{id_or_handle}-visible`: Same as `{id_or_handle}-published` (kept for backwards compatibility). - `{id_or_handle}-intended`: Returns resources added to the channel but not yet published. - `{id_or_handle}-hidden`: Returns resources not added to the channel or not published. Other: - `unavailable`: Returns resources not published to any channel. | - `online_store_channel`<br/> - `published`<br/> - `visible`<br/> - `unpublished`<br/> - `* {channel_id_or_handle}-published`<br/> - `* {channel_id_or_handle}-visible`<br/> - `* {channel_id_or_handle}-intended`<br/> - `* {channel_id_or_handle}-hidden`<br/> - `* {channel_app_id_or_handle}-published`<br/> - `* {channel_app_id_or_handle}-visible`<br/> - `* {channel_app_id_or_handle}-intended`<br/> - `* {channel_app_id_or_handle}-hidden`<br/> - `unavailable` | | - `published_status:online_store_channel`<br/> - `published_status:published`<br/> - `published_status:580111-published`<br/> - `published_status:580111-hidden`<br/> - `published_status:my-channel-handle-published`<br/> - `published_status:unavailable` |
     | sku | string | Filter by the product variant [`sku`](https://shopify.dev/api/admin-graphql/latest/objects/ProductVariant#field-sku) field. [Learn more about SKUs](https://help.shopify.com/manual/products/details/sku). | | | - `sku:XYZ-12345` |
-    | status | string | Filter by a comma-separated list of statuses. You can use statuses to manage inventory. Shopify only displays products with an `ACTIVE` status in online stores, sales channels, and apps. | - `active`<br/> - `archived`<br/> - `draft` | `active` | - `status:active,draft` |
+    | status | string | Filter by a comma-separated list of statuses. You can use statuses to manage inventory. Shopify only displays products with an `ACTIVE` status in online stores, sales channels, and apps. | - `active`<br/> - `archived`<br/> - `draft`<br/> - `unlisted` | `active` | - `status:active,draft` |
     | tag | string | Filter objects by the `tag` field. | | | - `tag:my_tag` |
     | tag_not | string | Filter by objects that don’t have the specified tag. | | | - `tag_not:my_tag` |
     | title | string | Filter by the product [`title`](https://shopify.dev/api/admin-graphql/latest/objects/Product#field-title) field. | | | - `title:The Minimal Snowboard` |
@@ -33844,7 +33883,7 @@ type QueryRoot {
   automaticDiscountNode(
     "The ID of the `DiscountAutomaticNode` to return."
     id: ID!
-  ): DiscountAutomaticNode
+  ): DiscountAutomaticNode @deprecated(reason : "Use `discountNode` instead.")
   "Returns a list of [automatic discounts](https://help.shopify.com/manual/discounts/discount-types#automatic-discounts)."
   automaticDiscountNodes(
     "The elements that come after the specified [cursor](https://shopify.dev/api/usage/pagination-graphql)."
@@ -34359,7 +34398,7 @@ type QueryRoot {
   codeDiscountNode(
     "The ID of the `DiscountCodeNode` to return."
     id: ID!
-  ): DiscountCodeNode
+  ): DiscountCodeNode @deprecated(reason : "Use `discountNode` instead.")
   """
   Retrieves a [code discount](https://help.shopify.com/manual/discounts/discount-types#discount-codes) by its discount code. The search is case-insensitive, enabling you to find discounts regardless of how customers enter the code.
   
@@ -34469,7 +34508,7 @@ type QueryRoot {
     "The identifier of the collection."
     identifier: CollectionIdentifierInput!
   ): Collection
-  "Lists all rules that can be used to create smart collections."
+  "Lists all rules that can be used to create collections."
   collectionRulesConditions: [CollectionRuleConditions!]!
   "Returns a list of the shop's collection saved searches."
   collectionSavedSearches(
@@ -34496,8 +34535,6 @@ type QueryRoot {
   - Build a browsing interface for a store's product groupings.
   - Create collection searching, sorting, and filtering experiences (for example, by title, type, or published status).
   - Sync collection data with external systems.
-  - Manage both custom ([manual](https://help.shopify.com/manual/products/collections/manual-shopify-collection))
-  and smart ([automated](https://help.shopify.com/manual/products/collections/automated-collections)) collections.
   
   The `collections` query supports [pagination](https://shopify.dev/docs/api/usage/pagination-graphql)
   for large catalogs and [saved searches](https://shopify.dev/docs/api/admin-graphql/latest/queries/collections#arguments-savedSearchId)
@@ -34508,11 +34545,11 @@ type QueryRoot {
   - Basic collection information (title, description, handle, and type)
   - Collection image and SEO metadata
   - Product count and product relationships
-  - Collection rules (for smart collections)
+  - Collection rules or conditions
   - Publishing status and publication details
   - Metafields and custom attributes
   
-  Learn more about [using metafields with smart collections](https://shopify.dev/docs/apps/build/custom-data/metafields/use-metafield-capabilities).
+  Learn more about [using metafields with collection conditions](https://shopify.dev/docs/apps/build/custom-data/metafields/use-metafield-capabilities).
   """
   collections(
     "The elements that come after the specified [cursor](https://shopify.dev/api/usage/pagination-graphql)."
@@ -34734,7 +34771,7 @@ type QueryRoot {
   """
   currentAppInstallation: AppInstallation!
   """
-  Returns the current app's most recent [`BulkOperation`](https://shopify.dev/docs/api/admin-graphql/latest/objects/BulkOperation). Apps can run one bulk query and one bulk mutation operation at a time per shop.
+  Returns the current app's most recent [`BulkOperation`](https://shopify.dev/docs/api/admin-graphql/latest/objects/BulkOperation). Bulk query and bulk mutation operations can run at the same time per shop. The number of concurrent operations that an app can run depends on the API version. For the applicable concurrency limits, refer to the [bulk operations guide](https://shopify.dev/docs/api/usage/bulk-operations/queries).
   
   The operation type parameter determines whether to retrieve the most recent query or mutation bulk operation. Use this query to check the operation's status, track its progress, and retrieve the result URL when it completes.
   """
@@ -34777,13 +34814,25 @@ type QueryRoot {
     "The ID of the job performing the customer merge request."
     jobId: ID!
   ): CustomerMergeRequest
-  "Returns a preview of a customer merge request."
+  """
+  Returns a preview of a customer merge request.
+  
+  The `customerOneId` and `customerTwoId` arguments don't guarantee which customer is kept. Shopify
+  selects the resulting customer in this order:
+  1. If `overrideFields.customerIdOfEmailToKeep` is provided and valid, then the selected customer is kept.
+  2. If exactly one customer has an email address, then that customer is kept.
+  3. If both customers have email addresses, then account state and email marketing consent determine
+     the customer that's kept: an `enabled` account wins over other account states; otherwise, an
+     `invited` account can win when consent doesn't already prefer `subscribed` or `pending`; otherwise
+     the consent result is used. If those rules don't prefer either customer, then `customerTwoId` is kept.
+  4. If neither customer has an email address, then `customerTwoId` is kept.
+  """
   customerMergePreview(
-    "The ID of the first customer that will be merged."
+    "The ID of one customer to merge. This customer isn't guaranteed to be kept."
     customerOneId: ID!,
-    "The ID of the second customer that will be merged."
+    "The ID of another customer to merge. This customer is kept when neither customer has an email address."
     customerTwoId: ID!,
-    "The fields to override the default customer merge rules."
+    "The field-specific overrides for default customer merge rules."
     overrideFields: CustomerMergeOverrideFields
   ): CustomerMergePreview!
   "Returns a vaulted customer payment method by its ID, including the instrument type (credit card, PayPal, etc.), billing address, and current status. Optionally includes revoked payment methods. Use this to look up a specific saved payment method for a customer — for example, to check whether a subscription's payment method is still valid or to display stored payment details."
@@ -34817,7 +34866,7 @@ type QueryRoot {
     reverse: Boolean = false,
     "Sort the underlying list using a key. If your query is slow or returns an error, then [try specifying a sort key that matches the field used in the search](https://shopify.dev/api/usage/pagination-graphql#search-performance-considerations)."
     sortKey: CustomerSavedSearchSortKeys = ID
-  ): SavedSearchConnection!
+  ): SavedSearchConnection! @deprecated(reason : "Use `segments` instead.")
   """
   A paginated list of customers that belong to an individual [`Segment`](https://shopify.dev/docs/api/admin-graphql/latest/objects/Segment). Segments group customers based on criteria defined through [ShopifyQL queries](https://shopify.dev/docs/api/shopifyql/segment-query-language-reference). Access segment members with their profile information and purchase summary data. The connection includes statistics for analyzing segment attributes (such as average and sum calculations) and a total count of all members.
   The maximum page size is 1000.
@@ -36945,7 +36994,7 @@ type QueryRoot {
     | published_at | time | Filter by the date and time when the product was published to the online store and other sales channels. | | | - `published_at:>2020-10-21T23:39:20Z`<br/> - `published_at:<now`<br/> - `published_at:<=2024` |
     | published_status | string | Filter resources by their visibility and publication state on a channel. Online store channel filtering: - `online_store_channel`: Returns all resources in the online store channel, regardless of publication status. - `published`/`visible`: Returns resources that are published to the online store. - `unpublished`: Returns resources that are not published to the online store. Channel-specific filtering using a channel ID, channel handle, [channel `app` ID](https://shopify.dev/api/admin-graphql/latest/objects/Channel#app-price) (`Channel.app.id`), or app handle with suffixes: - `{id_or_handle}-published`: Returns resources published to the specified channel. - `{id_or_handle}-visible`: Same as `{id_or_handle}-published` (kept for backwards compatibility). - `{id_or_handle}-intended`: Returns resources added to the channel but not yet published. - `{id_or_handle}-hidden`: Returns resources not added to the channel or not published. Other: - `unavailable`: Returns resources not published to any channel. | - `online_store_channel`<br/> - `published`<br/> - `visible`<br/> - `unpublished`<br/> - `* {channel_id_or_handle}-published`<br/> - `* {channel_id_or_handle}-visible`<br/> - `* {channel_id_or_handle}-intended`<br/> - `* {channel_id_or_handle}-hidden`<br/> - `* {channel_app_id_or_handle}-published`<br/> - `* {channel_app_id_or_handle}-visible`<br/> - `* {channel_app_id_or_handle}-intended`<br/> - `* {channel_app_id_or_handle}-hidden`<br/> - `unavailable` | | - `published_status:online_store_channel`<br/> - `published_status:published`<br/> - `published_status:580111-published`<br/> - `published_status:580111-hidden`<br/> - `published_status:my-channel-handle-published`<br/> - `published_status:unavailable` |
     | sku | string | Filter by the product variant [`sku`](https://shopify.dev/api/admin-graphql/latest/objects/ProductVariant#field-sku) field. [Learn more about SKUs](https://help.shopify.com/manual/products/details/sku). | | | - `sku:XYZ-12345` |
-    | status | string | Filter by a comma-separated list of statuses. You can use statuses to manage inventory. Shopify only displays products with an `ACTIVE` status in online stores, sales channels, and apps. | - `active`<br/> - `archived`<br/> - `draft` | `active` | - `status:active,draft` |
+    | status | string | Filter by a comma-separated list of statuses. You can use statuses to manage inventory. Shopify only displays products with an `ACTIVE` status in online stores, sales channels, and apps. | - `active`<br/> - `archived`<br/> - `draft`<br/> - `unlisted` | `active` | - `status:active,draft` |
     | tag | string | Filter objects by the `tag` field. | | | - `tag:my_tag` |
     | tag_not | string | Filter by objects that don’t have the specified tag. | | | - `tag_not:my_tag` |
     | title | string | Filter by the product [`title`](https://shopify.dev/api/admin-graphql/latest/objects/Product#field-title) field. | | | - `title:The Minimal Snowboard` |
@@ -37003,7 +37052,7 @@ type QueryRoot {
     | published_at | time | Filter by the date and time when the product was published to the online store and other sales channels. | | | - `published_at:>2020-10-21T23:39:20Z`<br/> - `published_at:<now`<br/> - `published_at:<=2024` |
     | published_status | string | Filter resources by their visibility and publication state on a channel. Online store channel filtering: - `online_store_channel`: Returns all resources in the online store channel, regardless of publication status. - `published`/`visible`: Returns resources that are published to the online store. - `unpublished`: Returns resources that are not published to the online store. Channel-specific filtering using a channel ID, channel handle, [channel `app` ID](https://shopify.dev/api/admin-graphql/latest/objects/Channel#app-price) (`Channel.app.id`), or app handle with suffixes: - `{id_or_handle}-published`: Returns resources published to the specified channel. - `{id_or_handle}-visible`: Same as `{id_or_handle}-published` (kept for backwards compatibility). - `{id_or_handle}-intended`: Returns resources added to the channel but not yet published. - `{id_or_handle}-hidden`: Returns resources not added to the channel or not published. Other: - `unavailable`: Returns resources not published to any channel. | - `online_store_channel`<br/> - `published`<br/> - `visible`<br/> - `unpublished`<br/> - `* {channel_id_or_handle}-published`<br/> - `* {channel_id_or_handle}-visible`<br/> - `* {channel_id_or_handle}-intended`<br/> - `* {channel_id_or_handle}-hidden`<br/> - `* {channel_app_id_or_handle}-published`<br/> - `* {channel_app_id_or_handle}-visible`<br/> - `* {channel_app_id_or_handle}-intended`<br/> - `* {channel_app_id_or_handle}-hidden`<br/> - `unavailable` | | - `published_status:online_store_channel`<br/> - `published_status:published`<br/> - `published_status:580111-published`<br/> - `published_status:580111-hidden`<br/> - `published_status:my-channel-handle-published`<br/> - `published_status:unavailable` |
     | sku | string | Filter by the product variant [`sku`](https://shopify.dev/api/admin-graphql/latest/objects/ProductVariant#field-sku) field. [Learn more about SKUs](https://help.shopify.com/manual/products/details/sku). | | | - `sku:XYZ-12345` |
-    | status | string | Filter by a comma-separated list of statuses. You can use statuses to manage inventory. Shopify only displays products with an `ACTIVE` status in online stores, sales channels, and apps. | - `active`<br/> - `archived`<br/> - `draft` | `active` | - `status:active,draft` |
+    | status | string | Filter by a comma-separated list of statuses. You can use statuses to manage inventory. Shopify only displays products with an `ACTIVE` status in online stores, sales channels, and apps. | - `active`<br/> - `archived`<br/> - `draft`<br/> - `unlisted` | `active` | - `status:active,draft` |
     | tag | string | Filter objects by the `tag` field. | | | - `tag:my_tag` |
     | tag_not | string | Filter by objects that don’t have the specified tag. | | | - `tag_not:my_tag` |
     | title | string | Filter by the product [`title`](https://shopify.dev/api/admin-graphql/latest/objects/Product#field-title) field. | | | - `title:The Minimal Snowboard` |
@@ -37284,7 +37333,7 @@ type QueryRoot {
     last: Int,
     "Search a segment migration by its saved search ID."
     savedSearchId: ID
-  ): SegmentMigrationConnection!
+  ): SegmentMigrationConnection! @deprecated(reason : "Use the migrated segment ID and query `segment` directly.")
   "The list of suggested values corresponding to a particular filter for a segment. A segment is a group of members, such as customers, that meet specific criteria."
   segmentValueSuggestions(
     "The elements that come after the specified [cursor](https://shopify.dev/api/usage/pagination-graphql)."
@@ -37654,6 +37703,7 @@ type QueryRoot {
     | name | type | description | acceptable_values | default_value | example_use |
     | ---- | ---- | ---- | ---- | ---- | ---- |
     | created_at | time |
+    | customer_id | id | Filter subscription contracts by the customer [`id`](https://shopify.dev/api/admin-graphql/latest/objects/Customer#field-Customer.fields.id) field. | | | - `customer_id:123` |
     | id | id | Filter by `id` range. | | | - `id:1234`<br/> - `id:>=1234`<br/> - `id:<=1234` |
     | last_billing_attempt_error_type | string |
     | status | string |
@@ -41005,7 +41055,7 @@ type Shop implements HasMetafieldDefinitions & HasMetafields & HasPublishedTrans
     | published_at | time | Filter by the date and time when the product was published to the online store and other sales channels. | | | - `published_at:>2020-10-21T23:39:20Z`<br/> - `published_at:<now`<br/> - `published_at:<=2024` |
     | published_status | string | Filter resources by their visibility and publication state on a channel. Online store channel filtering: - `online_store_channel`: Returns all resources in the online store channel, regardless of publication status. - `published`/`visible`: Returns resources that are published to the online store. - `unpublished`: Returns resources that are not published to the online store. Channel-specific filtering using a channel ID, channel handle, [channel `app` ID](https://shopify.dev/api/admin-graphql/latest/objects/Channel#app-price) (`Channel.app.id`), or app handle with suffixes: - `{id_or_handle}-published`: Returns resources published to the specified channel. - `{id_or_handle}-visible`: Same as `{id_or_handle}-published` (kept for backwards compatibility). - `{id_or_handle}-intended`: Returns resources added to the channel but not yet published. - `{id_or_handle}-hidden`: Returns resources not added to the channel or not published. Other: - `unavailable`: Returns resources not published to any channel. | - `online_store_channel`<br/> - `published`<br/> - `visible`<br/> - `unpublished`<br/> - `* {channel_id_or_handle}-published`<br/> - `* {channel_id_or_handle}-visible`<br/> - `* {channel_id_or_handle}-intended`<br/> - `* {channel_id_or_handle}-hidden`<br/> - `* {channel_app_id_or_handle}-published`<br/> - `* {channel_app_id_or_handle}-visible`<br/> - `* {channel_app_id_or_handle}-intended`<br/> - `* {channel_app_id_or_handle}-hidden`<br/> - `unavailable` | | - `published_status:online_store_channel`<br/> - `published_status:published`<br/> - `published_status:580111-published`<br/> - `published_status:580111-hidden`<br/> - `published_status:my-channel-handle-published`<br/> - `published_status:unavailable` |
     | sku | string | Filter by the product variant [`sku`](https://shopify.dev/api/admin-graphql/latest/objects/ProductVariant#field-sku) field. [Learn more about SKUs](https://help.shopify.com/manual/products/details/sku). | | | - `sku:XYZ-12345` |
-    | status | string | Filter by a comma-separated list of statuses. You can use statuses to manage inventory. Shopify only displays products with an `ACTIVE` status in online stores, sales channels, and apps. | - `active`<br/> - `archived`<br/> - `draft` | `active` | - `status:active,draft` |
+    | status | string | Filter by a comma-separated list of statuses. You can use statuses to manage inventory. Shopify only displays products with an `ACTIVE` status in online stores, sales channels, and apps. | - `active`<br/> - `archived`<br/> - `draft`<br/> - `unlisted` | `active` | - `status:active,draft` |
     | tag | string | Filter objects by the `tag` field. | | | - `tag:my_tag` |
     | tag_not | string | Filter by objects that don’t have the specified tag. | | | - `tag_not:my_tag` |
     | title | string | Filter by the product [`title`](https://shopify.dev/api/admin-graphql/latest/objects/Product#field-title) field. | | | - `title:The Minimal Snowboard` |
@@ -46470,6 +46520,8 @@ enum CarrierServiceUpdateUserErrorCode {
 
 "Possible error codes that can be returned by `CartTransformCreateUserError`."
 enum CartTransformCreateUserErrorCode {
+  "Shop must be on a Shopify Plus plan to activate functions from a custom app."
+  CUSTOM_APP_FUNCTION_NOT_ELIGIBLE
   "A cart transform function already exists for the provided function_id."
   FUNCTION_ALREADY_REGISTERED
   "Function does not implement the required interface for this cart_transform function."
@@ -46480,6 +46532,8 @@ enum CartTransformCreateUserErrorCode {
   INPUT_INVALID
   "Could not create or update metafields."
   INVALID_METAFIELDS
+  "The maximum number of cart transforms per shop has been reached."
+  MAXIMUM_CART_TRANSFORMS
   "Either function_id or function_handle must be provided."
   MISSING_FUNCTION_IDENTIFIER
   "Only one of function_id or function_handle can be provided, not both."
@@ -47533,7 +47587,7 @@ enum CollectionReorderProductsUserErrorCode {
   TOO_MANY_ATTEMPTS_TO_REORDER_PRODUCTS
 }
 
-"Specifies the attribute of a product being used to populate the smart collection."
+"Specifies the attribute of a product being used to populate the collection."
 enum CollectionRuleColumn {
   """
   An attribute evaluated based on the `compare_at_price` attribute of the product's variants.
@@ -47542,12 +47596,12 @@ enum CollectionRuleColumn {
   """
   IS_PRICE_REDUCED
   """
-  This rule type is designed to dynamically include products in a smart collection based on their category id.
+  This rule type is designed to dynamically include products in a collection based on their category id.
   When a specific product category is set as a condition, this rule will match products that are directly assigned to the specified category.
   """
   PRODUCT_CATEGORY_ID
   """
-  This rule type is designed to dynamically include products in a smart collection based on their category id.
+  This rule type is designed to dynamically include products in a collection based on their category id.
   When a specific product category is set as a condition, this rule will not only match products that are
   directly assigned to the specified category but also include any products categorized under any descendant of that category.
   """
@@ -47645,6 +47699,8 @@ enum ColumnDataType {
   BOOLEAN
   "Represents a hex color value."
   COLOR
+  "Represents a cumulative value."
+  CUMULATIVE
   "Represents a duration in days."
   DAY_DURATION
   "Represents a day of week value."
@@ -47653,8 +47709,12 @@ enum ColumnDataType {
   DAY_TIMESTAMP
   "Represents a decimal value."
   DECIMAL
+  "Represents an entity reference value."
+  ENTITY
   "Represents a floating point value."
   FLOAT
+  "Represents a geographic coordinate value."
+  GEO_COORDINATE
   "Represents a duration in hours."
   HOUR_DURATION
   "Represents an hour of day value."
@@ -47677,6 +47737,8 @@ enum ColumnDataType {
   MONTH_OF_YEAR
   "Represents a month-level timestamp value."
   MONTH_TIMESTAMP
+  "Represents a multiplier value."
+  MULTIPLIER
   "Represents a percentage value."
   PERCENT
   "Represents a quarter-level timestamp value."
@@ -47693,6 +47755,8 @@ enum ColumnDataType {
   STRING_IDENTITY
   "Represents a timestamp value in seconds."
   TIMESTAMP
+  "Represents a unitless scalar value."
+  UNITLESS_SCALAR
   "Represents an unspecified data type."
   UNSPECIFIED
   "Represents a week of year value."
@@ -51109,6 +51173,8 @@ enum InventoryTransferCreateAsReadyToShipUserErrorCode {
   IDEMPOTENCY_KEY_PARAMETER_MISMATCH
   "The quantity is invalid."
   INVALID_QUANTITY
+  "One or more tags are not valid."
+  INVALID_TAG
   "Current transfer status does not support this operation."
   INVALID_TRANSFER_STATUS
   "The item is not stocked at the intended location."
@@ -51145,6 +51211,8 @@ enum InventoryTransferCreateUserErrorCode {
   IDEMPOTENCY_KEY_PARAMETER_MISMATCH
   "The quantity is invalid."
   INVALID_QUANTITY
+  "One or more tags are not valid."
+  INVALID_TAG
   "The item is not stocked at the intended location."
   INVENTORY_STATE_NOT_ACTIVE
   "The item was not found."
@@ -51185,6 +51253,8 @@ enum InventoryTransferDuplicateUserErrorCode {
 enum InventoryTransferEditUserErrorCode {
   "Unexpected internal error happened."
   INTERNAL_ERROR
+  "One or more tags are not valid."
+  INVALID_TAG
   "The item is not stocked at the intended location."
   INVENTORY_STATE_NOT_ACTIVE
   "The location selected is not active."
@@ -52127,6 +52197,8 @@ enum MarketUserErrorCode {
   MANAGED_MARKET
   "Catalogs created by Managed Markets cannot be added to a market."
   MANAGED_MARKETS_CATALOG_NOT_ALLOWED
+  "Resources created by Managed Markets cannot be added to a market."
+  MANAGED_MARKETS_RESOURCE_NOT_ALLOWED
   "A direct connection catalog can't be attached to a market."
   MARKET_CANT_HAVE_DIRECT_CONNECTION_CATALOG
   "Market and condition types are not compatible with each other."
@@ -52135,6 +52207,8 @@ enum MarketUserErrorCode {
   MARKET_NOT_FOUND
   "Can't add another web presence to the market."
   MARKET_REACHED_WEB_PRESENCE_LIMIT
+  "Another modification to this market is in progress."
+  MARKET_UPDATE_CONCURRENT_MODIFICATION
   "The country code is missing."
   MISSING_COUNTRY_CODE
   "The province code is missing."
@@ -53916,6 +53990,8 @@ enum PaymentCustomizationErrorCode {
   INVALID_METAFIELDS
   "Maximum payment customizations are already enabled."
   MAXIMUM_ACTIVE_PAYMENT_CUSTOMIZATIONS
+  "The maximum number of payment customizations per shop has been reached."
+  MAXIMUM_PAYMENT_CUSTOMIZATIONS
   "Either function_id or function_handle must be provided."
   MISSING_FUNCTION_IDENTIFIER
   "Only one of function_id or function_handle can be provided, not both."
@@ -55821,6 +55897,8 @@ enum ReturnErrorCode {
   GREATER_THAN_OR_EQUAL_TO
   "The input value isn't included in the list."
   INCLUSION
+  "The requested configuration cannot be applied to this standard return policy which is managed for you in compliance with relevant regulations."
+  INCOMPATIBLE_WITH_STANDARD_POLICY
   "Unexpected internal error happened."
   INTERNAL_ERROR
   "The input value is invalid."
@@ -57856,6 +57934,8 @@ enum TaxExemption {
   CA_MB_FARMER_EXEMPTION
   "This customer is exempt from specific taxes for holding a valid RESELLER_EXEMPTION in Manitoba."
   CA_MB_RESELLER_EXEMPTION
+  "This customer is exempt from VPT (Vapour Products Tax) for holding a valid VPT_RESELLER_EXEMPTION in Newfoundland and Labrador."
+  CA_NL_VPT_RESELLER_EXEMPTION
   "This customer is exempt from specific taxes for holding a valid COMMERCIAL_FISHERY_EXEMPTION in Nova Scotia."
   CA_NS_COMMERCIAL_FISHERY_EXEMPTION
   "This customer is exempt from specific taxes for holding a valid FARMER_EXEMPTION in Nova Scotia."
@@ -57876,6 +57956,8 @@ enum TaxExemption {
   CA_SK_RESELLER_EXEMPTION
   "This customer is exempt from specific taxes for holding a valid SUB_CONTRACTOR_EXEMPTION in Saskatchewan."
   CA_SK_SUB_CONTRACTOR_EXEMPTION
+  "This customer is exempt from VPT (Vapour Products Tax) for holding a valid VPT_RESELLER_EXEMPTION in Saskatchewan."
+  CA_SK_VPT_RESELLER_EXEMPTION
   "This customer is exempt from specific taxes for holding a valid STATUS_CARD_EXEMPTION in Canada."
   CA_STATUS_CARD_EXEMPTION
   "This customer is exempt from VAT for purchases within the EU that is shipping from outside of customer's country, as well as purchases from the EU to the UK."
@@ -58731,6 +58813,8 @@ enum WebhookSubscriptionTopic {
   LOCATIONS_DELETE
   "The webhook topic for `locations/update` events. Occurs whenever a location is updated. Requires the `read_locations` scope."
   LOCATIONS_UPDATE
+  "The webhook topic for `machine_translation_batch/completed` events. Occurs when a whole-shop machine translation batch completes."
+  MACHINE_TRANSLATION_BATCH_COMPLETED
   "The webhook topic for `markets_backup_region/update` events. Occurs when a backup region is updated. Requires the `read_markets` scope."
   MARKETS_BACKUP_REGION_UPDATE
   "The webhook topic for `markets/create` events. Occurs when a new market is created. Requires the `read_markets` scope."
@@ -60802,14 +60886,17 @@ input CollectionInput {
   image: ImageInput
   "The metafields to associate with the collection."
   metafields: [MetafieldInput!]
-  "Initial list of collection products. Only valid with `collectionCreate` and without rules."
+  "Initial list of collection products. Only valid with `collectionCreate`."
   products: [ID!]
   """
   Indicates whether a redirect is required after a new handle has been provided.
   If true, then the old handle is redirected to the new one automatically.
   """
   redirectNewHandle: Boolean = false
-  "The rules used to assign products to the collection."
+  """
+  The rules used to assign products to the collection. This is the legacy smart-collection model;
+  use `sources` with `conditions` instead. Each `ruleSet` rule has an equivalent `condition`.
+  """
   ruleSet: CollectionRuleSetInput
   "SEO information for the collection."
   seo: SEOInput
@@ -61149,11 +61236,17 @@ input CustomerInput {
   taxExemptions: [TaxExemption!]
 }
 
-"The input fields to override default customer merge rules."
+"""
+The input fields to override default customer merge rules. These overrides are field-specific; they don't
+provide a general way to force a particular customer ID to survive the merge.
+"""
 input CustomerMergeOverrideFields {
   "The ID of the customer whose default address will be kept."
   customerIdOfDefaultAddressToKeep: ID
-  "The ID of the customer whose email will be kept."
+  """
+  The ID of the customer whose email will be kept. The selected customer must have an email address. When
+  this field is provided and valid, the selected customer is also the resulting customer after the merge.
+  """
   customerIdOfEmailToKeep: ID
   "The ID of the customer whose first name will be kept."
   customerIdOfFirstNameToKeep: ID
@@ -61500,7 +61593,7 @@ input DeliveryWeightConditionInput {
   operator: DeliveryConditionOperator
 }
 
-"The input fields configuring the deposit for a B2B buyer."
+"The input fields configuring the deposit requirement."
 input DepositInput {
   "The percentage of the order total that should be paid as a deposit. Must be between 1 and 99, inclusive."
   percentage: Float!
@@ -62413,14 +62506,8 @@ input DraftOrderInput {
   "The shipping line object, which details the shipping method used."
   shippingLine: ShippingLineInput
   """
-  The source of the checkout.
-  To use this field for sales attribution, you must register the channels that your app is managing.
-  You can register the channels that your app is managing by completing
-  [this Google Form](https://docs.google.com/forms/d/e/1FAIpQLScmVTZRQNjOJ7RD738mL1lGeFjqKVe_FM2tO9xsm21QEo5Ozg/viewform?usp=sf_link).
-  After you've submitted your request, you need to wait for your request to be processed by Shopify.
-  You can find a list of your channels in the Partner Dashboard, in your app's Marketplace extension.
-  You need to specify the handle as the `source_name` value in your request.
-  The handle is the channel that the order was placed from.
+  The source channel that the order is attributed to. Set this to the handle of an order attribution definition configured for your sales channel app, such as `youtube` or `channel:amazon-us`.
+  To set up order attribution for your app, follow the [order attribution guide](https://shopify.dev/docs/apps/build/sales-channels/order-attribution).
   """
   sourceName: String
   "A comma separated list of tags that have been added to the draft order."
@@ -64370,7 +64457,7 @@ input MetafieldDefinitionUpdateInput {
   name: String
   """
   The container for a group of metafields that the metafield definition is associated with. Used to help identify
-  the metafield definition, but cannot be updated itself. If omitted, the app-reserved namespace will be used.
+  the metafield definition, but can't be updated itself. If omitted, the app-reserved namespace will be used.
   """
   namespace: String
   """
@@ -64442,7 +64529,7 @@ input MetafieldInput {
   """
   namespace: String
   """
-  The type of data that is stored in the metafield.
+  The type of data that's stored in the metafield.
   Refer to the list of [supported types](https://shopify.dev/apps/metafields/types).
   
   Required when creating or updating a metafield without a definition.
@@ -64473,10 +64560,10 @@ input MetafieldsSetInput {
   "The unique ID of the resource that the metafield is attached to."
   ownerId: ID!
   """
-  The type of data that is stored in the metafield.
+  The type of data that's stored in the metafield.
   The type must be one of the [supported types](https://shopify.dev/apps/metafields/types).
   
-  Required when there is no corresponding definition for the given `namespace`, `key`, and
+  Required when there's no corresponding definition for the given `namespace`, `key`, and
   owner resource type (derived from `ownerId`).
   """
   type: String
@@ -65292,7 +65379,7 @@ input OrderCreateOrderInput {
   shippingLines: [OrderCreateShippingLineInput!]
   "The ID of the order placed on the originating platform. This value doesn't correspond to the Shopify ID that's generated from a completed draft."
   sourceIdentifier: String
-  "The source of the checkout. To use this field for sales attribution, you must register the channels that your app is managing. You can register the channels that your app is managing by completing [this Google Form](https://docs.google.com/forms/d/e/1FAIpQLScmVTZRQNjOJ7RD738mL1lGeFjqKVe_FM2tO9xsm21QEo5Ozg/viewform?usp=sf_link). After you've submited your request, you need to wait for your request to be processed by Shopify. You can find a list of your channels in the Partner Dashboard, in your app's Marketplace extension. You can specify a handle as the source_name value in your request."
+  "The source channel that the order is attributed to. Set this to the handle of an order attribution definition configured for your sales channel app, such as `youtube` or `channel:amazon-us`. To set up order attribution for your app, follow the [order attribution guide](https://shopify.dev/docs/apps/build/sales-channels/order-attribution)."
   sourceName: String
   "A valid URL to the original order on the originating surface. This URL is displayed to merchants on the Order Details page. If the URL is invalid, then it won't be displayed."
   sourceUrl: URL

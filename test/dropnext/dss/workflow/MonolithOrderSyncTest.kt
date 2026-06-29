@@ -136,10 +136,10 @@ class MonolithOrderSyncTest {
           fulfillmentOrderId = 0L,
           snapshotOfVariantTitle = "Item",
           snapshotOfProductTitle = "Product",
-          snapshotOfPriceInMinorUnits = 1999L,
+          snapshotOfPriceAsString = "19.99",
         ),
       ),
-      totalInMinorUnits = 1999L,
+      totalAsString = "19.99",
       currency = "USD",
     )
 }

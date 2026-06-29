@@ -1,5 +1,8 @@
 package dropnext.dss.workflow
 
+import dropnext.dss.lib.monolith.dto.generated.OrderLineItem
+import dropnext.dss.shopify.minorUnitsToShopifyDecimal
+import dropnext.dss.shopify.shopifyDecimalToMinorUnits
 import dropnext.graphql.generated.enums.CountryCode
 import dropnext.graphql.generated.enums.OrderDisplayFinancialStatus
 import dropnext.graphql.generated.enums.OrderDisplayFulfillmentStatus
@@ -193,6 +196,39 @@ class MonolithOrderMapperTest {
   }
 
   @Test
+  fun `maps line item unit price and order total from Shopify`() {
+    val req = orderToCreateShopifyOrderRequest("dropnext-staging", minimalOrder())
+    assert(req.lineItems.single().snapshotOfPriceAsString == "19.99")
+    assert(req.totalAsString == "39.98")
+  }
+
+  @Test
+  fun `resolveOrderTotalAsString uses Shopify total when positive`() {
+    assert(
+      resolveOrderTotalAsString(
+        orderTotalAmount = "39.98",
+        lineItems = emptyList(),
+      ) == "39.98",
+    )
+  }
+
+  @Test
+  fun `resolveOrderTotalAsString falls back to line sum when order total is zero`() {
+    val lineItems = listOf(
+      OrderLineItem(
+        shopifyLineItemId = 1L,
+        productVariantId = 1L,
+        quantity = 2,
+        fulfillmentOrderId = 1L,
+        snapshotOfVariantTitle = "Item",
+        snapshotOfProductTitle = "Product",
+        snapshotOfPriceAsString = "19.99",
+      ),
+    )
+    assert(resolveOrderTotalAsString(orderTotalAmount = "0.00", lineItems = lineItems) == "39.98")
+  }
+
+  @Test
   fun `falls back to lineItems sum when totalPriceSet is non-positive`() {
     val order = minimalOrder().copy(
       totalPriceSet = dropnext.graphql.generated.getorderfordss.MoneyBag(
@@ -203,8 +239,10 @@ class MonolithOrderMapperTest {
       ),
     )
     val req = orderToCreateShopifyOrderRequest("dropnext-staging", order)
-    val lineSum = req.lineItems.sumOf { it.snapshotOfPriceInMinorUnits * it.quantity.toLong() }
-    assert(req.totalInMinorUnits == lineSum)
+    val lineSumMinor = req.lineItems.sumOf {
+      shopifyDecimalToMinorUnits(it.snapshotOfPriceAsString) * it.quantity.toLong()
+    }
+    assert(req.totalAsString == minorUnitsToShopifyDecimal(lineSumMinor))
   }
 
   @Test
@@ -218,8 +256,10 @@ class MonolithOrderMapperTest {
       ),
     )
     val req = orderToCreateShopifyOrderRequest("dropnext-staging", order)
-    val lineSum = req.lineItems.sumOf { it.snapshotOfPriceInMinorUnits * it.quantity.toLong() }
-    assert(req.totalInMinorUnits == lineSum)
+    val lineSumMinor = req.lineItems.sumOf {
+      shopifyDecimalToMinorUnits(it.snapshotOfPriceAsString) * it.quantity.toLong()
+    }
+    assert(req.totalAsString == minorUnitsToShopifyDecimal(lineSumMinor))
   }
 
   @Test

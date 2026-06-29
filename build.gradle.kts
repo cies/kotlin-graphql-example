@@ -1,5 +1,6 @@
 import com.expediagroup.graphql.plugin.gradle.config.GraphQLSerializer
 import com.expediagroup.graphql.plugin.gradle.graphql
+import groovy.json.JsonSlurper
 import org.gradle.api.JavaVersion.VERSION_25
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_25
@@ -183,6 +184,9 @@ jacoco {
 }
 
 val monolithServiceGeneratedDtoPath = "dropnext/dss/lib/monolith/dto/generated"
+val monolithPathsGeneratedDir = layout.buildDirectory.dir("generated/monolith-paths")
+val monolithPathsGeneratedFile =
+  layout.buildDirectory.file("generated/monolith-paths/dropnext/dss/lib/monolith/OutBoundMonolithPaths.kt")
 
 tasks.named<JacocoReport>("jacocoTestReport") {
   // So `./gradlew jacocoTestReport` runs the tests too; otherwise it would silently report on stale exec data.
@@ -291,6 +295,114 @@ val rewriteOpenApiSpecToV31 by tasks.registering {
   }
 }
 
+// Generates `OutBoundMonolithPaths` from the same monolith OpenAPI spec as DTO codegen (`apis=false`
+// skips path constants in openApiGenerate). Reads the source spec directly — paths/servers are
+// unaffected by `rewriteOpenApiSpecToV31`.
+val generateOutBoundMonolithPaths by tasks.registering {
+  group = "build"
+  description = "Generates OutBoundMonolithPaths.kt from monolith-dss-openapi.json."
+
+  val source = openApiSpecFile
+  val outputFile = monolithPathsGeneratedFile
+
+  inputs.file(source)
+  outputs.file(outputFile)
+
+  doLast {
+    @Suppress("UNCHECKED_CAST")
+    val spec = JsonSlurper().parseText(source.readText()) as Map<String, Any?>
+
+    @Suppress("UNCHECKED_CAST")
+    val paths = spec["paths"] as? Map<String, Map<String, Any?>>
+      ?: throw GradleException("OpenAPI spec missing non-empty 'paths' object")
+
+    @Suppress("UNCHECKED_CAST")
+    val servers = spec["servers"] as? List<Map<String, Any?>>
+    val apiPathPrefix = servers
+      ?.firstOrNull()
+      ?.get("url")
+      ?.toString()
+      ?.trim()
+      ?.trimEnd('/')
+      ?.takeIf { it.isNotEmpty() }
+
+    fun segmentToConstPart(segment: String, isFirstSegment: Boolean): String =
+      segment.split('-')
+        .filter { it.isNotEmpty() }
+        .mapIndexed { wordIndex, word ->
+          val lower = word.lowercase()
+          if (isFirstSegment && wordIndex == 0) lower
+          else lower.replaceFirstChar(Char::uppercaseChar)
+        }
+        .joinToString("")
+
+    fun pathToConstName(path: String): String =
+      path.trim('/')
+        .split('/')
+        .filter { it.isNotEmpty() }
+        .mapIndexed { index, segment -> segmentToConstPart(segment, isFirstSegment = index == 0) }
+        .joinToString("")
+
+    val httpMethodOrder = listOf("delete", "get", "patch", "post", "put")
+
+    val pathEntries = paths.keys.sorted().map { path ->
+      val operations = paths[path].orEmpty()
+      val kdocLines = operations.keys
+        .filter { it in httpMethodOrder }
+        .sortedBy { httpMethodOrder.indexOf(it) }
+        .map { method ->
+          @Suppress("UNCHECKED_CAST")
+          val op = operations[method] as? Map<String, Any?>
+          val summary = op?.get("summary")?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+          val summarySuffix = summary?.let { " — $it" }.orEmpty()
+          "   * `${method.uppercase()} $path`$summarySuffix"
+        }
+      Triple(pathToConstName(path), path, kdocLines)
+    }
+
+    val duplicateNames = pathEntries.groupBy { it.first }.filter { it.value.size > 1 }.keys
+    if (duplicateNames.isNotEmpty()) {
+      throw GradleException(
+        "OpenAPI paths map to duplicate OutBoundMonolithPaths constant names: $duplicateNames",
+      )
+    }
+
+    val body = buildString {
+      appendLine("package dropnext.dss.lib.monolith")
+      appendLine()
+      appendLine("/**")
+      appendLine(" * Outbound paths the DSS calls on the DropNext monolith. Appended to")
+      appendLine(" * `Config.monolithBaseUrl` (+ optional `Config.monolithApiPrefix`) by `HttpMonolithService`.")
+      appendLine(" *")
+      appendLine(" * **Generated** from `src/resources/monolith-dss-openapi.json` by the")
+      appendLine(" * `generateOutBoundMonolithPaths` Gradle task — do not edit by hand.")
+      appendLine(" */")
+      appendLine("@Suppress(\"ConstPropertyName\") // Less shouty field names.")
+      appendLine("object OutBoundMonolithPaths {")
+
+      if (apiPathPrefix != null) {
+        appendLine("  /** OpenAPI `servers[0].url` — typical value for `MONOLITH_API_PREFIX`. */")
+        appendLine("  const val apiPathPrefix = \"$apiPathPrefix\"")
+        appendLine()
+      }
+
+      pathEntries.forEach { (constName, path, kdocLines) ->
+        appendLine("  /**")
+        kdocLines.forEach { appendLine(it) }
+        appendLine("   */")
+        appendLine("  const val $constName = \"$path\"")
+        appendLine()
+      }
+
+      appendLine("}")
+    }
+
+    val target = outputFile.get().asFile
+    target.parentFile.mkdirs()
+    target.writeText(body.trimEnd() + "\n")
+  }
+}
+
 openApiGenerate {
   generatorName.set("kotlin")
   // file: URI — required on Windows when validateSpec is enabled (absolute paths break $ref resolution).
@@ -318,11 +430,12 @@ openApiGenerate {
 }
 
 sourceSets["main"].kotlin.srcDir("${layout.buildDirectory.get()}/generated/openapi/src/main/kotlin")
+sourceSets["main"].kotlin.srcDir(monolithPathsGeneratedDir)
 
 tasks.named("openApiGenerate") {
   dependsOn(rewriteOpenApiSpecToV31)
 }
 
 tasks.named("compileKotlin") {
-  dependsOn(tasks.named("openApiGenerate"))
+  dependsOn(tasks.named("openApiGenerate"), tasks.named("generateOutBoundMonolithPaths"))
 }

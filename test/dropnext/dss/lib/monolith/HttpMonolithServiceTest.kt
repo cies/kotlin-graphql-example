@@ -347,7 +347,7 @@ class HttpMonolithServiceTest {
       title = "Default",
       sku = null,
       barcode = null,
-      priceInMinorUnits = 1995L,
+      priceAsString = "19.95",
       priceCurrency = "USD",
       selectedOptions = emptyList(),
       imageUrl = null,

@@ -4,6 +4,7 @@ import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
 import dropnext.dss.lib.monolith.dto.generated.Shipment
 import dropnext.dss.lib.monolith.dto.generated.ShipmentLineItem
 import dropnext.dss.lib.monolith.dto.generated.SyncShipmentsWithFulfillmentsRequest
+import dropnext.dss.lib.monolith.dto.generated.SyncShipmentsWithFulfillmentsResponse
 import dropnext.dss.lib.shopify.ShopDomain
 import dropnext.dss.lib.shopify.graphql.HttpShopifyGraphqlService
 import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlService
@@ -85,8 +86,12 @@ class SyncShopifyShipmentsToFulfillmentsTest {
     fake.stubGetOrderForDss(order = minimalOrder().copy(fulfillments = emptyList()))
     fake.stubFulfillmentCreateOk(fulfillmentId = 5000L)
     val result = syncShopifyShipmentsToFulfillments(shopify, syncRequest())
-    assert(result is FulfillmentResult.Ok<*>)
-    assert(fake.calls.map { it.operationName } == listOf("GetOrderForDss", "FulfillmentCreateWithLineItems"))
+    val response = result.unwrapOk<SyncShipmentsWithFulfillmentsResponse>()
+    assert(response.newFulfillmentIds == listOf(5000L))
+    assert(
+      fake.calls.map { it.operationName } ==
+        listOf("GetOrderForDss", "FulfillmentCreateWithLineItems", "GetOrderForDss"),
+    )
     assert(fake.calls.first().authorization == "tok")
   }
 
@@ -96,10 +101,17 @@ class SyncShopifyShipmentsToFulfillmentsTest {
     fake.stubFulfillmentCancelOk(fulfillmentId = 8000L)
     fake.stubFulfillmentCreateOk(fulfillmentId = 9000L)
     val result = syncShopifyShipmentsToFulfillments(shopify, syncRequest())
-    assert(result is FulfillmentResult.Ok<*>)
+    val response = result.unwrapOk<SyncShipmentsWithFulfillmentsResponse>()
+    assert(response.newFulfillmentIds == listOf(9000L))
     assert(
       fake.calls.map { it.operationName } ==
-        listOf("GetOrderForDss", "FulfillmentCancelMutation", "GetOrderForDss", "FulfillmentCreateWithLineItems"),
+        listOf(
+          "GetOrderForDss",
+          "FulfillmentCancelMutation",
+          "GetOrderForDss",
+          "FulfillmentCreateWithLineItems",
+          "GetOrderForDss",
+        ),
     )
   }
 

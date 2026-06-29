@@ -331,6 +331,16 @@ class ArchitectureTest {
     }
   }
 
+  @Test
+  fun `OutBoundMonolithPaths is generated not hand-written`() {
+    val handWritten = Konsist.scopeFromDirectory("src")
+      .files
+      .filter { it.name == "OutBoundMonolithPaths.kt" }
+    assert(handWritten.isEmpty()) {
+      "OutBoundMonolithPaths.kt is generated from monolith-dss-openapi.json: ${handWritten.map { it.path }}"
+    }
+  }
+
   /**
    * Test files exempt from the mirror-source rule. These tests legitimately don't map 1:1 to a
    * single source file (cross-cutting integration tests, meta-tests). Add entries sparingly and

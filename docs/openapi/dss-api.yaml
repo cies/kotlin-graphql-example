@@ -223,7 +223,7 @@ paths:
         - fulfillment_order_id
         - snapshot_of_variant_title
         - snapshot_of_product_title
-        - snapshot_of_price_in_minor_units
+        - snapshot_of_price_as_string
       properties:
         shopify_line_item_id: { type: integer, format: int64 }
         product_variant_id: { type: integer, format: int64 }
@@ -231,7 +231,12 @@ paths:
         fulfillment_order_id: { type: integer, format: int64 }
         snapshot_of_variant_title: { type: string }
         snapshot_of_product_title: { type: string }
-        snapshot_of_price_in_minor_units: { type: integer, format: int64 }
+        snapshot_of_price_as_string:
+          type: string
+          description: |
+            Unit price as a decimal string exactly as Shopify's APIs emit it (dot separator,
+            no thousands separators, no currency symbol). Non-negative; rounded half-up by the
+            monolith when finer than the order currency allows.
 
     CreateShopifyOrderRequest:
       type: object
@@ -245,7 +250,7 @@ paths:
         - created_at
         - shipping_address
         - line_items
-        - total_in_minor_units
+        - total_as_string
         - currency
       properties:
         shopify_subdomain: { type: string }
@@ -260,10 +265,12 @@ paths:
           type: array
           items:
             $ref: "#/components/schemas/OrderLineItem"
-        total_in_minor_units:
-          type: integer
-          format: int64
-          description: Order total in minor currency units (non-negative).
+        total_as_string:
+          type: string
+          description: |
+            Order total as a decimal string exactly as Shopify's APIs emit it (dot separator,
+            no thousands separators, no currency symbol). Non-negative; rounded half-up by the
+            monolith when finer than the order currency allows.
         currency:
           type: string
           description: ISO 4217 currency code (e.g. "USD").
@@ -358,7 +365,7 @@ paths:
         - title
         - sku
         - barcode
-        - price_in_minor_units
+        - price_as_string
         - price_currency
         - selected_options
         - image_url
@@ -385,7 +392,12 @@ paths:
         title: { type: string }
         sku: { type: string, nullable: true }
         barcode: { type: string, nullable: true }
-        price_in_minor_units: { type: integer, format: int64 }
+        price_as_string:
+          type: string
+          description: |
+            Variant price as a decimal string exactly as Shopify's APIs emit it (dot separator,
+            no thousands separators, no currency symbol). Non-negative; rounded half-up by the
+            monolith when finer than `price_currency` allows.
         price_currency: { type: string }
         selected_options:
           type: array

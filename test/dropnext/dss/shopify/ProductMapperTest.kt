@@ -30,9 +30,9 @@ class ProductMapperTest {
     assert(items[0].productId == 101L)
     assert(items[0].productTitle == "T-Shirt")
     assert(items[0].productVariantId == 201L)
-    assert(items[0].priceInMinorUnits == 1995L)
+    assert(items[0].priceAsString == "19.95")
     assert(items[1].productVariantId == 202L)
-    assert(items[1].priceInMinorUnits == 2250L)
+    assert(items[1].priceAsString == "22.50")
   }
 
   @Test
@@ -56,17 +56,24 @@ class ProductMapperTest {
   }
 
   @Test
-  fun `rounds half-cent prices`() {
+  fun `passes through Shopify price string unchanged`() {
     val product = sampleProduct(variants = listOf(sampleVariant(price = "19.999")))
     val items = product.toProductVariantItems("USD")
-    assert(items.single().priceInMinorUnits == 2000L)
+    assert(items.single().priceAsString == "19.999")
   }
 
   @Test
-  fun `invalid price string becomes zero`() {
+  fun `blank price defaults to zero decimal`() {
+    val product = sampleProduct(variants = listOf(sampleVariant(price = "")))
+    val items = product.toProductVariantItems("USD")
+    assert(items.single().priceAsString == "0.00")
+  }
+
+  @Test
+  fun `passes through invalid price string unchanged`() {
     val product = sampleProduct(variants = listOf(sampleVariant(price = "n/a")))
     val items = product.toProductVariantItems("USD")
-    assert(items.single().priceInMinorUnits == 0L)
+    assert(items.single().priceAsString == "n/a")
   }
 
   @Test

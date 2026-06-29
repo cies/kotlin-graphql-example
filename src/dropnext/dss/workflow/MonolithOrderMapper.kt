@@ -4,7 +4,9 @@ import dropnext.dss.lib.monolith.dto.generated.CreateShopifyOrderRequest
 import dropnext.dss.lib.monolith.dto.generated.OrderLineItem
 import dropnext.dss.lib.monolith.dto.generated.ShippingAddress
 import dropnext.dss.lib.shopify.legacyIdFromGid
+import dropnext.dss.shopify.minorUnitsToShopifyDecimal
 import dropnext.dss.shopify.shopifyDecimalToMinorUnits
+import dropnext.dss.shopify.shopifyMoneyAmountForWire
 import dropnext.graphql.generated.enums.OrderDisplayFinancialStatus
 import dropnext.graphql.generated.enums.OrderDisplayFulfillmentStatus
 import dropnext.graphql.generated.getorderfordss.MailingAddress
@@ -42,7 +44,6 @@ fun orderToCreateShopifyOrderRequest(
     val variantLegacy = variant.legacyResourceId.toLongOrNull() ?: return@mapNotNull null
     val foId = findFulfillmentOrderLegacyIdForVariant(order, variant) ?: return@mapNotNull null
     val lineId = legacyIdFromGid(li.id) ?: return@mapNotNull null
-    val minor = shopifyDecimalToMinorUnits(li.originalUnitPriceSet.shopMoney.amount)
     OrderLineItem(
       shopifyLineItemId = lineId,
       productVariantId = variantLegacy,
@@ -50,12 +51,13 @@ fun orderToCreateShopifyOrderRequest(
       fulfillmentOrderId = foId,
       snapshotOfVariantTitle = li.name,
       snapshotOfProductTitle = li.title,
-      snapshotOfPriceInMinorUnits = minor,
+      snapshotOfPriceAsString = shopifyMoneyAmountForWire(li.originalUnitPriceSet.shopMoney.amount),
     )
   }
-  val totalMinor = shopifyDecimalToMinorUnits(order.totalPriceSet.shopMoney.amount)
-    .takeIf { it > 0L }
-    ?: lineItems.sumOf { it.snapshotOfPriceInMinorUnits * it.quantity.toLong() }.coerceAtLeast(0L)
+  val totalString = resolveOrderTotalAsString(
+    orderTotalAmount = order.totalPriceSet.shopMoney.amount,
+    lineItems = lineItems,
+  )
   val currency = order.totalPriceSet.shopMoney.currencyCode.name
   return CreateShopifyOrderRequest(
     shopifySubdomain = shopifySubdomain,
@@ -66,9 +68,27 @@ fun orderToCreateShopifyOrderRequest(
     createdAt = formatCreatedAtUtcZ(order.createdAt),
     shippingAddress = shipping,
     lineItems = lineItems,
-    totalInMinorUnits = totalMinor,
+    totalAsString = totalString,
     currency = currency,
   )
+}
+
+/**
+ * Uses Shopify's order total when it parses to a positive amount; otherwise derives the total
+ * from line-item unit prices × quantities (same fallback as the previous minor-units contract).
+ */
+internal fun resolveOrderTotalAsString(
+  orderTotalAmount: String?,
+  lineItems: List<OrderLineItem>,
+): String {
+  val normalizedOrderTotal = shopifyMoneyAmountForWire(orderTotalAmount)
+  if (shopifyDecimalToMinorUnits(normalizedOrderTotal) > 0L) {
+    return normalizedOrderTotal
+  }
+  val lineSumMinor = lineItems.sumOf { item ->
+    shopifyDecimalToMinorUnits(item.snapshotOfPriceAsString) * item.quantity.toLong()
+  }.coerceAtLeast(0L)
+  return minorUnitsToShopifyDecimal(lineSumMinor)
 }
 
 private fun OrderDisplayFinancialStatus.toFinancialString(): String {
