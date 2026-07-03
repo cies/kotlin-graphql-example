@@ -1,9 +1,16 @@
-/build/
-/out/
-/.gradle/
-/.kotlin/
+# Gradle outputs — unanchored so nested projects (e.g. buildSrc) are covered too.
+build/
+out/
+.gradle/
+.kotlin/
+
 /.idea/*
 !/.idea/dictionaries/
 /.idea/dictionaries/*
 !/.idea/dictionaries/project.xml
 .env
+
+# Local JVM crash dumps from Gradle/test runs
+hs_err_pid*.log
+replay_pid*.log
+debug.log
