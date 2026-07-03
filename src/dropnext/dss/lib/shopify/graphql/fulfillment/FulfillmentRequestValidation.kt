@@ -28,8 +28,25 @@ fun validateSyncShipmentsRequest(request: SyncShipmentsWithFulfillmentsRequest):
     request.shipments.forEachIndexed { index, shipment ->
       errors += validateShipment(shipment, index)
     }
+    errors += validateDuplicateTrackingNumbers(request.shipments)
   }
   return errors.toResult()
+}
+
+private fun validateDuplicateTrackingNumbers(shipments: List<Shipment>): List<String> {
+  val seen = mutableSetOf<String>()
+  val duplicates = linkedSetOf<String>()
+  for (shipment in shipments) {
+    val tracking = shipment.trackingNumber.trim()
+    if (!seen.add(tracking)) {
+      duplicates.add(tracking)
+    }
+  }
+  return if (duplicates.isEmpty()) {
+    emptyList()
+  } else {
+    listOf("duplicate tracking_number in payload: ${duplicates.joinToString(", ")}")
+  }
 }
 
 fun validateTrackingUpdateRequest(request: TrackingUpdateRequest): RequestValidation {
@@ -47,7 +64,6 @@ private fun validateShipment(shipment: Shipment, index: Int): List<String> {
   val errors = mutableListOf<String>()
   val prefix = "shipments[$index]"
   if (shipment.trackingNumber.isBlank()) errors += "$prefix tracking_number is required"
-  if (shipment.carrier.isNullOrBlank()) errors += "$prefix carrier is required"
   if (shipment.lineItems.isEmpty()) {
     errors += "$prefix line_items must not be empty"
   } else {

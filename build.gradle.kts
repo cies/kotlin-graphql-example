@@ -183,6 +183,12 @@ jacoco {
   toolVersion = "0.8.14"
 }
 
+tasks.test {
+  // One fork at a time — avoids OOM when many integration tests spin up Ktor/HTTP fakes.
+  maxParallelForks = 1
+  jvmArgs("-Xmx768m", "-XX:MaxMetaspaceSize=256m")
+}
+
 val monolithServiceGeneratedDtoPath = "dropnext/dss/lib/monolith/dto/generated"
 val monolithPathsGeneratedDir = layout.buildDirectory.dir("generated/monolith-paths")
 val monolithPathsGeneratedFile =

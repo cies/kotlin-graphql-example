@@ -9,9 +9,11 @@ import dropnext.dss.lib.shopify.graphql.fulfillment.FulfillmentResult
 import dropnext.dss.lib.shopify.graphql.fulfillment.ShipmentMatchResult
 import dropnext.dss.lib.shopify.graphql.fulfillment.SkipReason
 import dropnext.dss.lib.shopify.graphql.fulfillment.SkippedShipmentLine
+import dropnext.dss.lib.shopify.graphql.fulfillment.SyncShipmentsRunStats
 import dropnext.dss.lib.shopify.graphql.fulfillment.dryRunAllShipments
+import dropnext.dss.lib.shopify.graphql.fulfillment.formatSyncShipmentsLogLine
 import dropnext.dss.lib.shopify.graphql.fulfillment.matchShipmentToFulfillmentOrders
-import dropnext.dss.lib.shopify.legacyIdFromGid
+import dropnext.dss.lib.shopify.graphql.fulfillment.parseCreatedFulfillmentId
 import dropnext.dss.lib.shopify.orderGid
 import dropnext.graphql.generated.getorderfordss.FulfillmentOrder
 import dropnext.graphql.generated.getorderfordss.Order
@@ -94,13 +96,9 @@ suspend fun syncShopifyShipmentsToFulfillments(
           is FulfillmentResult.Ok -> {
             val createdIds = createResult.value
             newFulfillmentIds.addAll(createdIds)
-            order = loadOrder(shopify, orderGid)
+            order = reloadOrderAfterCreate(shopify, orderGid, shop, orderId, createdIds)
               ?: return FulfillmentResult.Err.Network(
-                buildString {
-                  append("fulfillmentId=${createdIds.lastOrNull()} created but order reload failed")
-                  append(" — manual verify required")
-                  append(" (shop=$shop orderId=$orderId)")
-                },
+                buildReloadFailureMessage(shop, orderId, createdIds),
               )
           }
         }
@@ -108,15 +106,41 @@ suspend fun syncShopifyShipmentsToFulfillments(
     }
   }
 
-  log.info {
-    "sync-shipments orderId=$orderId shop=$shop canceled=$canceledCount " +
-      "created=${newFulfillmentIds.size} skippedLines=$totalSkippedLines " +
-      "skippedShipments=$skippedShipments fulfillmentIds=$newFulfillmentIds"
-  }
+  val stats = SyncShipmentsRunStats(
+    canceledCount = canceledCount,
+    createdCount = newFulfillmentIds.size,
+    skippedLines = totalSkippedLines,
+    skippedShipments = skippedShipments,
+  )
+
+  log.info { formatSyncShipmentsLogLine(shop, orderId, stats, newFulfillmentIds) }
 
   return FulfillmentResult.Ok(
     SyncShipmentsWithFulfillmentsResponse(newFulfillmentIds = newFulfillmentIds),
   )
+}
+
+private fun buildReloadFailureMessage(shop: String, orderId: Long, createdIds: List<Long>): String =
+  buildString {
+    append("fulfillmentId=${createdIds.lastOrNull()} created but order reload failed")
+    append(" — manual verify required")
+    append(" (shop=$shop orderId=$orderId)")
+  }
+
+private suspend fun reloadOrderAfterCreate(
+  shopify: ShopifyGraphqlService,
+  orderGid: String,
+  shop: String,
+  orderId: Long,
+  createdIds: List<Long>,
+): Order? {
+  val reloaded = loadOrder(shopify, orderGid)
+  if (reloaded == null) {
+    log.error {
+      buildReloadFailureMessage(shop, orderId, createdIds)
+    }
+  }
+  return reloaded
 }
 
 private fun logSkippedLine(shop: String, orderId: Long, skipped: SkippedShipmentLine) {
@@ -197,8 +221,7 @@ private suspend fun createFulfillmentForGroups(
   val fulfillment = response.data?.fulfillmentCreate?.fulfillment
     ?: return FulfillmentResult.Err.UserError(listOf("fulfillment missing in response"))
 
-  val fulfillmentId = fulfillment.legacyResourceId.toLongOrNull()
-    ?: fulfillment.id.let { legacyIdFromGid(it) }
+  val fulfillmentId = parseCreatedFulfillmentId(fulfillment)
   if (fulfillmentId == null) {
     log.warn {
       "sync-shipments could not resolve fulfillment id from response gid=${fulfillment.id} " +

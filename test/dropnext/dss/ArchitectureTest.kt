@@ -10,6 +10,12 @@ import org.junit.jupiter.api.Test
 /** Tests that enforce architecture rules relating to the dependencies that packages have on each other. */
 class ArchitectureTest {
 
+  /** Konsist returns OS-native paths; allow-list entries use forward slashes. */
+  private fun normalizedPath(path: String): String = path.replace('\\', '/')
+
+  private fun pathContainsAllowListEntry(path: String, allowList: List<String>): Boolean =
+    allowList.any { allowed -> allowed in normalizedPath(path) }
+
   @Test
   fun `the project's packages have correct dependencies on each other`() {
     // Our sources live in `src/` (not `src/main/kotlin/`), which defeats Konsist's
@@ -97,7 +103,7 @@ class ArchitectureTest {
   fun `forbid use of JVM reflection`() {
     Konsist.scopeFromDirectory("src")
       .files
-      .filterNot { file -> reflectionAllowList.any { allowed -> allowed in file.path } }
+      .filterNot { file -> pathContainsAllowListEntry(file.path, reflectionAllowList) }
       .assertFalse { file ->
         val importNames = file.imports.map { it.name }
 
@@ -145,7 +151,7 @@ class ArchitectureTest {
   fun `workflow package must not depend on Ktor server or HTTP request types`() {
     Konsist.scopeFromDirectory("src")
       .files
-      .filter { "/dropnext/dss/workflow/" in it.path }
+      .filter { "/dropnext/dss/workflow/" in normalizedPath(it.path) }
       .assertFalse { file ->
         val httpImports = file.imports
           .map { it.name }
@@ -220,7 +226,7 @@ class ArchitectureTest {
   fun `forbid dropnext-graphql-generated imports outside lib_shopify and mappers`() {
     Konsist.scopeFromDirectory("src")
       .files
-      .filterNot { file -> graphqlGeneratedAllowList.any { allowed -> allowed in file.path } }
+      .filterNot { file -> pathContainsAllowListEntry(file.path, graphqlGeneratedAllowList) }
       .assertFalse { file ->
         val offending = file.imports
           .map { it.name }
@@ -242,7 +248,7 @@ class ArchitectureTest {
     val jsonConstructor = Regex("""\bJson\s*\{""")
     Konsist.scopeFromDirectory("src")
       .files
-      .filterNot { file -> jsonConstructionAllowList.any { allowed -> allowed in file.path } }
+      .filterNot { file -> pathContainsAllowListEntry(file.path, jsonConstructionAllowList) }
       .assertFalse { file ->
         val hasJsonImport = file.imports.any { it.name == "kotlinx.serialization.json.Json" }
         val constructs = hasJsonImport && jsonConstructor.containsMatchIn(file.text)
@@ -272,7 +278,7 @@ class ArchitectureTest {
     val httpClientConstructor = Regex("""\bHttpClient\s*\(""")
     Konsist.scopeFromDirectory("src")
       .files
-      .filterNot { file -> httpClientConstructionAllowList.any { allowed -> allowed in file.path } }
+      .filterNot { file -> pathContainsAllowListEntry(file.path, httpClientConstructionAllowList) }
       .assertFalse { file ->
         val constructs = httpClientConstructor.containsMatchIn(file.text)
         if (constructs) {
@@ -325,7 +331,7 @@ class ArchitectureTest {
     // under src/dropnext/dss/lib/dto/ (sources tree only; generated DTOs live under build/).
     val handWritten = Konsist.scopeFromDirectory("src")
       .files
-      .filter { "/dropnext/dss/lib/dto/" in it.path }
+      .filter { "/dropnext/dss/lib/dto/" in normalizedPath(it.path) }
     assert(handWritten.isEmpty()) {
       "Hand-written DTOs belong in openapi.json codegen only: ${handWritten.map { it.path }}"
     }
@@ -379,17 +385,18 @@ class ArchitectureTest {
     // convention; deliberately does NOT enforce coverage (code review handles that).
     val srcFilesByPath: Set<String> = Konsist.scopeFromDirectory("src")
       .files
-      .map { it.path }
+      .map { normalizedPath(it.path) }
       .toSet()
 
     val orphaned = Konsist.scopeFromDirectory("test")
       .files
       .filter { it.name.endsWith("Test") }
       .filterNot { file -> testInfrastructureSuffixes.any { file.name.endsWith(it) } }
-      .filterNot { file -> mirrorSourceAllowList.any { it in file.path } }
+      .filterNot { file -> pathContainsAllowListEntry(file.path, mirrorSourceAllowList) }
       .mapNotNull { file ->
         val stem = file.name.removeSuffix("Test")
-        val mirroredDir = file.path.substringBeforeLast("/").replace("/test/", "/src/")
+        val normalized = normalizedPath(file.path)
+        val mirroredDir = normalized.substringBeforeLast("/").replace("/test/", "/src/")
         val pascalCandidate = "$mirroredDir/$stem.kt"
         val lowerCamelCandidate =
           "$mirroredDir/${stem.replaceFirstChar { it.lowercaseChar() }}.kt"

@@ -15,8 +15,12 @@ import dropnext.graphql.generated.RegisterWebhook
 import dropnext.graphql.generated.ShopIdentity
 import dropnext.graphql.generated.SyncProductsPage
 import dropnext.graphql.generated.enums.WebhookSubscriptionTopic
+import dropnext.graphql.generated.fulfillmentcancelmutation.Fulfillment as CancelledFulfillment
 import dropnext.graphql.generated.fulfillmentcancelmutation.FulfillmentCancelPayload
+import dropnext.graphql.generated.fulfillmentcreatewithlineitems.Fulfillment as CreatedFulfillment
 import dropnext.graphql.generated.fulfillmentcreatewithlineitems.FulfillmentCreatePayload
+import dropnext.graphql.generated.fulfillmentcreatewithlineitems.UserError as CreateUserError
+import dropnext.graphql.generated.enums.FulfillmentStatus
 import dropnext.graphql.generated.fulfillmenteventcreatemutation.FulfillmentEventCreatePayload
 import dropnext.graphql.generated.getwebhooksubscriptions.WebhookSubscriptionConnection
 import dropnext.graphql.generated.inputs.FulfillmentEventInput
@@ -55,7 +59,26 @@ class FakeShopifyGraphqlService(
 
   var loadOrderForDssResponse: GraphQLClientResponse<GetOrderForDss.Result> =
     okResponse(GetOrderForDss.Result(order = null))
+  val loadOrderForDssResponseQueue: MutableList<GraphQLClientResponse<GetOrderForDss.Result>> = mutableListOf()
   val loadOrderForDssCalls: MutableList<String> = mutableListOf()
+
+  var cancelFulfillmentResponse: GraphQLClientResponse<FulfillmentCancelMutation.Result> =
+    okResponse(
+      FulfillmentCancelMutation.Result(
+        fulfillmentCancel = FulfillmentCancelPayload(fulfillment = null, userErrors = emptyList()),
+      ),
+    )
+  val cancelFulfillmentCalls: MutableList<String> = mutableListOf()
+
+  var createFulfillmentWithLineItemsResponse: GraphQLClientResponse<FulfillmentCreateWithLineItems.Result> =
+    okResponse(
+      FulfillmentCreateWithLineItems.Result(
+        fulfillmentCreate = FulfillmentCreatePayload(fulfillment = null, userErrors = emptyList()),
+      ),
+    )
+  val createFulfillmentWithLineItemsResponseQueue:
+    MutableList<GraphQLClientResponse<FulfillmentCreateWithLineItems.Result>> = mutableListOf()
+  val createFulfillmentWithLineItemsCalls: MutableList<RecordedCreateFulfillmentCall> = mutableListOf()
 
   var getProductByIdResponse: GraphQLClientResponse<GetProductById.Result> =
     okResponse(GetProductById.Result(product = null, shop = GetProductByIdShop()))
@@ -91,28 +114,35 @@ class FakeShopifyGraphqlService(
 
   override suspend fun loadOrderForDss(orderGid: String): GraphQLClientResponse<GetOrderForDss.Result> {
     loadOrderForDssCalls.add(orderGid)
+    if (loadOrderForDssResponseQueue.isNotEmpty()) {
+      return loadOrderForDssResponseQueue.removeAt(0)
+    }
     return loadOrderForDssResponse
   }
 
   override suspend fun cancelFulfillment(
     fulfillmentGid: String,
-  ): GraphQLClientResponse<FulfillmentCancelMutation.Result> =
-    okResponse(
-      FulfillmentCancelMutation.Result(
-        fulfillmentCancel = FulfillmentCancelPayload(fulfillment = null, userErrors = emptyList()),
-      ),
-    )
+  ): GraphQLClientResponse<FulfillmentCancelMutation.Result> {
+    cancelFulfillmentCalls.add(fulfillmentGid)
+    return cancelFulfillmentResponse
+  }
 
   override suspend fun createFulfillmentWithLineItems(
       lineItemsByFulfillmentOrder: List<FulfillmentOrderLineItemsInput>,
       tracking: FulfillmentTrackingInput,
       notifyCustomer: Boolean,
-  ): GraphQLClientResponse<FulfillmentCreateWithLineItems.Result> =
-    okResponse(
-      FulfillmentCreateWithLineItems.Result(
-        fulfillmentCreate = FulfillmentCreatePayload(fulfillment = null, userErrors = emptyList()),
+  ): GraphQLClientResponse<FulfillmentCreateWithLineItems.Result> {
+    createFulfillmentWithLineItemsCalls.add(
+      RecordedCreateFulfillmentCall(
+        lineItemsByFulfillmentOrder = lineItemsByFulfillmentOrder,
+        tracking = tracking,
       ),
     )
+    if (createFulfillmentWithLineItemsResponseQueue.isNotEmpty()) {
+      return createFulfillmentWithLineItemsResponseQueue.removeAt(0)
+    }
+    return createFulfillmentWithLineItemsResponse
+  }
 
   override suspend fun createFulfillmentEvent(
     input: FulfillmentEventInput,
@@ -152,6 +182,11 @@ class FakeShopifyGraphqlService(
     )
   }
 }
+
+data class RecordedCreateFulfillmentCall(
+  val lineItemsByFulfillmentOrder: List<FulfillmentOrderLineItemsInput>,
+  val tracking: FulfillmentTrackingInput,
+)
 
 /** Build a [GraphQLClientResponse] with only `data` populated — the common case for stubs. */
 fun <T> okResponse(data: T): GraphQLClientResponse<T> =

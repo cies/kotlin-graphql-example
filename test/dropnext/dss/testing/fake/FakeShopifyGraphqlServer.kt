@@ -38,6 +38,7 @@ class FakeShopifyGraphqlServer {
   val calls: MutableList<RecordedCall> = mutableListOf()
 
   private val responses: MutableMap<String, String> = mutableMapOf()
+  private val responseQueues: MutableMap<String, ArrayDeque<String>> = mutableMapOf()
   private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
   /** OAuth token-exchange response served on `POST /admin/oauth/access_token`. */
@@ -63,7 +64,8 @@ class FakeShopifyGraphqlServer {
           val token = call.request.headers["X-Shopify-Access-Token"]
           calls.add(RecordedCall(op, vars, token, raw))
           val body =
-            responses[op]
+            dequeueResponse(op)
+              ?: responses[op]
               ?: """{"data":null,"errors":[{"message":"no stub for $op"}]}"""
           call.respondText(body, ContentType.Application.Json, HttpStatusCode.OK)
         }
@@ -86,6 +88,7 @@ class FakeShopifyGraphqlServer {
   fun reset() {
     calls.clear()
     responses.clear()
+    responseQueues.clear()
     oauthCalls.clear()
     oauthAccessTokenResponse = """{"access_token":"shpat_fake_admin_token","scope":"read_orders"}"""
     oauthStatus = HttpStatusCode.OK
@@ -95,6 +98,19 @@ class FakeShopifyGraphqlServer {
   fun stubRaw(operationName: String, responseJson: String) {
     responses[operationName] = responseJson
   }
+
+  /** Stub a sequence of raw responses for [operationName]; each call dequeues the next entry. */
+  fun stubSequence(operationName: String, vararg responseJson: String) {
+    responseQueues[operationName] = ArrayDeque(responseJson.toList())
+  }
+
+  /** Enqueue a response served before any static [stubRaw] / [stubData] stub for [operationName]. */
+  fun enqueueResponse(operationName: String, responseJson: String) {
+    responseQueues.getOrPut(operationName) { ArrayDeque() }.addLast(responseJson)
+  }
+
+  private fun dequeueResponse(operationName: String): String? =
+    responseQueues[operationName]?.removeFirstOrNull()
 
   /** Stub `{"data": <serialized payload>}` for [operationName] from a typed payload. */
   fun <T : Any> stubData(operationName: String, payload: T, serializer: KSerializer<T>) {

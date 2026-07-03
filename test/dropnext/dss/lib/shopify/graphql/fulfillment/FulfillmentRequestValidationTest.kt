@@ -51,7 +51,7 @@ class FulfillmentRequestValidationTest {
   }
 
   @Test
-  fun `rejects missing carrier on shipment`() {
+  fun `accepts shipment without carrier`() {
     val result =
         validateSyncShipmentsRequest(
             SyncShipmentsWithFulfillmentsRequest(
@@ -60,7 +60,7 @@ class FulfillmentRequestValidationTest {
                 shipments = listOf(validShipment().copy(carrier = null)),
             ),
         )
-    assert(result is RequestValidation.Invalid)
+    assert(result is RequestValidation.Valid)
   }
 
   @Test
@@ -126,6 +126,39 @@ class FulfillmentRequestValidationTest {
   }
 
   @Test
+  fun `rejects duplicate tracking numbers`() {
+    val result =
+        validateSyncShipmentsRequest(
+            SyncShipmentsWithFulfillmentsRequest(
+                shopifySubdomain = "acme",
+                shopifyOrderId = 1001L,
+                shipments = listOf(
+                    validShipment().copy(trackingNumber = "1Z999"),
+                    validShipment().copy(trackingNumber = "1Z999"),
+                ),
+            ),
+        )
+    assert(result is RequestValidation.Invalid)
+    assert("duplicate tracking_number" in (result as RequestValidation.Invalid).message)
+  }
+
+  @Test
+  fun `accepts distinct tracking numbers across shipments`() {
+    val result =
+        validateSyncShipmentsRequest(
+            SyncShipmentsWithFulfillmentsRequest(
+                shopifySubdomain = "acme",
+                shopifyOrderId = 1001L,
+                shipments = listOf(
+                    validShipment().copy(trackingNumber = "1Z999"),
+                    validShipment().copy(trackingNumber = "1Z888"),
+                ),
+            ),
+        )
+    assert(result is RequestValidation.Valid)
+  }
+
+  @Test
   fun `accepts valid sync request`() {
     val result =
         validateSyncShipmentsRequest(
@@ -174,7 +207,7 @@ class FulfillmentRequestValidationTest {
                 shopifySubdomain = "acme",
                 shopifyOrderId = 0L,
                 shipments = listOf(
-                    validShipment().copy(trackingNumber = "  ", carrier = null),
+                    validShipment().copy(trackingNumber = "  "),
                     validShipment().copy(
                         lineItems = listOf(
                             ShipmentLineItem(
@@ -190,9 +223,8 @@ class FulfillmentRequestValidationTest {
     val messages = (result as RequestValidation.Invalid).messages
     assert(messages.any { "shopify_order_id" in it })
     assert(messages.any { "tracking_number" in it })
-    assert(messages.any { "carrier" in it })
     assert(messages.any { "quantity must be positive" in it })
-    assert(messages.size >= 4)
+    assert(messages.size >= 3)
   }
 
   @Test

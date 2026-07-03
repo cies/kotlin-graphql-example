@@ -1,6 +1,6 @@
 # Fulfillment verification (DSS)
 
-Checklist for verifying **supplier shipment → Shopify fulfillment** via the monolith → DSS path. DSS does not call the Supplier API directly; the monolith bridges supplier events to DSS webhooks defined in [`openapi.json`](../openapi.json) (`x-webhooks`).
+Checklist for verifying **supplier shipment → Shopify fulfillment** via the monolith → DSS path. DSS does not call the Supplier API directly; the monolith bridges supplier events to DSS webhooks defined in [`docs/openapi/dss-api.yaml`](openapi/dss-api.yaml).
 
 ## Prerequisites
 
@@ -15,9 +15,8 @@ Checklist for verifying **supplier shipment → Shopify fulfillment** via the mo
 |-----------------|---------|--------------|
 | Supplier created/reorganized shipment | `POST /sync-shipments-with-fulfillments` | `SyncShipmentsWithFulfillmentsRequest` |
 | Carrier tracking status (e.g. AfterShip) | `POST /tracking-update` | `TrackingUpdateRequest` |
-| Compat alias for tracking status | `POST /tracking-updates` | `TrackingUpdateRequest` |
 
-See also [`docs/openapi/dss-api.yaml`](openapi/dss-api.yaml).
+See also [`docs/openapi/dss-api.yaml`](openapi/dss-api.yaml) and [`specs/fulfillment-shipment-fo-mapping.md`](../specs/fulfillment-shipment-fo-mapping.md).
 
 ## Step A — Order ingest (Shopify → monolith)
 
@@ -43,14 +42,63 @@ See also [`docs/openapi/dss-api.yaml`](openapi/dss-api.yaml).
 }
 ```
 
-3. Expect **HTTP 200** and `new_fulfillment_ids` non-empty.
-4. In Shopify Admin: order shows fulfillment with tracking; line items marked fulfilled.
+3. Expect **HTTP 200** and a JSON body with `new_fulfillment_ids` (array of Shopify fulfillment legacy IDs created during this sync):
 
-**Failure checks (after defensive validation):**
+```json
+{
+  "new_fulfillment_ids": [5001]
+}
+```
 
-- Wrong `product_variant_id` → **404** with explicit message.
-- Quantity greater than remaining on FO → **400**.
+- One entry per shipment that had at least one matchable line item (one `fulfillmentCreate` per such shipment).
+- Empty array when every line in every shipment was skipped (see partial match below) — still **200**.
+4. In Shopify Admin: order shows fulfillment with tracking; matched line items marked fulfilled.
+
+### Sync phases (validate-before-cancel)
+
+DSS never cancels existing fulfillments until the full payload passes validation against the current order:
+
+```
+load order → dry-run match ALL shipments → if ANY hard error → 400, NO cancels
+           → cancel all existing fulfillments
+           → reload order
+           → create fulfillments one-by-one (reload after each success)
+```
+
+This means a bad quantity in the payload leaves existing Shopify fulfillments untouched.
+
+### Partial match (unmatched variants)
+
+When a shipment line's `product_variant_id` does not appear on any open fulfillment order line, DSS **skips that line** and continues — it does not fail the whole sync.
+
+| Situation | HTTP | Shopify effect |
+|-----------|------|----------------|
+| Line matches open FO with sufficient qty | 200 | Included in `fulfillmentCreate` |
+| Variant not on any open FO | 200 | Line skipped; matched lines still fulfilled |
+| All lines in a shipment unmatched | 200 | No create for that shipment; `new_fulfillment_ids` omits it |
+| Qty exceeds remaining (single line or cross-shipment total) | **400** (before cancel) | Existing fulfillments untouched |
+| Order not found | **404** | No mutations |
+
+**Partial-match manual check:**
+
+1. Send a shipment with one known-good variant and one bogus `product_variant_id` (e.g. `999`).
+2. Expect **HTTP 200** with `new_fulfillment_ids` containing one ID.
+3. In Shopify Admin: the good variant is fulfilled; the bogus variant stays unfulfilled.
+4. In DSS logs at `warn`: `sync-shipments skipped line … variant=999 reason=no_open_fo`.
+
+**Hard-failure manual check (validate-before-cancel):**
+
+1. Note existing fulfillments on a test order.
+2. POST a payload where a line quantity exceeds remaining FO quantity.
+3. Expect **400**; confirm existing fulfillments are still present in Shopify Admin.
+
+**Failure checks (request validation and sync):**
+
+- Malformed body, missing fields, non-positive `shopify_order_id` → **400**.
+- Quantity greater than remaining on FO (including cross-shipment over-allocation) → **400** before any cancel.
+- Order not found in Shopify → **404**.
 - No resolvable Shopify Admin token for the shop → **401**.
+- Cancel or create GraphQL failure (non–already-canceled) → **4xx/5xx**; partial creates may exist until monolith retries the full payload.
 
 ## Step C — Tracking event (AfterShip-style)
 
@@ -71,9 +119,20 @@ See also [`docs/openapi/dss-api.yaml`](openapi/dss-api.yaml).
 
 ## Operational notes
 
-- Each shipment sync **cancels all existing fulfillments** on the order, then recreates from the payload (destructive resync by design).
+- Each successful sync **cancels all existing fulfillments** on the order, then recreates from the payload (destructive resync by design). Validation runs first so hard errors do not leave the order with zero fulfillments.
+- Re-sending the same payload is idempotent: cancel whatever exists → recreate identical fulfillments. Tracking events on canceled fulfillments are lost (known trade-off).
+- DSS logs a summary at `info` after each sync, e.g. `sync-shipments orderId=1001 shop=acme canceled=2 created=1 skippedLines=1 skippedShipments=0 fulfillmentIds=[5001]`.
+- Per skipped line at `warn`: `sync-shipments skipped line … tracking=… variant=… reason=no_open_fo qty=…`.
 - Shopify **webhooks always return 200** even when monolith sync fails; monitor DSS logs (`error` level) and `dss.webhook.outcome=failed` MDC on monolith 5xx.
 - Orders with more than 100 line items may truncate in `GetOrderForDss` (`lineItems(first: 100)`).
+
+## Extended manual checklist
+
+1. **Cross-FO shipment** — one shipment spanning two fulfillment orders → one Shopify fulfillment, correct tracking, both FOs reflected.
+2. **Bad quantity** — payload with qty > remaining → **400**, existing fulfillments untouched.
+3. **Partial match** — one unmatched variant in payload → **200**, partial fulfillment created, skipped line in logs.
+4. **Idempotent retry** — re-send same payload → cancel + recreate, same outcome.
+5. **Reorganized splits** — supplier changes shipment groupings → new fulfillments match new payload.
 
 ## Automated tests in this repo
 

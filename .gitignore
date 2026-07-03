@@ -10,7 +10,4 @@ out/
 !/.idea/dictionaries/project.xml
 .env
 
-# Local JVM crash dumps from Gradle/test runs
-hs_err_pid*.log
-replay_pid*.log
-debug.log
+

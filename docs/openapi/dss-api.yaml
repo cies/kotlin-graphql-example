@@ -171,7 +171,7 @@ paths:
       description: |
         Sent by the monolith when a tracking status update arrives (e.g. from AfterShip).
         The DSS locates the Shopify fulfillment by order + tracking number and creates a FulfillmentEvent.
-      required: [shopify_subdomain, shopify_order_id, tracking_number, status, happened_at]
+      required: [shopify_subdomain, shopify_order_id, tracking_number, status, happened_at, message]
       properties:
         shopify_subdomain:
           type: string

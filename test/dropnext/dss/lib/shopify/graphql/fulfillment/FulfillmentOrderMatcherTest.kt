@@ -294,6 +294,83 @@ class FulfillmentOrderMatcherTest {
   }
 
   @Test
+  fun `ledger initializes remaining quantities from open fulfillment order lines`() {
+    val order = orderWithFulfillmentOrders(openFo(variantId = 101L, remaining = 3))
+    val ledger = FulfillmentQuantityLedger(order)
+    assert(ledger.remaining("gid://shopify/FulfillmentOrderLineItem/401") == 3)
+  }
+
+  @Test
+  fun `ledger ignores closed fulfillment orders and zero remaining lines`() {
+    val closed =
+      FulfillmentOrder(
+        id = "gid://shopify/FulfillmentOrder/301",
+        status = FulfillmentOrderStatus.CLOSED,
+        lineItems = foLineItems(variantId = 101L, remaining = 5),
+      )
+    val openZero =
+      FulfillmentOrder(
+        id = "gid://shopify/FulfillmentOrder/302",
+        status = FulfillmentOrderStatus.OPEN,
+        lineItems = foLineItems(lineItemId = 402L, variantId = 202L, remaining = 0),
+      )
+    val order = orderWithFulfillmentOrders(closed, openZero)
+    val ledger = FulfillmentQuantityLedger(order)
+    assert(ledger.remaining("gid://shopify/FulfillmentOrderLineItem/401") == 0)
+    assert(ledger.remaining("gid://shopify/FulfillmentOrderLineItem/402") == 0)
+  }
+
+  @Test
+  fun `ledger tryConsume decrements remaining quantity`() {
+    val order = orderWithFulfillmentOrders(openFo(variantId = 101L, remaining = 3))
+    val ledger = FulfillmentQuantityLedger(order)
+    val gid = "gid://shopify/FulfillmentOrderLineItem/401"
+    assert(ledger.tryConsume(gid, 2))
+    assert(ledger.remaining(gid) == 1)
+    assert(ledger.tryConsume(gid, 1))
+    assert(ledger.remaining(gid) == 0)
+  }
+
+  @Test
+  fun `ledger tryConsume returns false when quantity exceeds remaining`() {
+    val order = orderWithFulfillmentOrders(openFo(variantId = 101L, remaining = 2))
+    val ledger = FulfillmentQuantityLedger(order)
+    val gid = "gid://shopify/FulfillmentOrderLineItem/401"
+    assert(!ledger.tryConsume(gid, 3))
+    assert(ledger.remaining(gid) == 2)
+  }
+
+  @Test
+  fun `ledger tryConsume returns false for unknown line item gid`() {
+    val order = orderWithFulfillmentOrders(openFo(variantId = 101L, remaining = 2))
+    val ledger = FulfillmentQuantityLedger(order)
+    assert(!ledger.tryConsume("gid://shopify/FulfillmentOrderLineItem/999", 1))
+  }
+
+  @Test
+  fun `dry-run reports total skipped lines across shipments`() {
+    val order = orderWithFulfillmentOrders(openFo(variantId = 101L, remaining = 2))
+    val shipments =
+      listOf(
+        Shipment(
+          trackingNumber = "TRK-1",
+          carrier = "UPS",
+          trackingUrl = null,
+          lineItems = listOf(
+            ShipmentLineItem(productVariantId = 101L, quantity = 1),
+            ShipmentLineItem(productVariantId = 999L, quantity = 1),
+          ),
+        ),
+        shipment(tracking = "TRK-2", variantId = 888L, quantity = 1),
+      )
+    val result = dryRunAllShipments(order, shipments) as DryRunResult.Ok
+    assert(result.totalSkipped == 2)
+    assert(result.perShipment.size == 2)
+    assert(result.perShipment.first().skipped.size == 1)
+    assert(result.perShipment.last().skipped.size == 1)
+  }
+
+  @Test
   fun `isOpenForFulfillment is true for OPEN`() {
     assert(FulfillmentOrderStatus.OPEN.isOpenForFulfillment())
   }

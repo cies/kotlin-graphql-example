@@ -9,14 +9,24 @@ import dropnext.dss.lib.monolith.dto.generated.UpdateStoreApiKeyResponse
 import dropnext.dss.lib.monolith.dto.generated.Shipment
 import dropnext.dss.lib.monolith.dto.generated.ShipmentLineItem
 import dropnext.dss.lib.monolith.dto.generated.SyncShipmentsWithFulfillmentsRequest
+import dropnext.dss.lib.monolith.dto.generated.SyncShipmentsWithFulfillmentsResponse
 import dropnext.dss.lib.monolith.dto.generated.TrackingUpdateRequest
 import dropnext.dss.lib.json.AppJson
 import dropnext.dss.lib.ktor.plugin.installMonolithWebhookAuth
 import dropnext.dss.lib.ktor.installJsonContentNegotiation
 import dropnext.dss.routing.installMonolithWebhookRoutes
 import dropnext.dss.lib.shopify.ShopDomain
+import dropnext.dss.lib.shopify.graphql.fulfillment.diagramCrossFoOrder
+import dropnext.dss.lib.shopify.graphql.fulfillment.diagramCrossFoShipment
 import dropnext.dss.testing.fake.FakeMonolithService
+import dropnext.dss.testing.fake.FakeShopifyGraphqlService
 import dropnext.dss.testing.fake.FakeShopifyGraphqlServiceFactory
+import dropnext.dss.testing.fake.okResponse
+import dropnext.dss.workflow.minimalOrder
+import dropnext.graphql.generated.FulfillmentCreateWithLineItems
+import dropnext.graphql.generated.GetOrderForDss
+import dropnext.graphql.generated.fulfillmentcreatewithlineitems.Fulfillment as CreatedFulfillment
+import dropnext.graphql.generated.fulfillmentcreatewithlineitems.FulfillmentCreatePayload
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation as ClientContentNegotiation
@@ -110,6 +120,176 @@ class MonolithWebhookHandlersTest {
     }
     assert(r.status == HttpStatusCode.BadRequest)
     assert("invalid request body" in r.bodyAsText())
+  }
+
+  @Test
+  fun `sync-shipments returns 400 for duplicate tracking numbers`() = runDssApp(handlers()) { client ->
+    val r = client.post(Paths.syncShipmentsWithFulfillments) {
+      contentType(ContentType.Application.Json)
+      setBody(
+        validSyncRequest().copy(
+          shipments = listOf(
+            validSyncRequest().shipments.single(),
+            validSyncRequest().shipments.single(),
+          ),
+        ),
+      )
+    }
+    assert(r.status == HttpStatusCode.BadRequest)
+    assert("duplicate tracking_number" in r.bodyAsText())
+  }
+
+  // ---------- sync-shipments success + dry-run ----------
+
+  @Test
+  fun `sync-shipments returns 200 with new_fulfillment_ids`() {
+    val fakeShopify = FakeShopifyGraphqlService()
+    fakeShopify.loadOrderForDssResponse = okResponse(GetOrderForDss.Result(order = minimalOrder()))
+    fakeShopify.createFulfillmentWithLineItemsResponse = okResponse(
+      FulfillmentCreateWithLineItems.Result(
+        fulfillmentCreate = FulfillmentCreatePayload(
+          fulfillment = CreatedFulfillment(
+            id = "gid://shopify/Fulfillment/5001",
+            legacyResourceId = "5001",
+          ),
+          userErrors = emptyList(),
+        ),
+      ),
+    )
+    val tokens = ShopAccessTokenCache().apply { this[acmeShop] = "shpat_test" }
+    runDssApp(
+      handlers(
+        shopTokens = tokens,
+        shopifyGraphqlServiceFactory = FakeShopifyGraphqlServiceFactory(service = fakeShopify),
+      ),
+    ) { client ->
+      val r = client.post(Paths.syncShipmentsWithFulfillments) {
+        contentType(ContentType.Application.Json)
+        setBody(validSyncRequest())
+      }
+      assert(r.status == HttpStatusCode.OK)
+      val body = r.body<SyncShipmentsWithFulfillmentsResponse>()
+      assert(body.newFulfillmentIds == listOf(5001L))
+      assert("new_fulfillment_ids" in r.bodyAsText())
+    }
+  }
+
+  @Test
+  fun `sync-shipments returns 400 on dry-run quantity failure before cancel`() {
+    val fakeShopify = FakeShopifyGraphqlService()
+    fakeShopify.loadOrderForDssResponse = okResponse(GetOrderForDss.Result(order = minimalOrder()))
+    val tokens = ShopAccessTokenCache().apply { this[acmeShop] = "shpat_test" }
+    runDssApp(
+      handlers(
+        shopTokens = tokens,
+        shopifyGraphqlServiceFactory = FakeShopifyGraphqlServiceFactory(service = fakeShopify),
+      ),
+    ) { client ->
+      val r = client.post(Paths.syncShipmentsWithFulfillments) {
+        contentType(ContentType.Application.Json)
+        setBody(
+          validSyncRequest().copy(
+            shipments = listOf(
+              validSyncRequest().shipments.single().copy(
+                lineItems = listOf(ShipmentLineItem(productVariantId = 101L, quantity = 99)),
+              ),
+            ),
+          ),
+        )
+      }
+      assert(r.status == HttpStatusCode.BadRequest)
+      assert("exceeds remaining" in r.bodyAsText())
+      assert(fakeShopify.cancelFulfillmentCalls.isEmpty())
+      assert(fakeShopify.createFulfillmentWithLineItemsCalls.isEmpty())
+    }
+  }
+
+  @Test
+  fun `sync-shipments returns 200 for partial match with unmatched variant skipped`() {
+    val fakeShopify = FakeShopifyGraphqlService()
+    fakeShopify.loadOrderForDssResponse = okResponse(GetOrderForDss.Result(order = minimalOrder()))
+    fakeShopify.createFulfillmentWithLineItemsResponse = okResponse(
+      FulfillmentCreateWithLineItems.Result(
+        fulfillmentCreate = FulfillmentCreatePayload(
+          fulfillment = CreatedFulfillment(
+            id = "gid://shopify/Fulfillment/5002",
+            legacyResourceId = "5002",
+          ),
+          userErrors = emptyList(),
+        ),
+      ),
+    )
+    val tokens = ShopAccessTokenCache().apply { this[acmeShop] = "shpat_test" }
+    runDssApp(
+      handlers(
+        shopTokens = tokens,
+        shopifyGraphqlServiceFactory = FakeShopifyGraphqlServiceFactory(service = fakeShopify),
+      ),
+    ) { client ->
+      val r = client.post(Paths.syncShipmentsWithFulfillments) {
+        contentType(ContentType.Application.Json)
+        setBody(
+          validSyncRequest().copy(
+            shipments = listOf(
+              Shipment(
+                trackingNumber = "TRK-MIXED",
+                carrier = "UPS",
+                trackingUrl = null,
+                lineItems = listOf(
+                  ShipmentLineItem(productVariantId = 101L, quantity = 1),
+                  ShipmentLineItem(productVariantId = 999L, quantity = 1),
+                ),
+              ),
+            ),
+          ),
+        )
+      }
+      assert(r.status == HttpStatusCode.OK)
+      val body = r.body<SyncShipmentsWithFulfillmentsResponse>()
+      assert(body.newFulfillmentIds == listOf(5002L))
+      assert(fakeShopify.createFulfillmentWithLineItemsCalls.size == 1)
+    }
+  }
+
+  @Test
+  fun `sync-shipments cross-FO shipment sends two fulfillment order groups to create`() {
+    val fakeShopify = FakeShopifyGraphqlService()
+    fakeShopify.loadOrderForDssResponse =
+      okResponse(GetOrderForDss.Result(order = diagramCrossFoOrder()))
+    fakeShopify.createFulfillmentWithLineItemsResponse = okResponse(
+      FulfillmentCreateWithLineItems.Result(
+        fulfillmentCreate = FulfillmentCreatePayload(
+          fulfillment = CreatedFulfillment(
+            id = "gid://shopify/Fulfillment/5100",
+            legacyResourceId = "5100",
+          ),
+          userErrors = emptyList(),
+        ),
+      ),
+    )
+    val tokens = ShopAccessTokenCache().apply { this[acmeShop] = "shpat_test" }
+    runDssApp(
+      handlers(
+        shopTokens = tokens,
+        shopifyGraphqlServiceFactory = FakeShopifyGraphqlServiceFactory(service = fakeShopify),
+      ),
+    ) { client ->
+      val r = client.post(Paths.syncShipmentsWithFulfillments) {
+        contentType(ContentType.Application.Json)
+        setBody(
+          validSyncRequest().copy(
+            shipments = listOf(diagramCrossFoShipment()),
+          ),
+        )
+      }
+      assert(r.status == HttpStatusCode.OK)
+      val createCall = fakeShopify.createFulfillmentWithLineItemsCalls.single()
+      assert(createCall.lineItemsByFulfillmentOrder.size == 2)
+      val foIds = createCall.lineItemsByFulfillmentOrder.map { it.fulfillmentOrderId }
+      assert("gid://shopify/FulfillmentOrder/301" in foIds)
+      assert("gid://shopify/FulfillmentOrder/302" in foIds)
+      assert(createCall.tracking.number == "TRK-A")
+    }
   }
 
   // ---------- missing token ----------
