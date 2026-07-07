@@ -408,13 +408,13 @@ interface HasMetafieldDefinitions {
     | name | type | description | acceptable_values | default_value | example_use |
     | ---- | ---- | ---- | ---- | ---- | ---- |
     | default | string | Filter by a case-insensitive search of multiple fields in a document. | | | - `query=Bob Norman`<br/> - `query=title:green hoodie` |
-    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>2020-10-21T23:39:20Z`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
+    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>'2020-10-21T23:39:20Z'`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
     | id | id | Filter by `id` range. | | | - `id:1234`<br/> - `id:>=1234`<br/> - `id:<=1234` |
     | key | string | Filter by the metafield definition [`key`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-key) field. | | | - `key:some-key` |
     | namespace | string | Filter by the metafield definition [`namespace`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-namespace) field. | | | - `namespace:some-namespace` |
     | owner_type | string | Filter by the metafield definition [`ownerType`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-ownertype) field. | | | - `owner_type:PRODUCT` |
     | type | string | Filter by the metafield definition [`type`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-type) field. | | | - `type:single_line_text_field` |
-    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>2020-10-21T23:39:20Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
+    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>'2020-10-21T23:39:20Z'`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
     query: String,
@@ -2576,13 +2576,13 @@ type Article implements HasEvents & HasMetafieldDefinitions & HasMetafields & Ha
     | name | type | description | acceptable_values | default_value | example_use |
     | ---- | ---- | ---- | ---- | ---- | ---- |
     | default | string | Filter by a case-insensitive search of multiple fields in a document. | | | - `query=Bob Norman`<br/> - `query=title:green hoodie` |
-    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>2020-10-21T23:39:20Z`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
+    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>'2020-10-21T23:39:20Z'`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
     | id | id | Filter by `id` range. | | | - `id:1234`<br/> - `id:>=1234`<br/> - `id:<=1234` |
     | key | string | Filter by the metafield definition [`key`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-key) field. | | | - `key:some-key` |
     | namespace | string | Filter by the metafield definition [`namespace`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-namespace) field. | | | - `namespace:some-namespace` |
     | owner_type | string | Filter by the metafield definition [`ownerType`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-ownertype) field. | | | - `owner_type:PRODUCT` |
     | type | string | Filter by the metafield definition [`type`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-type) field. | | | - `type:single_line_text_field` |
-    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>2020-10-21T23:39:20Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
+    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>'2020-10-21T23:39:20Z'`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
     query: String,
@@ -3016,13 +3016,13 @@ type Blog implements HasEvents & HasMetafieldDefinitions & HasMetafields & HasPu
     | name | type | description | acceptable_values | default_value | example_use |
     | ---- | ---- | ---- | ---- | ---- | ---- |
     | default | string | Filter by a case-insensitive search of multiple fields in a document. | | | - `query=Bob Norman`<br/> - `query=title:green hoodie` |
-    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>2020-10-21T23:39:20Z`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
+    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>'2020-10-21T23:39:20Z'`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
     | id | id | Filter by `id` range. | | | - `id:1234`<br/> - `id:>=1234`<br/> - `id:<=1234` |
     | key | string | Filter by the metafield definition [`key`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-key) field. | | | - `key:some-key` |
     | namespace | string | Filter by the metafield definition [`namespace`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-namespace) field. | | | - `namespace:some-namespace` |
     | owner_type | string | Filter by the metafield definition [`ownerType`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-ownertype) field. | | | - `owner_type:PRODUCT` |
     | type | string | Filter by the metafield definition [`type`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-type) field. | | | - `type:single_line_text_field` |
-    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>2020-10-21T23:39:20Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
+    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>'2020-10-21T23:39:20Z'`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
     query: String,
@@ -4783,7 +4783,7 @@ type Channel implements Node {
     | product_type | string | Filter by a comma-separated list of [product types](https://help.shopify.com/manual/products/details/product-type). | | | - `product_type:snowboard` |
     | publication_ids | string | Filter by a comma-separated list of publication IDs that are associated with the product. | | | - `publication_ids:184111530305,184111694145` |
     | publishable_status | string | **Deprecated:** This parameter is deprecated as of 2025-12 and will be removed in a future API version. Use [published_status](https://shopify.dev/api/admin-graphql/latest/queries/products#argument-query-filter-publishable_status) for visibility checks. Filter by the publishable status of the resource on a channel. The value is a composite of the [channel `app` ID](https://shopify.dev/api/admin-graphql/latest/objects/Channel#app-price) (`Channel.app.id`) and one of the valid status values. | - `* {channel_app_id}-unset`<br/> - `* {channel_app_id}-pending`<br/> - `* {channel_app_id}-approved`<br/> - `* {channel_app_id}-not_approved` | | - `publishable_status:580111-unset`<br/> - `publishable_status:580111-pending` |
-    | published_at | time | Filter by the date and time when the product was published to the online store and other sales channels. | | | - `published_at:>2020-10-21T23:39:20Z`<br/> - `published_at:<now`<br/> - `published_at:<=2024` |
+    | published_at | time | Filter by the date and time when the product was published to the online store and other sales channels. | | | - `published_at:>'2020-10-21T23:39:20Z'`<br/> - `published_at:<now`<br/> - `published_at:<=2024` |
     | published_status | string | Filter resources by their visibility and publication state on a channel. Online store channel filtering: - `online_store_channel`: Returns all resources in the online store channel, regardless of publication status. - `published`/`visible`: Returns resources that are published to the online store. - `unpublished`: Returns resources that are not published to the online store. Channel-specific filtering using a channel ID, channel handle, [channel `app` ID](https://shopify.dev/api/admin-graphql/latest/objects/Channel#app-price) (`Channel.app.id`), or app handle with suffixes: - `{id_or_handle}-published`: Returns resources published to the specified channel. - `{id_or_handle}-visible`: Same as `{id_or_handle}-published` (kept for backwards compatibility). - `{id_or_handle}-intended`: Returns resources added to the channel but not yet published. - `{id_or_handle}-hidden`: Returns resources not added to the channel or not published. Other: - `unavailable`: Returns resources not published to any channel. | - `online_store_channel`<br/> - `published`<br/> - `visible`<br/> - `unpublished`<br/> - `* {channel_id_or_handle}-published`<br/> - `* {channel_id_or_handle}-visible`<br/> - `* {channel_id_or_handle}-intended`<br/> - `* {channel_id_or_handle}-hidden`<br/> - `* {channel_app_id_or_handle}-published`<br/> - `* {channel_app_id_or_handle}-visible`<br/> - `* {channel_app_id_or_handle}-intended`<br/> - `* {channel_app_id_or_handle}-hidden`<br/> - `unavailable` | | - `published_status:online_store_channel`<br/> - `published_status:published`<br/> - `published_status:580111-published`<br/> - `published_status:580111-hidden`<br/> - `published_status:my-channel-handle-published`<br/> - `published_status:unavailable` |
     | sku | string | Filter by the product variant [`sku`](https://shopify.dev/api/admin-graphql/latest/objects/ProductVariant#field-sku) field. [Learn more about SKUs](https://help.shopify.com/manual/products/details/sku). | | | - `sku:XYZ-12345` |
     | status | string | Filter by a comma-separated list of statuses. You can use statuses to manage inventory. Shopify only displays products with an `ACTIVE` status in online stores, sales channels, and apps. | - `active`<br/> - `archived`<br/> - `draft`<br/> - `unlisted` | `active` | - `status:active,draft` |
@@ -6574,13 +6574,13 @@ type Collection implements HasEvents & HasMetafieldDefinitions & HasMetafields &
     | name | type | description | acceptable_values | default_value | example_use |
     | ---- | ---- | ---- | ---- | ---- | ---- |
     | default | string | Filter by a case-insensitive search of multiple fields in a document. | | | - `query=Bob Norman`<br/> - `query=title:green hoodie` |
-    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>2020-10-21T23:39:20Z`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
+    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>'2020-10-21T23:39:20Z'`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
     | id | id | Filter by `id` range. | | | - `id:1234`<br/> - `id:>=1234`<br/> - `id:<=1234` |
     | key | string | Filter by the metafield definition [`key`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-key) field. | | | - `key:some-key` |
     | namespace | string | Filter by the metafield definition [`namespace`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-namespace) field. | | | - `namespace:some-namespace` |
     | owner_type | string | Filter by the metafield definition [`ownerType`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-ownertype) field. | | | - `owner_type:PRODUCT` |
     | type | string | Filter by the metafield definition [`type`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-type) field. | | | - `type:single_line_text_field` |
-    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>2020-10-21T23:39:20Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
+    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>'2020-10-21T23:39:20Z'`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
     query: String,
@@ -7550,13 +7550,13 @@ type Company implements CommentEventSubject & HasEvents & HasMetafieldDefinition
     | name | type | description | acceptable_values | default_value | example_use |
     | ---- | ---- | ---- | ---- | ---- | ---- |
     | default | string | Filter by a case-insensitive search of multiple fields in a document. | | | - `query=Bob Norman`<br/> - `query=title:green hoodie` |
-    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>2020-10-21T23:39:20Z`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
+    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>'2020-10-21T23:39:20Z'`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
     | id | id | Filter by `id` range. | | | - `id:1234`<br/> - `id:>=1234`<br/> - `id:<=1234` |
     | key | string | Filter by the metafield definition [`key`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-key) field. | | | - `key:some-key` |
     | namespace | string | Filter by the metafield definition [`namespace`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-namespace) field. | | | - `namespace:some-namespace` |
     | owner_type | string | Filter by the metafield definition [`ownerType`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-ownertype) field. | | | - `owner_type:PRODUCT` |
     | type | string | Filter by the metafield definition [`type`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-type) field. | | | - `type:single_line_text_field` |
-    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>2020-10-21T23:39:20Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
+    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>'2020-10-21T23:39:20Z'`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
     query: String,
@@ -8127,13 +8127,13 @@ type CompanyLocation implements CommentEventSubject & HasEvents & HasMetafieldDe
     | name | type | description | acceptable_values | default_value | example_use |
     | ---- | ---- | ---- | ---- | ---- | ---- |
     | default | string | Filter by a case-insensitive search of multiple fields in a document. | | | - `query=Bob Norman`<br/> - `query=title:green hoodie` |
-    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>2020-10-21T23:39:20Z`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
+    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>'2020-10-21T23:39:20Z'`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
     | id | id | Filter by `id` range. | | | - `id:1234`<br/> - `id:>=1234`<br/> - `id:<=1234` |
     | key | string | Filter by the metafield definition [`key`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-key) field. | | | - `key:some-key` |
     | namespace | string | Filter by the metafield definition [`namespace`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-namespace) field. | | | - `namespace:some-namespace` |
     | owner_type | string | Filter by the metafield definition [`ownerType`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-ownertype) field. | | | - `owner_type:PRODUCT` |
     | type | string | Filter by the metafield definition [`type`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-type) field. | | | - `type:single_line_text_field` |
-    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>2020-10-21T23:39:20Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
+    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>'2020-10-21T23:39:20Z'`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
     query: String,
@@ -8864,13 +8864,13 @@ type Customer implements CommentEventSubject & HasEvents & HasMetafieldDefinitio
     | name | type | description | acceptable_values | default_value | example_use |
     | ---- | ---- | ---- | ---- | ---- | ---- |
     | default | string | Filter by a case-insensitive search of multiple fields in a document. | | | - `query=Bob Norman`<br/> - `query=title:green hoodie` |
-    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>2020-10-21T23:39:20Z`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
+    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>'2020-10-21T23:39:20Z'`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
     | id | id | Filter by `id` range. | | | - `id:1234`<br/> - `id:>=1234`<br/> - `id:<=1234` |
     | key | string | Filter by the metafield definition [`key`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-key) field. | | | - `key:some-key` |
     | namespace | string | Filter by the metafield definition [`namespace`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-namespace) field. | | | - `namespace:some-namespace` |
     | owner_type | string | Filter by the metafield definition [`ownerType`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-ownertype) field. | | | - `owner_type:PRODUCT` |
     | type | string | Filter by the metafield definition [`type`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-type) field. | | | - `type:single_line_text_field` |
-    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>2020-10-21T23:39:20Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
+    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>'2020-10-21T23:39:20Z'`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
     query: String,
@@ -8926,7 +8926,7 @@ type Customer implements CommentEventSubject & HasEvents & HasMetafieldDefinitio
     | chargeback_status | string | Filter by the order's chargeback status. A chargeback occurs when a customer questions the legitimacy of a charge with their financial institution. | - `accepted`<br/> - `charge_refunded`<br/> - `lost`<br/> - `needs_response`<br/> - `under_review`<br/> - `won` | | - `chargeback_status:accepted` |
     | checkout_token | string | Filter by the checkout token's unique value to analyze conversion funnels or resolve payment issues. The checkout token's value references the checkout that's associated with an order. | | | - `checkout_token:abc123` |
     | confirmation_number | string | Filter by the randomly generated alpha-numeric identifier for an order that can be displayed to the customer instead of the sequential order name. This value isn't guaranteed to be unique. | | | - `confirmation_number:ABC123` |
-    | created_at | time | Filter by the date and time when the order was created in Shopify's system. | | | - `created_at:2020-10-21T23:39:20Z`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
+    | created_at | time | Filter by the date and time when the order was created in Shopify's system. | | | - `created_at:'2020-10-21T23:39:20Z'`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
     | credit_card_last4 | string | Filter by the last four digits of the payment card that was used to pay for the order. This filter matches only the last four digits of the card for heightened security. | | | - `credit_card_last4:1234` |
     | current_total_price | float | Filter by the current total price of the order in the shop currency, including any returns/refunds/removals. This filter supports both exact values and ranges. | | | - `current_total_price:10`<br/> - `current_total_price:>=5.00 current_total_price:<=20.99` |
     | customer_id | id | Filter orders by the customer [`id`](https://shopify.dev/api/admin-graphql/latest/objects/Customer#field-Customer.fields.id) field. | | | - `customer_id:123` |
@@ -8945,7 +8945,7 @@ type Customer implements CommentEventSubject & HasEvents & HasMetafieldDefinitio
     | payment_id | string | Filter by the payment ID that's associated with the order to reconcile financial records or troubleshoot payment issues. | | | - `payment_id:abc123` |
     | payment_provider_id | id | Filter by the ID of the payment provider that's associated with the order to manage payment methods or troubleshoot transactions. | | | - `payment_provider_id:123` |
     | po_number | string | Filter by the order [`poNumber`](https://shopify.dev/api/admin-graphql/latest/objects/order#field-Order.fields.poNumber) field. | | | - `po_number:P01001` |
-    | processed_at | time | Filter by the order [`processedAt`](https://shopify.dev/api/admin-graphql/latest/objects/order#field-Order.fields.processedAt) field. | | | - `processed_at:2021-01-01T00:00:00Z` |
+    | processed_at | time | Filter by the order [`processedAt`](https://shopify.dev/api/admin-graphql/latest/objects/order#field-Order.fields.processedAt) field. | | | - `processed_at:'2021-01-01T00:00:00Z'` |
     | reference_location_id | id | Filter by the ID of a location that's associated with the order, such as locations from fulfillments, refunds, or the shop's primary location. | | | - `reference_location_id:123` |
     | return_status | string | Filter by the order's [`returnStatus`](https://shopify.dev/api/admin-graphql/latest/objects/Order#field-Order.fields.returnStatus) to monitor returns processing and track which orders have active returns. | - `return_requested`<br/> - `in_progress`<br/> - `inspection_complete`<br/> - `returned`<br/> - `return_failed`<br/> - `no_return` | | - `return_status:in_progress` |
     | risk_level | string | Filter by the order risk assessment [`riskLevel`](https://shopify.dev/api/admin-graphql/latest/objects/OrderRiskAssessment#field-OrderRiskAssessment.fields.riskLevel) field. | - `high`<br/> - `medium`<br/> - `low`<br/> - `none`<br/> - `pending` | | - `risk_level:high` |
@@ -8959,7 +8959,7 @@ type Customer implements CommentEventSubject & HasEvents & HasMetafieldDefinitio
     | tag_not | string | Filter by objects that don’t have the specified tag. | | | - `tag_not:my_tag` |
     | test | boolean | Filter by test orders. Test orders are made using the [Shopify Bogus Gateway](https://help.shopify.com/manual/checkout-settings/test-orders/payments-test-mode#bogus-gateway) or a payment provider with test mode enabled. | | | - `test:true` |
     | total_weight | string | Filter by the order weight. This filter supports both exact values and ranges, and is to be used to filter orders by the total weight of all items (excluding packaging). It takes a unit of measurement as a suffix. It accepts the following units: g, kg, lb, oz. | | | - `total_weight:10.5kg`<br/> - `total_weight:>=5g total_weight:<=20g`<br/> - `total_weight:.5 lb` |
-    | updated_at | time | Filter by the date and time when the order was last updated in Shopify's system. | | | - `updated_at:2020-10-21T23:39:20Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
+    | updated_at | time | Filter by the date and time when the order was last updated in Shopify's system. | | | - `updated_at:'2020-10-21T23:39:20Z'`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
     query: String,
@@ -10658,13 +10658,13 @@ type DeliveryCustomization implements HasMetafieldDefinitions & HasMetafields & 
     | name | type | description | acceptable_values | default_value | example_use |
     | ---- | ---- | ---- | ---- | ---- | ---- |
     | default | string | Filter by a case-insensitive search of multiple fields in a document. | | | - `query=Bob Norman`<br/> - `query=title:green hoodie` |
-    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>2020-10-21T23:39:20Z`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
+    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>'2020-10-21T23:39:20Z'`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
     | id | id | Filter by `id` range. | | | - `id:1234`<br/> - `id:>=1234`<br/> - `id:<=1234` |
     | key | string | Filter by the metafield definition [`key`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-key) field. | | | - `key:some-key` |
     | namespace | string | Filter by the metafield definition [`namespace`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-namespace) field. | | | - `namespace:some-namespace` |
     | owner_type | string | Filter by the metafield definition [`ownerType`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-ownertype) field. | | | - `owner_type:PRODUCT` |
     | type | string | Filter by the metafield definition [`type`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-type) field. | | | - `type:single_line_text_field` |
-    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>2020-10-21T23:39:20Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
+    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>'2020-10-21T23:39:20Z'`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
     query: String,
@@ -11982,13 +11982,13 @@ type DiscountAutomaticNode implements HasEvents & HasMetafieldDefinitions & HasM
     | name | type | description | acceptable_values | default_value | example_use |
     | ---- | ---- | ---- | ---- | ---- | ---- |
     | default | string | Filter by a case-insensitive search of multiple fields in a document. | | | - `query=Bob Norman`<br/> - `query=title:green hoodie` |
-    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>2020-10-21T23:39:20Z`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
+    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>'2020-10-21T23:39:20Z'`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
     | id | id | Filter by `id` range. | | | - `id:1234`<br/> - `id:>=1234`<br/> - `id:<=1234` |
     | key | string | Filter by the metafield definition [`key`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-key) field. | | | - `key:some-key` |
     | namespace | string | Filter by the metafield definition [`namespace`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-namespace) field. | | | - `namespace:some-namespace` |
     | owner_type | string | Filter by the metafield definition [`ownerType`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-ownertype) field. | | | - `owner_type:PRODUCT` |
     | type | string | Filter by the metafield definition [`type`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-type) field. | | | - `type:single_line_text_field` |
-    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>2020-10-21T23:39:20Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
+    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>'2020-10-21T23:39:20Z'`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
     query: String,
@@ -12873,13 +12873,13 @@ type DiscountCodeNode implements HasEvents & HasMetafieldDefinitions & HasMetafi
     | name | type | description | acceptable_values | default_value | example_use |
     | ---- | ---- | ---- | ---- | ---- | ---- |
     | default | string | Filter by a case-insensitive search of multiple fields in a document. | | | - `query=Bob Norman`<br/> - `query=title:green hoodie` |
-    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>2020-10-21T23:39:20Z`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
+    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>'2020-10-21T23:39:20Z'`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
     | id | id | Filter by `id` range. | | | - `id:1234`<br/> - `id:>=1234`<br/> - `id:<=1234` |
     | key | string | Filter by the metafield definition [`key`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-key) field. | | | - `key:some-key` |
     | namespace | string | Filter by the metafield definition [`namespace`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-namespace) field. | | | - `namespace:some-namespace` |
     | owner_type | string | Filter by the metafield definition [`ownerType`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-ownertype) field. | | | - `owner_type:PRODUCT` |
     | type | string | Filter by the metafield definition [`type`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-type) field. | | | - `type:single_line_text_field` |
-    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>2020-10-21T23:39:20Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
+    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>'2020-10-21T23:39:20Z'`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
     query: String,
@@ -13190,13 +13190,13 @@ type DiscountNode implements HasEvents & HasMetafieldDefinitions & HasMetafields
     | name | type | description | acceptable_values | default_value | example_use |
     | ---- | ---- | ---- | ---- | ---- | ---- |
     | default | string | Filter by a case-insensitive search of multiple fields in a document. | | | - `query=Bob Norman`<br/> - `query=title:green hoodie` |
-    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>2020-10-21T23:39:20Z`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
+    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>'2020-10-21T23:39:20Z'`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
     | id | id | Filter by `id` range. | | | - `id:1234`<br/> - `id:>=1234`<br/> - `id:<=1234` |
     | key | string | Filter by the metafield definition [`key`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-key) field. | | | - `key:some-key` |
     | namespace | string | Filter by the metafield definition [`namespace`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-namespace) field. | | | - `namespace:some-namespace` |
     | owner_type | string | Filter by the metafield definition [`ownerType`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-ownertype) field. | | | - `owner_type:PRODUCT` |
     | type | string | Filter by the metafield definition [`type`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-type) field. | | | - `type:single_line_text_field` |
-    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>2020-10-21T23:39:20Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
+    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>'2020-10-21T23:39:20Z'`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
     query: String,
@@ -17732,13 +17732,13 @@ type InventoryTransfer implements CommentEventSubject & HasEvents & HasMetafield
     | name | type | description | acceptable_values | default_value | example_use |
     | ---- | ---- | ---- | ---- | ---- | ---- |
     | default | string | Filter by a case-insensitive search of multiple fields in a document. | | | - `query=Bob Norman`<br/> - `query=title:green hoodie` |
-    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>2020-10-21T23:39:20Z`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
+    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>'2020-10-21T23:39:20Z'`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
     | id | id | Filter by `id` range. | | | - `id:1234`<br/> - `id:>=1234`<br/> - `id:<=1234` |
     | key | string | Filter by the metafield definition [`key`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-key) field. | | | - `key:some-key` |
     | namespace | string | Filter by the metafield definition [`namespace`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-namespace) field. | | | - `namespace:some-namespace` |
     | owner_type | string | Filter by the metafield definition [`ownerType`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-ownertype) field. | | | - `owner_type:PRODUCT` |
     | type | string | Filter by the metafield definition [`type`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-type) field. | | | - `type:single_line_text_field` |
-    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>2020-10-21T23:39:20Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
+    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>'2020-10-21T23:39:20Z'`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
     query: String,
@@ -18493,13 +18493,13 @@ type Location implements HasMetafieldDefinitions & HasMetafields & LegacyInterop
     | name | type | description | acceptable_values | default_value | example_use |
     | ---- | ---- | ---- | ---- | ---- | ---- |
     | default | string | Filter by a case-insensitive search of multiple fields in a document. | | | - `query=Bob Norman`<br/> - `query=title:green hoodie` |
-    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>2020-10-21T23:39:20Z`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
+    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>'2020-10-21T23:39:20Z'`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
     | id | id | Filter by `id` range. | | | - `id:1234`<br/> - `id:>=1234`<br/> - `id:<=1234` |
     | key | string | Filter by the metafield definition [`key`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-key) field. | | | - `key:some-key` |
     | namespace | string | Filter by the metafield definition [`namespace`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-namespace) field. | | | - `namespace:some-namespace` |
     | owner_type | string | Filter by the metafield definition [`ownerType`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-ownertype) field. | | | - `owner_type:PRODUCT` |
     | type | string | Filter by the metafield definition [`type`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-type) field. | | | - `type:single_line_text_field` |
-    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>2020-10-21T23:39:20Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
+    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>'2020-10-21T23:39:20Z'`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
     query: String,
@@ -18932,13 +18932,13 @@ type Market implements HasMetafieldDefinitions & HasMetafields & Node {
     | name | type | description | acceptable_values | default_value | example_use |
     | ---- | ---- | ---- | ---- | ---- | ---- |
     | default | string | Filter by a case-insensitive search of multiple fields in a document. | | | - `query=Bob Norman`<br/> - `query=title:green hoodie` |
-    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>2020-10-21T23:39:20Z`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
+    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>'2020-10-21T23:39:20Z'`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
     | id | id | Filter by `id` range. | | | - `id:1234`<br/> - `id:>=1234`<br/> - `id:<=1234` |
     | key | string | Filter by the metafield definition [`key`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-key) field. | | | - `key:some-key` |
     | namespace | string | Filter by the metafield definition [`namespace`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-namespace) field. | | | - `namespace:some-namespace` |
     | owner_type | string | Filter by the metafield definition [`ownerType`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-ownertype) field. | | | - `owner_type:PRODUCT` |
     | type | string | Filter by the metafield definition [`type`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-type) field. | | | - `type:single_line_text_field` |
-    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>2020-10-21T23:39:20Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
+    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>'2020-10-21T23:39:20Z'`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
     query: String,
@@ -28162,13 +28162,13 @@ type Order implements CommentEventSubject & HasEvents & HasLocalizationExtension
     | name | type | description | acceptable_values | default_value | example_use |
     | ---- | ---- | ---- | ---- | ---- | ---- |
     | default | string | Filter by a case-insensitive search of multiple fields in a document. | | | - `query=Bob Norman`<br/> - `query=title:green hoodie` |
-    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>2020-10-21T23:39:20Z`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
+    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>'2020-10-21T23:39:20Z'`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
     | id | id | Filter by `id` range. | | | - `id:1234`<br/> - `id:>=1234`<br/> - `id:<=1234` |
     | key | string | Filter by the metafield definition [`key`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-key) field. | | | - `key:some-key` |
     | namespace | string | Filter by the metafield definition [`namespace`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-namespace) field. | | | - `namespace:some-namespace` |
     | owner_type | string | Filter by the metafield definition [`ownerType`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-ownertype) field. | | | - `owner_type:PRODUCT` |
     | type | string | Filter by the metafield definition [`type`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-type) field. | | | - `type:single_line_text_field` |
-    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>2020-10-21T23:39:20Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
+    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>'2020-10-21T23:39:20Z'`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
     query: String,
@@ -29517,13 +29517,13 @@ type Page implements HasEvents & HasMetafieldDefinitions & HasMetafields & HasPu
     | name | type | description | acceptable_values | default_value | example_use |
     | ---- | ---- | ---- | ---- | ---- | ---- |
     | default | string | Filter by a case-insensitive search of multiple fields in a document. | | | - `query=Bob Norman`<br/> - `query=title:green hoodie` |
-    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>2020-10-21T23:39:20Z`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
+    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>'2020-10-21T23:39:20Z'`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
     | id | id | Filter by `id` range. | | | - `id:1234`<br/> - `id:>=1234`<br/> - `id:<=1234` |
     | key | string | Filter by the metafield definition [`key`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-key) field. | | | - `key:some-key` |
     | namespace | string | Filter by the metafield definition [`namespace`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-namespace) field. | | | - `namespace:some-namespace` |
     | owner_type | string | Filter by the metafield definition [`ownerType`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-ownertype) field. | | | - `owner_type:PRODUCT` |
     | type | string | Filter by the metafield definition [`type`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-type) field. | | | - `type:single_line_text_field` |
-    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>2020-10-21T23:39:20Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
+    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>'2020-10-21T23:39:20Z'`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
     query: String,
@@ -29700,13 +29700,13 @@ type PaymentCustomization implements HasMetafieldDefinitions & HasMetafields & N
     | name | type | description | acceptable_values | default_value | example_use |
     | ---- | ---- | ---- | ---- | ---- | ---- |
     | default | string | Filter by a case-insensitive search of multiple fields in a document. | | | - `query=Bob Norman`<br/> - `query=title:green hoodie` |
-    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>2020-10-21T23:39:20Z`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
+    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>'2020-10-21T23:39:20Z'`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
     | id | id | Filter by `id` range. | | | - `id:1234`<br/> - `id:>=1234`<br/> - `id:<=1234` |
     | key | string | Filter by the metafield definition [`key`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-key) field. | | | - `key:some-key` |
     | namespace | string | Filter by the metafield definition [`namespace`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-namespace) field. | | | - `namespace:some-namespace` |
     | owner_type | string | Filter by the metafield definition [`ownerType`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-ownertype) field. | | | - `owner_type:PRODUCT` |
     | type | string | Filter by the metafield definition [`type`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-type) field. | | | - `type:single_line_text_field` |
-    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>2020-10-21T23:39:20Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
+    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>'2020-10-21T23:39:20Z'`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
     query: String,
@@ -30694,7 +30694,7 @@ type PriceRuleCustomerSelection {
     | tag | string | Filter by the tags that are associated with the customer. This query parameter accepts multiple tags separated by commas. | | | - `tag:'VIP'`<br/> - `tag:'Wholesale,Repeat'` |
     | tag_not | string | Filter by the tags that aren't associated with the customer. This query parameter accepts multiple tags separated by commas. | | | - `tag_not:'Prospect'`<br/> - `tag_not:'Test,Internal'` |
     | total_spent | float | Filter by the total amount of money a customer has spent across all orders. | | | - `total_spent:100.50`<br/> - `total_spent:50.00`<br/> - `total_spent:>100.50`<br/> - `total_spent:>50.00` |
-    | updated_at | time | The date and time, matching a whole day, when the customer's information was last updated. | | | - `updated_at:2024-01-01T00:00:00Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
+    | updated_at | time | The date and time, matching a whole day, when the customer's information was last updated. | | | - `updated_at:'2024-01-01T00:00:00Z'`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
     query: String,
@@ -31242,13 +31242,13 @@ type Product implements HasEvents & HasMetafieldDefinitions & HasMetafields & Ha
     | name | type | description | acceptable_values | default_value | example_use |
     | ---- | ---- | ---- | ---- | ---- | ---- |
     | default | string | Filter by a case-insensitive search of multiple fields in a document. | | | - `query=Bob Norman`<br/> - `query=title:green hoodie` |
-    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>2020-10-21T23:39:20Z`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
+    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>'2020-10-21T23:39:20Z'`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
     | id | id | Filter by `id` range. | | | - `id:1234`<br/> - `id:>=1234`<br/> - `id:<=1234` |
     | key | string | Filter by the metafield definition [`key`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-key) field. | | | - `key:some-key` |
     | namespace | string | Filter by the metafield definition [`namespace`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-namespace) field. | | | - `namespace:some-namespace` |
     | owner_type | string | Filter by the metafield definition [`ownerType`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-ownertype) field. | | | - `owner_type:PRODUCT` |
     | type | string | Filter by the metafield definition [`type`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-type) field. | | | - `type:single_line_text_field` |
-    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>2020-10-21T23:39:20Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
+    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>'2020-10-21T23:39:20Z'`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
     query: String,
@@ -31362,7 +31362,7 @@ type Product implements HasEvents & HasMetafieldDefinitions & HasMetafields & Ha
     | product_type | string | Filter by a comma-separated list of [product types](https://help.shopify.com/manual/products/details/product-type). | | | - `product_type:snowboard` |
     | publication_ids | string | Filter by a comma-separated list of publication IDs that are associated with the product. | | | - `publication_ids:184111530305,184111694145` |
     | publishable_status | string | **Deprecated:** This parameter is deprecated as of 2025-12 and will be removed in a future API version. Use [published_status](https://shopify.dev/api/admin-graphql/latest/queries/products#argument-query-filter-publishable_status) for visibility checks. Filter by the publishable status of the resource on a channel. The value is a composite of the [channel `app` ID](https://shopify.dev/api/admin-graphql/latest/objects/Channel#app-price) (`Channel.app.id`) and one of the valid status values. | - `* {channel_app_id}-unset`<br/> - `* {channel_app_id}-pending`<br/> - `* {channel_app_id}-approved`<br/> - `* {channel_app_id}-not_approved` | | - `publishable_status:580111-unset`<br/> - `publishable_status:580111-pending` |
-    | published_at | time | Filter by the date and time when the product was published to the online store and other sales channels. | | | - `published_at:>2020-10-21T23:39:20Z`<br/> - `published_at:<now`<br/> - `published_at:<=2024` |
+    | published_at | time | Filter by the date and time when the product was published to the online store and other sales channels. | | | - `published_at:>'2020-10-21T23:39:20Z'`<br/> - `published_at:<now`<br/> - `published_at:<=2024` |
     | published_status | string | Filter resources by their visibility and publication state on a channel. Online store channel filtering: - `online_store_channel`: Returns all resources in the online store channel, regardless of publication status. - `published`/`visible`: Returns resources that are published to the online store. - `unpublished`: Returns resources that are not published to the online store. Channel-specific filtering using a channel ID, channel handle, [channel `app` ID](https://shopify.dev/api/admin-graphql/latest/objects/Channel#app-price) (`Channel.app.id`), or app handle with suffixes: - `{id_or_handle}-published`: Returns resources published to the specified channel. - `{id_or_handle}-visible`: Same as `{id_or_handle}-published` (kept for backwards compatibility). - `{id_or_handle}-intended`: Returns resources added to the channel but not yet published. - `{id_or_handle}-hidden`: Returns resources not added to the channel or not published. Other: - `unavailable`: Returns resources not published to any channel. | - `online_store_channel`<br/> - `published`<br/> - `visible`<br/> - `unpublished`<br/> - `* {channel_id_or_handle}-published`<br/> - `* {channel_id_or_handle}-visible`<br/> - `* {channel_id_or_handle}-intended`<br/> - `* {channel_id_or_handle}-hidden`<br/> - `* {channel_app_id_or_handle}-published`<br/> - `* {channel_app_id_or_handle}-visible`<br/> - `* {channel_app_id_or_handle}-intended`<br/> - `* {channel_app_id_or_handle}-hidden`<br/> - `unavailable` | | - `published_status:online_store_channel`<br/> - `published_status:published`<br/> - `published_status:580111-published`<br/> - `published_status:580111-hidden`<br/> - `published_status:my-channel-handle-published`<br/> - `published_status:unavailable` |
     | sku | string | Filter by the product variant [`sku`](https://shopify.dev/api/admin-graphql/latest/objects/ProductVariant#field-sku) field. [Learn more about SKUs](https://help.shopify.com/manual/products/details/sku). | | | - `sku:XYZ-12345` |
     | status | string | Filter by a comma-separated list of statuses. You can use statuses to manage inventory. Shopify only displays products with an `ACTIVE` status in online stores, sales channels, and apps. | - `active`<br/> - `archived`<br/> - `draft`<br/> - `unlisted` | `active` | - `status:active,draft` |
@@ -32635,13 +32635,13 @@ type ProductVariant implements HasEvents & HasMetafieldDefinitions & HasMetafiel
     | name | type | description | acceptable_values | default_value | example_use |
     | ---- | ---- | ---- | ---- | ---- | ---- |
     | default | string | Filter by a case-insensitive search of multiple fields in a document. | | | - `query=Bob Norman`<br/> - `query=title:green hoodie` |
-    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>2020-10-21T23:39:20Z`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
+    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>'2020-10-21T23:39:20Z'`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
     | id | id | Filter by `id` range. | | | - `id:1234`<br/> - `id:>=1234`<br/> - `id:<=1234` |
     | key | string | Filter by the metafield definition [`key`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-key) field. | | | - `key:some-key` |
     | namespace | string | Filter by the metafield definition [`namespace`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-namespace) field. | | | - `namespace:some-namespace` |
     | owner_type | string | Filter by the metafield definition [`ownerType`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-ownertype) field. | | | - `owner_type:PRODUCT` |
     | type | string | Filter by the metafield definition [`type`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-type) field. | | | - `type:single_line_text_field` |
-    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>2020-10-21T23:39:20Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
+    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>'2020-10-21T23:39:20Z'`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
     query: String,
@@ -32730,7 +32730,7 @@ type ProductVariant implements HasEvents & HasMetafieldDefinitions & HasMetafiel
     | product_type | string | Filter by a comma-separated list of [product types](https://help.shopify.com/manual/products/details/product-type). | | | - `product_type:snowboard` |
     | publication_ids | string | Filter by a comma-separated list of publication IDs that are associated with the product. | | | - `publication_ids:184111530305,184111694145` |
     | publishable_status | string | **Deprecated:** This parameter is deprecated as of 2025-12 and will be removed in a future API version. Use [published_status](https://shopify.dev/api/admin-graphql/latest/queries/products#argument-query-filter-publishable_status) for visibility checks. Filter by the publishable status of the resource on a channel. The value is a composite of the [channel `app` ID](https://shopify.dev/api/admin-graphql/latest/objects/Channel#app-price) (`Channel.app.id`) and one of the valid status values. | - `* {channel_app_id}-unset`<br/> - `* {channel_app_id}-pending`<br/> - `* {channel_app_id}-approved`<br/> - `* {channel_app_id}-not_approved` | | - `publishable_status:580111-unset`<br/> - `publishable_status:580111-pending` |
-    | published_at | time | Filter by the date and time when the product was published to the online store and other sales channels. | | | - `published_at:>2020-10-21T23:39:20Z`<br/> - `published_at:<now`<br/> - `published_at:<=2024` |
+    | published_at | time | Filter by the date and time when the product was published to the online store and other sales channels. | | | - `published_at:>'2020-10-21T23:39:20Z'`<br/> - `published_at:<now`<br/> - `published_at:<=2024` |
     | published_status | string | Filter resources by their visibility and publication state on a channel. Online store channel filtering: - `online_store_channel`: Returns all resources in the online store channel, regardless of publication status. - `published`/`visible`: Returns resources that are published to the online store. - `unpublished`: Returns resources that are not published to the online store. Channel-specific filtering using a channel ID, channel handle, [channel `app` ID](https://shopify.dev/api/admin-graphql/latest/objects/Channel#app-price) (`Channel.app.id`), or app handle with suffixes: - `{id_or_handle}-published`: Returns resources published to the specified channel. - `{id_or_handle}-visible`: Same as `{id_or_handle}-published` (kept for backwards compatibility). - `{id_or_handle}-intended`: Returns resources added to the channel but not yet published. - `{id_or_handle}-hidden`: Returns resources not added to the channel or not published. Other: - `unavailable`: Returns resources not published to any channel. | - `online_store_channel`<br/> - `published`<br/> - `visible`<br/> - `unpublished`<br/> - `* {channel_id_or_handle}-published`<br/> - `* {channel_id_or_handle}-visible`<br/> - `* {channel_id_or_handle}-intended`<br/> - `* {channel_id_or_handle}-hidden`<br/> - `* {channel_app_id_or_handle}-published`<br/> - `* {channel_app_id_or_handle}-visible`<br/> - `* {channel_app_id_or_handle}-intended`<br/> - `* {channel_app_id_or_handle}-hidden`<br/> - `unavailable` | | - `published_status:online_store_channel`<br/> - `published_status:published`<br/> - `published_status:580111-published`<br/> - `published_status:580111-hidden`<br/> - `published_status:my-channel-handle-published`<br/> - `published_status:unavailable` |
     | sku | string | Filter by the product variant [`sku`](https://shopify.dev/api/admin-graphql/latest/objects/ProductVariant#field-sku) field. [Learn more about SKUs](https://help.shopify.com/manual/products/details/sku). | | | - `sku:XYZ-12345` |
     | status | string | Filter by a comma-separated list of statuses. You can use statuses to manage inventory. Shopify only displays products with an `ACTIVE` status in online stores, sales channels, and apps. | - `active`<br/> - `archived`<br/> - `draft`<br/> - `unlisted` | `active` | - `status:active,draft` |
@@ -33206,7 +33206,7 @@ type Publication implements Node {
     | product_type | string | Filter by a comma-separated list of [product types](https://help.shopify.com/manual/products/details/product-type). | | | - `product_type:snowboard` |
     | publication_ids | string | Filter by a comma-separated list of publication IDs that are associated with the product. | | | - `publication_ids:184111530305,184111694145` |
     | publishable_status | string | **Deprecated:** This parameter is deprecated as of 2025-12 and will be removed in a future API version. Use [published_status](https://shopify.dev/api/admin-graphql/latest/queries/products#argument-query-filter-publishable_status) for visibility checks. Filter by the publishable status of the resource on a channel. The value is a composite of the [channel `app` ID](https://shopify.dev/api/admin-graphql/latest/objects/Channel#app-price) (`Channel.app.id`) and one of the valid status values. | - `* {channel_app_id}-unset`<br/> - `* {channel_app_id}-pending`<br/> - `* {channel_app_id}-approved`<br/> - `* {channel_app_id}-not_approved` | | - `publishable_status:580111-unset`<br/> - `publishable_status:580111-pending` |
-    | published_at | time | Filter by the date and time when the product was published to the online store and other sales channels. | | | - `published_at:>2020-10-21T23:39:20Z`<br/> - `published_at:<now`<br/> - `published_at:<=2024` |
+    | published_at | time | Filter by the date and time when the product was published to the online store and other sales channels. | | | - `published_at:>'2020-10-21T23:39:20Z'`<br/> - `published_at:<now`<br/> - `published_at:<=2024` |
     | published_status | string | Filter resources by their visibility and publication state on a channel. Online store channel filtering: - `online_store_channel`: Returns all resources in the online store channel, regardless of publication status. - `published`/`visible`: Returns resources that are published to the online store. - `unpublished`: Returns resources that are not published to the online store. Channel-specific filtering using a channel ID, channel handle, [channel `app` ID](https://shopify.dev/api/admin-graphql/latest/objects/Channel#app-price) (`Channel.app.id`), or app handle with suffixes: - `{id_or_handle}-published`: Returns resources published to the specified channel. - `{id_or_handle}-visible`: Same as `{id_or_handle}-published` (kept for backwards compatibility). - `{id_or_handle}-intended`: Returns resources added to the channel but not yet published. - `{id_or_handle}-hidden`: Returns resources not added to the channel or not published. Other: - `unavailable`: Returns resources not published to any channel. | - `online_store_channel`<br/> - `published`<br/> - `visible`<br/> - `unpublished`<br/> - `* {channel_id_or_handle}-published`<br/> - `* {channel_id_or_handle}-visible`<br/> - `* {channel_id_or_handle}-intended`<br/> - `* {channel_id_or_handle}-hidden`<br/> - `* {channel_app_id_or_handle}-published`<br/> - `* {channel_app_id_or_handle}-visible`<br/> - `* {channel_app_id_or_handle}-intended`<br/> - `* {channel_app_id_or_handle}-hidden`<br/> - `unavailable` | | - `published_status:online_store_channel`<br/> - `published_status:published`<br/> - `published_status:580111-published`<br/> - `published_status:580111-hidden`<br/> - `published_status:my-channel-handle-published`<br/> - `published_status:unavailable` |
     | sku | string | Filter by the product variant [`sku`](https://shopify.dev/api/admin-graphql/latest/objects/ProductVariant#field-sku) field. [Learn more about SKUs](https://help.shopify.com/manual/products/details/sku). | | | - `sku:XYZ-12345` |
     | status | string | Filter by a comma-separated list of statuses. You can use statuses to manage inventory. Shopify only displays products with an `ACTIVE` status in online stores, sales channels, and apps. | - `active`<br/> - `archived`<br/> - `draft`<br/> - `unlisted` | `active` | - `status:active,draft` |
@@ -33264,7 +33264,7 @@ type Publication implements Node {
     | product_type | string | Filter by a comma-separated list of [product types](https://help.shopify.com/manual/products/details/product-type). | | | - `product_type:snowboard` |
     | publication_ids | string | Filter by a comma-separated list of publication IDs that are associated with the product. | | | - `publication_ids:184111530305,184111694145` |
     | publishable_status | string | **Deprecated:** This parameter is deprecated as of 2025-12 and will be removed in a future API version. Use [published_status](https://shopify.dev/api/admin-graphql/latest/queries/products#argument-query-filter-publishable_status) for visibility checks. Filter by the publishable status of the resource on a channel. The value is a composite of the [channel `app` ID](https://shopify.dev/api/admin-graphql/latest/objects/Channel#app-price) (`Channel.app.id`) and one of the valid status values. | - `* {channel_app_id}-unset`<br/> - `* {channel_app_id}-pending`<br/> - `* {channel_app_id}-approved`<br/> - `* {channel_app_id}-not_approved` | | - `publishable_status:580111-unset`<br/> - `publishable_status:580111-pending` |
-    | published_at | time | Filter by the date and time when the product was published to the online store and other sales channels. | | | - `published_at:>2020-10-21T23:39:20Z`<br/> - `published_at:<now`<br/> - `published_at:<=2024` |
+    | published_at | time | Filter by the date and time when the product was published to the online store and other sales channels. | | | - `published_at:>'2020-10-21T23:39:20Z'`<br/> - `published_at:<now`<br/> - `published_at:<=2024` |
     | published_status | string | Filter resources by their visibility and publication state on a channel. Online store channel filtering: - `online_store_channel`: Returns all resources in the online store channel, regardless of publication status. - `published`/`visible`: Returns resources that are published to the online store. - `unpublished`: Returns resources that are not published to the online store. Channel-specific filtering using a channel ID, channel handle, [channel `app` ID](https://shopify.dev/api/admin-graphql/latest/objects/Channel#app-price) (`Channel.app.id`), or app handle with suffixes: - `{id_or_handle}-published`: Returns resources published to the specified channel. - `{id_or_handle}-visible`: Same as `{id_or_handle}-published` (kept for backwards compatibility). - `{id_or_handle}-intended`: Returns resources added to the channel but not yet published. - `{id_or_handle}-hidden`: Returns resources not added to the channel or not published. Other: - `unavailable`: Returns resources not published to any channel. | - `online_store_channel`<br/> - `published`<br/> - `visible`<br/> - `unpublished`<br/> - `* {channel_id_or_handle}-published`<br/> - `* {channel_id_or_handle}-visible`<br/> - `* {channel_id_or_handle}-intended`<br/> - `* {channel_id_or_handle}-hidden`<br/> - `* {channel_app_id_or_handle}-published`<br/> - `* {channel_app_id_or_handle}-visible`<br/> - `* {channel_app_id_or_handle}-intended`<br/> - `* {channel_app_id_or_handle}-hidden`<br/> - `unavailable` | | - `published_status:online_store_channel`<br/> - `published_status:published`<br/> - `published_status:580111-published`<br/> - `published_status:580111-hidden`<br/> - `published_status:my-channel-handle-published`<br/> - `published_status:unavailable` |
     | sku | string | Filter by the product variant [`sku`](https://shopify.dev/api/admin-graphql/latest/objects/ProductVariant#field-sku) field. [Learn more about SKUs](https://help.shopify.com/manual/products/details/sku). | | | - `sku:XYZ-12345` |
     | status | string | Filter by a comma-separated list of statuses. You can use statuses to manage inventory. Shopify only displays products with an `ACTIVE` status in online stores, sales channels, and apps. | - `active`<br/> - `archived`<br/> - `draft`<br/> - `unlisted` | `active` | - `status:active,draft` |
@@ -33342,7 +33342,7 @@ type Publication implements Node {
     | product_type | string | Filter by a comma-separated list of [product types](https://help.shopify.com/manual/products/details/product-type). | | | - `product_type:snowboard` |
     | publication_ids | string | Filter by a comma-separated list of publication IDs that are associated with the product. | | | - `publication_ids:184111530305,184111694145` |
     | publishable_status | string | **Deprecated:** This parameter is deprecated as of 2025-12 and will be removed in a future API version. Use [published_status](https://shopify.dev/api/admin-graphql/latest/queries/products#argument-query-filter-publishable_status) for visibility checks. Filter by the publishable status of the resource on a channel. The value is a composite of the [channel `app` ID](https://shopify.dev/api/admin-graphql/latest/objects/Channel#app-price) (`Channel.app.id`) and one of the valid status values. | - `* {channel_app_id}-unset`<br/> - `* {channel_app_id}-pending`<br/> - `* {channel_app_id}-approved`<br/> - `* {channel_app_id}-not_approved` | | - `publishable_status:580111-unset`<br/> - `publishable_status:580111-pending` |
-    | published_at | time | Filter by the date and time when the product was published to the online store and other sales channels. | | | - `published_at:>2020-10-21T23:39:20Z`<br/> - `published_at:<now`<br/> - `published_at:<=2024` |
+    | published_at | time | Filter by the date and time when the product was published to the online store and other sales channels. | | | - `published_at:>'2020-10-21T23:39:20Z'`<br/> - `published_at:<now`<br/> - `published_at:<=2024` |
     | published_status | string | Filter resources by their visibility and publication state on a channel. Online store channel filtering: - `online_store_channel`: Returns all resources in the online store channel, regardless of publication status. - `published`/`visible`: Returns resources that are published to the online store. - `unpublished`: Returns resources that are not published to the online store. Channel-specific filtering using a channel ID, channel handle, [channel `app` ID](https://shopify.dev/api/admin-graphql/latest/objects/Channel#app-price) (`Channel.app.id`), or app handle with suffixes: - `{id_or_handle}-published`: Returns resources published to the specified channel. - `{id_or_handle}-visible`: Same as `{id_or_handle}-published` (kept for backwards compatibility). - `{id_or_handle}-intended`: Returns resources added to the channel but not yet published. - `{id_or_handle}-hidden`: Returns resources not added to the channel or not published. Other: - `unavailable`: Returns resources not published to any channel. | - `online_store_channel`<br/> - `published`<br/> - `visible`<br/> - `unpublished`<br/> - `* {channel_id_or_handle}-published`<br/> - `* {channel_id_or_handle}-visible`<br/> - `* {channel_id_or_handle}-intended`<br/> - `* {channel_id_or_handle}-hidden`<br/> - `* {channel_app_id_or_handle}-published`<br/> - `* {channel_app_id_or_handle}-visible`<br/> - `* {channel_app_id_or_handle}-intended`<br/> - `* {channel_app_id_or_handle}-hidden`<br/> - `unavailable` | | - `published_status:online_store_channel`<br/> - `published_status:published`<br/> - `published_status:580111-published`<br/> - `published_status:580111-hidden`<br/> - `published_status:my-channel-handle-published`<br/> - `published_status:unavailable` |
     | sku | string | Filter by the product variant [`sku`](https://shopify.dev/api/admin-graphql/latest/objects/ProductVariant#field-sku) field. [Learn more about SKUs](https://help.shopify.com/manual/products/details/sku). | | | - `sku:XYZ-12345` |
     | status | string | Filter by a comma-separated list of statuses. You can use statuses to manage inventory. Shopify only displays products with an `ACTIVE` status in online stores, sales channels, and apps. | - `active`<br/> - `archived`<br/> - `draft`<br/> - `unlisted` | `active` | - `status:active,draft` |
@@ -34949,7 +34949,7 @@ type QueryRoot {
     | tag | string | Filter by the tags that are associated with the customer. This query parameter accepts multiple tags separated by commas. | | | - `tag:'VIP'`<br/> - `tag:'Wholesale,Repeat'` |
     | tag_not | string | Filter by the tags that aren't associated with the customer. This query parameter accepts multiple tags separated by commas. | | | - `tag_not:'Prospect'`<br/> - `tag_not:'Test,Internal'` |
     | total_spent | float | Filter by the total amount of money a customer has spent across all orders. | | | - `total_spent:100.50`<br/> - `total_spent:50.00`<br/> - `total_spent:>100.50`<br/> - `total_spent:>50.00` |
-    | updated_at | time | The date and time, matching a whole day, when the customer's information was last updated. | | | - `updated_at:2024-01-01T00:00:00Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
+    | updated_at | time | The date and time, matching a whole day, when the customer's information was last updated. | | | - `updated_at:'2024-01-01T00:00:00Z'`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
     query: String,
@@ -35618,7 +35618,7 @@ type QueryRoot {
     | ---- | ---- | ---- | ---- | ---- | ---- |
     | default | string | Filter by a case-insensitive search of multiple fields in a document, including gift card codes. | | | - `query=a5bh6h64b329j4k7`<br/> - `query=Bob Norman` |
     | balance_status | string | | - `full`<br/> - `partial`<br/> - `empty`<br/> - `full_or_partial` | | - `balance_status:full` |
-    | created_at | time | | | | - `created_at:>=2020-01-01T12:00:00Z` |
+    | created_at | time | | | | - `created_at:>='2020-01-01T12:00:00Z'` |
     | customer_id | id |
     | expires_on | date | | | | - `expires_on:>=2020-01-01` |
     | id | id | Filter by `id` range. | | | - `id:1234`<br/> - `id:>=1234`<br/> - `id:<=1234` |
@@ -35649,7 +35649,7 @@ type QueryRoot {
     | ---- | ---- | ---- | ---- | ---- | ---- |
     | default | string | Filter by a case-insensitive search of multiple fields in a document, including gift card codes. | | | - `query=a5bh6h64b329j4k7`<br/> - `query=Bob Norman` |
     | balance_status | string | | - `full`<br/> - `partial`<br/> - `empty`<br/> - `full_or_partial` | | - `balance_status:full` |
-    | created_at | time | | | | - `created_at:>=2020-01-01T12:00:00Z` |
+    | created_at | time | | | | - `created_at:>='2020-01-01T12:00:00Z'` |
     | customer_id | id |
     | expires_on | date | | | | - `expires_on:>=2020-01-01` |
     | id | id | Filter by `id` range. | | | - `id:1234`<br/> - `id:>=1234`<br/> - `id:<=1234` |
@@ -36166,13 +36166,13 @@ type QueryRoot {
     | name | type | description | acceptable_values | default_value | example_use |
     | ---- | ---- | ---- | ---- | ---- | ---- |
     | default | string | Filter by a case-insensitive search of multiple fields in a document. | | | - `query=Bob Norman`<br/> - `query=title:green hoodie` |
-    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>2020-10-21T23:39:20Z`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
+    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>'2020-10-21T23:39:20Z'`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
     | id | id | Filter by `id` range. | | | - `id:1234`<br/> - `id:>=1234`<br/> - `id:<=1234` |
     | key | string | Filter by the metafield definition [`key`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-key) field. | | | - `key:some-key` |
     | namespace | string | Filter by the metafield definition [`namespace`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-namespace) field. | | | - `namespace:some-namespace` |
     | owner_type | string | Filter by the metafield definition [`ownerType`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-ownertype) field. | | | - `owner_type:PRODUCT` |
     | type | string | Filter by the metafield definition [`type`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-type) field. | | | - `type:single_line_text_field` |
-    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>2020-10-21T23:39:20Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
+    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>'2020-10-21T23:39:20Z'`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
     query: String,
@@ -36377,7 +36377,7 @@ type QueryRoot {
     | chargeback_status | string | Filter by the order's chargeback status. A chargeback occurs when a customer questions the legitimacy of a charge with their financial institution. | - `accepted`<br/> - `charge_refunded`<br/> - `lost`<br/> - `needs_response`<br/> - `under_review`<br/> - `won` | | - `chargeback_status:accepted` |
     | checkout_token | string | Filter by the checkout token's unique value to analyze conversion funnels or resolve payment issues. The checkout token's value references the checkout that's associated with an order. | | | - `checkout_token:abc123` |
     | confirmation_number | string | Filter by the randomly generated alpha-numeric identifier for an order that can be displayed to the customer instead of the sequential order name. This value isn't guaranteed to be unique. | | | - `confirmation_number:ABC123` |
-    | created_at | time | Filter by the date and time when the order was created in Shopify's system. | | | - `created_at:2020-10-21T23:39:20Z`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
+    | created_at | time | Filter by the date and time when the order was created in Shopify's system. | | | - `created_at:'2020-10-21T23:39:20Z'`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
     | credit_card_last4 | string | Filter by the last four digits of the payment card that was used to pay for the order. This filter matches only the last four digits of the card for heightened security. | | | - `credit_card_last4:1234` |
     | current_total_price | float | Filter by the current total price of the order in the shop currency, including any returns/refunds/removals. This filter supports both exact values and ranges. | | | - `current_total_price:10`<br/> - `current_total_price:>=5.00 current_total_price:<=20.99` |
     | customer_id | id | Filter orders by the customer [`id`](https://shopify.dev/api/admin-graphql/latest/objects/Customer#field-Customer.fields.id) field. | | | - `customer_id:123` |
@@ -36396,7 +36396,7 @@ type QueryRoot {
     | payment_id | string | Filter by the payment ID that's associated with the order to reconcile financial records or troubleshoot payment issues. | | | - `payment_id:abc123` |
     | payment_provider_id | id | Filter by the ID of the payment provider that's associated with the order to manage payment methods or troubleshoot transactions. | | | - `payment_provider_id:123` |
     | po_number | string | Filter by the order [`poNumber`](https://shopify.dev/api/admin-graphql/latest/objects/order#field-Order.fields.poNumber) field. | | | - `po_number:P01001` |
-    | processed_at | time | Filter by the order [`processedAt`](https://shopify.dev/api/admin-graphql/latest/objects/order#field-Order.fields.processedAt) field. | | | - `processed_at:2021-01-01T00:00:00Z` |
+    | processed_at | time | Filter by the order [`processedAt`](https://shopify.dev/api/admin-graphql/latest/objects/order#field-Order.fields.processedAt) field. | | | - `processed_at:'2021-01-01T00:00:00Z'` |
     | reference_location_id | id | Filter by the ID of a location that's associated with the order, such as locations from fulfillments, refunds, or the shop's primary location. | | | - `reference_location_id:123` |
     | return_status | string | Filter by the order's [`returnStatus`](https://shopify.dev/api/admin-graphql/latest/objects/Order#field-Order.fields.returnStatus) to monitor returns processing and track which orders have active returns. | - `return_requested`<br/> - `in_progress`<br/> - `inspection_complete`<br/> - `returned`<br/> - `return_failed`<br/> - `no_return` | | - `return_status:in_progress` |
     | risk_level | string | Filter by the order risk assessment [`riskLevel`](https://shopify.dev/api/admin-graphql/latest/objects/OrderRiskAssessment#field-OrderRiskAssessment.fields.riskLevel) field. | - `high`<br/> - `medium`<br/> - `low`<br/> - `none`<br/> - `pending` | | - `risk_level:high` |
@@ -36410,7 +36410,7 @@ type QueryRoot {
     | tag_not | string | Filter by objects that don’t have the specified tag. | | | - `tag_not:my_tag` |
     | test | boolean | Filter by test orders. Test orders are made using the [Shopify Bogus Gateway](https://help.shopify.com/manual/checkout-settings/test-orders/payments-test-mode#bogus-gateway) or a payment provider with test mode enabled. | | | - `test:true` |
     | total_weight | string | Filter by the order weight. This filter supports both exact values and ranges, and is to be used to filter orders by the total weight of all items (excluding packaging). It takes a unit of measurement as a suffix. It accepts the following units: g, kg, lb, oz. | | | - `total_weight:10.5kg`<br/> - `total_weight:>=5g total_weight:<=20g`<br/> - `total_weight:.5 lb` |
-    | updated_at | time | Filter by the date and time when the order was last updated in Shopify's system. | | | - `updated_at:2020-10-21T23:39:20Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
+    | updated_at | time | Filter by the date and time when the order was last updated in Shopify's system. | | | - `updated_at:'2020-10-21T23:39:20Z'`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
     query: String,
@@ -36446,7 +36446,7 @@ type QueryRoot {
     | chargeback_status | string | Filter by the order's chargeback status. A chargeback occurs when a customer questions the legitimacy of a charge with their financial institution. | - `accepted`<br/> - `charge_refunded`<br/> - `lost`<br/> - `needs_response`<br/> - `under_review`<br/> - `won` | | - `chargeback_status:accepted` |
     | checkout_token | string | Filter by the checkout token's unique value to analyze conversion funnels or resolve payment issues. The checkout token's value references the checkout that's associated with an order. | | | - `checkout_token:abc123` |
     | confirmation_number | string | Filter by the randomly generated alpha-numeric identifier for an order that can be displayed to the customer instead of the sequential order name. This value isn't guaranteed to be unique. | | | - `confirmation_number:ABC123` |
-    | created_at | time | Filter by the date and time when the order was created in Shopify's system. | | | - `created_at:2020-10-21T23:39:20Z`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
+    | created_at | time | Filter by the date and time when the order was created in Shopify's system. | | | - `created_at:'2020-10-21T23:39:20Z'`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
     | credit_card_last4 | string | Filter by the last four digits of the payment card that was used to pay for the order. This filter matches only the last four digits of the card for heightened security. | | | - `credit_card_last4:1234` |
     | current_total_price | float | Filter by the current total price of the order in the shop currency, including any returns/refunds/removals. This filter supports both exact values and ranges. | | | - `current_total_price:10`<br/> - `current_total_price:>=5.00 current_total_price:<=20.99` |
     | customer_id | id | Filter orders by the customer [`id`](https://shopify.dev/api/admin-graphql/latest/objects/Customer#field-Customer.fields.id) field. | | | - `customer_id:123` |
@@ -36465,7 +36465,7 @@ type QueryRoot {
     | payment_id | string | Filter by the payment ID that's associated with the order to reconcile financial records or troubleshoot payment issues. | | | - `payment_id:abc123` |
     | payment_provider_id | id | Filter by the ID of the payment provider that's associated with the order to manage payment methods or troubleshoot transactions. | | | - `payment_provider_id:123` |
     | po_number | string | Filter by the order [`poNumber`](https://shopify.dev/api/admin-graphql/latest/objects/order#field-Order.fields.poNumber) field. | | | - `po_number:P01001` |
-    | processed_at | time | Filter by the order [`processedAt`](https://shopify.dev/api/admin-graphql/latest/objects/order#field-Order.fields.processedAt) field. | | | - `processed_at:2021-01-01T00:00:00Z` |
+    | processed_at | time | Filter by the order [`processedAt`](https://shopify.dev/api/admin-graphql/latest/objects/order#field-Order.fields.processedAt) field. | | | - `processed_at:'2021-01-01T00:00:00Z'` |
     | reference_location_id | id | Filter by the ID of a location that's associated with the order, such as locations from fulfillments, refunds, or the shop's primary location. | | | - `reference_location_id:123` |
     | return_status | string | Filter by the order's [`returnStatus`](https://shopify.dev/api/admin-graphql/latest/objects/Order#field-Order.fields.returnStatus) to monitor returns processing and track which orders have active returns. | - `return_requested`<br/> - `in_progress`<br/> - `inspection_complete`<br/> - `returned`<br/> - `return_failed`<br/> - `no_return` | | - `return_status:in_progress` |
     | risk_level | string | Filter by the order risk assessment [`riskLevel`](https://shopify.dev/api/admin-graphql/latest/objects/OrderRiskAssessment#field-OrderRiskAssessment.fields.riskLevel) field. | - `high`<br/> - `medium`<br/> - `low`<br/> - `none`<br/> - `pending` | | - `risk_level:high` |
@@ -36479,7 +36479,7 @@ type QueryRoot {
     | tag_not | string | Filter by objects that don’t have the specified tag. | | | - `tag_not:my_tag` |
     | test | boolean | Filter by test orders. Test orders are made using the [Shopify Bogus Gateway](https://help.shopify.com/manual/checkout-settings/test-orders/payments-test-mode#bogus-gateway) or a payment provider with test mode enabled. | | | - `test:true` |
     | total_weight | string | Filter by the order weight. This filter supports both exact values and ranges, and is to be used to filter orders by the total weight of all items (excluding packaging). It takes a unit of measurement as a suffix. It accepts the following units: g, kg, lb, oz. | | | - `total_weight:10.5kg`<br/> - `total_weight:>=5g total_weight:<=20g`<br/> - `total_weight:.5 lb` |
-    | updated_at | time | Filter by the date and time when the order was last updated in Shopify's system. | | | - `updated_at:2020-10-21T23:39:20Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
+    | updated_at | time | Filter by the date and time when the order was last updated in Shopify's system. | | | - `updated_at:'2020-10-21T23:39:20Z'`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
     query: String,
@@ -36889,7 +36889,7 @@ type QueryRoot {
     | tag_not | string | Filter by objects that don’t have the specified tag. | | | - `tag_not:my_tag` |
     | taxable | boolean | Filter by the product variant [`taxable`](https://shopify.dev/api/admin-graphql/latest/objects/ProductVariant#field-taxable) field. | | | - `taxable:false` |
     | title | string | Filter by the product variant [`title`](https://shopify.dev/api/admin-graphql/latest/objects/ProductVariant#field-title) field. | | | - `title:ice` |
-    | updated_at | time | Filter by date and time when the product variant was updated. | | | - `updated_at:>2020-10-21T23:39:20Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
+    | updated_at | time | Filter by date and time when the product variant was updated. | | | - `updated_at:>'2020-10-21T23:39:20Z'`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
     | vendor | string | Filter by the origin or source of the product variant. Learn more about [vendors and managing vendor information](https://help.shopify.com/manual/products/managing-vendor-info). | | | - `vendor:Snowdevil`<br/> - `vendor:Snowdevil,Icedevil`<br/> - `vendor:Snowdevil OR vendor:Icedevil` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
@@ -36991,7 +36991,7 @@ type QueryRoot {
     | product_type | string | Filter by a comma-separated list of [product types](https://help.shopify.com/manual/products/details/product-type). | | | - `product_type:snowboard` |
     | publication_ids | string | Filter by a comma-separated list of publication IDs that are associated with the product. | | | - `publication_ids:184111530305,184111694145` |
     | publishable_status | string | **Deprecated:** This parameter is deprecated as of 2025-12 and will be removed in a future API version. Use [published_status](https://shopify.dev/api/admin-graphql/latest/queries/products#argument-query-filter-publishable_status) for visibility checks. Filter by the publishable status of the resource on a channel. The value is a composite of the [channel `app` ID](https://shopify.dev/api/admin-graphql/latest/objects/Channel#app-price) (`Channel.app.id`) and one of the valid status values. | - `* {channel_app_id}-unset`<br/> - `* {channel_app_id}-pending`<br/> - `* {channel_app_id}-approved`<br/> - `* {channel_app_id}-not_approved` | | - `publishable_status:580111-unset`<br/> - `publishable_status:580111-pending` |
-    | published_at | time | Filter by the date and time when the product was published to the online store and other sales channels. | | | - `published_at:>2020-10-21T23:39:20Z`<br/> - `published_at:<now`<br/> - `published_at:<=2024` |
+    | published_at | time | Filter by the date and time when the product was published to the online store and other sales channels. | | | - `published_at:>'2020-10-21T23:39:20Z'`<br/> - `published_at:<now`<br/> - `published_at:<=2024` |
     | published_status | string | Filter resources by their visibility and publication state on a channel. Online store channel filtering: - `online_store_channel`: Returns all resources in the online store channel, regardless of publication status. - `published`/`visible`: Returns resources that are published to the online store. - `unpublished`: Returns resources that are not published to the online store. Channel-specific filtering using a channel ID, channel handle, [channel `app` ID](https://shopify.dev/api/admin-graphql/latest/objects/Channel#app-price) (`Channel.app.id`), or app handle with suffixes: - `{id_or_handle}-published`: Returns resources published to the specified channel. - `{id_or_handle}-visible`: Same as `{id_or_handle}-published` (kept for backwards compatibility). - `{id_or_handle}-intended`: Returns resources added to the channel but not yet published. - `{id_or_handle}-hidden`: Returns resources not added to the channel or not published. Other: - `unavailable`: Returns resources not published to any channel. | - `online_store_channel`<br/> - `published`<br/> - `visible`<br/> - `unpublished`<br/> - `* {channel_id_or_handle}-published`<br/> - `* {channel_id_or_handle}-visible`<br/> - `* {channel_id_or_handle}-intended`<br/> - `* {channel_id_or_handle}-hidden`<br/> - `* {channel_app_id_or_handle}-published`<br/> - `* {channel_app_id_or_handle}-visible`<br/> - `* {channel_app_id_or_handle}-intended`<br/> - `* {channel_app_id_or_handle}-hidden`<br/> - `unavailable` | | - `published_status:online_store_channel`<br/> - `published_status:published`<br/> - `published_status:580111-published`<br/> - `published_status:580111-hidden`<br/> - `published_status:my-channel-handle-published`<br/> - `published_status:unavailable` |
     | sku | string | Filter by the product variant [`sku`](https://shopify.dev/api/admin-graphql/latest/objects/ProductVariant#field-sku) field. [Learn more about SKUs](https://help.shopify.com/manual/products/details/sku). | | | - `sku:XYZ-12345` |
     | status | string | Filter by a comma-separated list of statuses. You can use statuses to manage inventory. Shopify only displays products with an `ACTIVE` status in online stores, sales channels, and apps. | - `active`<br/> - `archived`<br/> - `draft`<br/> - `unlisted` | `active` | - `status:active,draft` |
@@ -37049,7 +37049,7 @@ type QueryRoot {
     | product_type | string | Filter by a comma-separated list of [product types](https://help.shopify.com/manual/products/details/product-type). | | | - `product_type:snowboard` |
     | publication_ids | string | Filter by a comma-separated list of publication IDs that are associated with the product. | | | - `publication_ids:184111530305,184111694145` |
     | publishable_status | string | **Deprecated:** This parameter is deprecated as of 2025-12 and will be removed in a future API version. Use [published_status](https://shopify.dev/api/admin-graphql/latest/queries/products#argument-query-filter-publishable_status) for visibility checks. Filter by the publishable status of the resource on a channel. The value is a composite of the [channel `app` ID](https://shopify.dev/api/admin-graphql/latest/objects/Channel#app-price) (`Channel.app.id`) and one of the valid status values. | - `* {channel_app_id}-unset`<br/> - `* {channel_app_id}-pending`<br/> - `* {channel_app_id}-approved`<br/> - `* {channel_app_id}-not_approved` | | - `publishable_status:580111-unset`<br/> - `publishable_status:580111-pending` |
-    | published_at | time | Filter by the date and time when the product was published to the online store and other sales channels. | | | - `published_at:>2020-10-21T23:39:20Z`<br/> - `published_at:<now`<br/> - `published_at:<=2024` |
+    | published_at | time | Filter by the date and time when the product was published to the online store and other sales channels. | | | - `published_at:>'2020-10-21T23:39:20Z'`<br/> - `published_at:<now`<br/> - `published_at:<=2024` |
     | published_status | string | Filter resources by their visibility and publication state on a channel. Online store channel filtering: - `online_store_channel`: Returns all resources in the online store channel, regardless of publication status. - `published`/`visible`: Returns resources that are published to the online store. - `unpublished`: Returns resources that are not published to the online store. Channel-specific filtering using a channel ID, channel handle, [channel `app` ID](https://shopify.dev/api/admin-graphql/latest/objects/Channel#app-price) (`Channel.app.id`), or app handle with suffixes: - `{id_or_handle}-published`: Returns resources published to the specified channel. - `{id_or_handle}-visible`: Same as `{id_or_handle}-published` (kept for backwards compatibility). - `{id_or_handle}-intended`: Returns resources added to the channel but not yet published. - `{id_or_handle}-hidden`: Returns resources not added to the channel or not published. Other: - `unavailable`: Returns resources not published to any channel. | - `online_store_channel`<br/> - `published`<br/> - `visible`<br/> - `unpublished`<br/> - `* {channel_id_or_handle}-published`<br/> - `* {channel_id_or_handle}-visible`<br/> - `* {channel_id_or_handle}-intended`<br/> - `* {channel_id_or_handle}-hidden`<br/> - `* {channel_app_id_or_handle}-published`<br/> - `* {channel_app_id_or_handle}-visible`<br/> - `* {channel_app_id_or_handle}-intended`<br/> - `* {channel_app_id_or_handle}-hidden`<br/> - `unavailable` | | - `published_status:online_store_channel`<br/> - `published_status:published`<br/> - `published_status:580111-published`<br/> - `published_status:580111-hidden`<br/> - `published_status:my-channel-handle-published`<br/> - `published_status:unavailable` |
     | sku | string | Filter by the product variant [`sku`](https://shopify.dev/api/admin-graphql/latest/objects/ProductVariant#field-sku) field. [Learn more about SKUs](https://help.shopify.com/manual/products/details/sku). | | | - `sku:XYZ-12345` |
     | status | string | Filter by a comma-separated list of statuses. You can use statuses to manage inventory. Shopify only displays products with an `ACTIVE` status in online stores, sales channels, and apps. | - `active`<br/> - `archived`<br/> - `draft`<br/> - `unlisted` | `active` | - `status:active,draft` |
@@ -39850,13 +39850,13 @@ type SellingPlan implements HasMetafieldDefinitions & HasMetafields & HasPublish
     | name | type | description | acceptable_values | default_value | example_use |
     | ---- | ---- | ---- | ---- | ---- | ---- |
     | default | string | Filter by a case-insensitive search of multiple fields in a document. | | | - `query=Bob Norman`<br/> - `query=title:green hoodie` |
-    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>2020-10-21T23:39:20Z`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
+    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>'2020-10-21T23:39:20Z'`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
     | id | id | Filter by `id` range. | | | - `id:1234`<br/> - `id:>=1234`<br/> - `id:<=1234` |
     | key | string | Filter by the metafield definition [`key`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-key) field. | | | - `key:some-key` |
     | namespace | string | Filter by the metafield definition [`namespace`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-namespace) field. | | | - `namespace:some-namespace` |
     | owner_type | string | Filter by the metafield definition [`ownerType`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-ownertype) field. | | | - `owner_type:PRODUCT` |
     | type | string | Filter by the metafield definition [`type`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-type) field. | | | - `type:single_line_text_field` |
-    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>2020-10-21T23:39:20Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
+    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>'2020-10-21T23:39:20Z'`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
     query: String,
@@ -40644,7 +40644,7 @@ type Shop implements HasMetafieldDefinitions & HasMetafields & HasPublishedTrans
     | tag | string | Filter by the tags that are associated with the customer. This query parameter accepts multiple tags separated by commas. | | | - `tag:'VIP'`<br/> - `tag:'Wholesale,Repeat'` |
     | tag_not | string | Filter by the tags that aren't associated with the customer. This query parameter accepts multiple tags separated by commas. | | | - `tag_not:'Prospect'`<br/> - `tag_not:'Test,Internal'` |
     | total_spent | float | Filter by the total amount of money a customer has spent across all orders. | | | - `total_spent:100.50`<br/> - `total_spent:50.00`<br/> - `total_spent:>100.50`<br/> - `total_spent:>50.00` |
-    | updated_at | time | The date and time, matching a whole day, when the customer's information was last updated. | | | - `updated_at:2024-01-01T00:00:00Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
+    | updated_at | time | The date and time, matching a whole day, when the customer's information was last updated. | | | - `updated_at:'2024-01-01T00:00:00Z'`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
     query: String,
@@ -40812,13 +40812,13 @@ type Shop implements HasMetafieldDefinitions & HasMetafields & HasPublishedTrans
     | name | type | description | acceptable_values | default_value | example_use |
     | ---- | ---- | ---- | ---- | ---- | ---- |
     | default | string | Filter by a case-insensitive search of multiple fields in a document. | | | - `query=Bob Norman`<br/> - `query=title:green hoodie` |
-    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>2020-10-21T23:39:20Z`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
+    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>'2020-10-21T23:39:20Z'`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
     | id | id | Filter by `id` range. | | | - `id:1234`<br/> - `id:>=1234`<br/> - `id:<=1234` |
     | key | string | Filter by the metafield definition [`key`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-key) field. | | | - `key:some-key` |
     | namespace | string | Filter by the metafield definition [`namespace`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-namespace) field. | | | - `namespace:some-namespace` |
     | owner_type | string | Filter by the metafield definition [`ownerType`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-ownertype) field. | | | - `owner_type:PRODUCT` |
     | type | string | Filter by the metafield definition [`type`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-type) field. | | | - `type:single_line_text_field` |
-    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>2020-10-21T23:39:20Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
+    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>'2020-10-21T23:39:20Z'`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
     query: String,
@@ -40885,7 +40885,7 @@ type Shop implements HasMetafieldDefinitions & HasMetafields & HasPublishedTrans
     | chargeback_status | string | Filter by the order's chargeback status. A chargeback occurs when a customer questions the legitimacy of a charge with their financial institution. | - `accepted`<br/> - `charge_refunded`<br/> - `lost`<br/> - `needs_response`<br/> - `under_review`<br/> - `won` | | - `chargeback_status:accepted` |
     | checkout_token | string | Filter by the checkout token's unique value to analyze conversion funnels or resolve payment issues. The checkout token's value references the checkout that's associated with an order. | | | - `checkout_token:abc123` |
     | confirmation_number | string | Filter by the randomly generated alpha-numeric identifier for an order that can be displayed to the customer instead of the sequential order name. This value isn't guaranteed to be unique. | | | - `confirmation_number:ABC123` |
-    | created_at | time | Filter by the date and time when the order was created in Shopify's system. | | | - `created_at:2020-10-21T23:39:20Z`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
+    | created_at | time | Filter by the date and time when the order was created in Shopify's system. | | | - `created_at:'2020-10-21T23:39:20Z'`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
     | credit_card_last4 | string | Filter by the last four digits of the payment card that was used to pay for the order. This filter matches only the last four digits of the card for heightened security. | | | - `credit_card_last4:1234` |
     | current_total_price | float | Filter by the current total price of the order in the shop currency, including any returns/refunds/removals. This filter supports both exact values and ranges. | | | - `current_total_price:10`<br/> - `current_total_price:>=5.00 current_total_price:<=20.99` |
     | customer_id | id | Filter orders by the customer [`id`](https://shopify.dev/api/admin-graphql/latest/objects/Customer#field-Customer.fields.id) field. | | | - `customer_id:123` |
@@ -40904,7 +40904,7 @@ type Shop implements HasMetafieldDefinitions & HasMetafields & HasPublishedTrans
     | payment_id | string | Filter by the payment ID that's associated with the order to reconcile financial records or troubleshoot payment issues. | | | - `payment_id:abc123` |
     | payment_provider_id | id | Filter by the ID of the payment provider that's associated with the order to manage payment methods or troubleshoot transactions. | | | - `payment_provider_id:123` |
     | po_number | string | Filter by the order [`poNumber`](https://shopify.dev/api/admin-graphql/latest/objects/order#field-Order.fields.poNumber) field. | | | - `po_number:P01001` |
-    | processed_at | time | Filter by the order [`processedAt`](https://shopify.dev/api/admin-graphql/latest/objects/order#field-Order.fields.processedAt) field. | | | - `processed_at:2021-01-01T00:00:00Z` |
+    | processed_at | time | Filter by the order [`processedAt`](https://shopify.dev/api/admin-graphql/latest/objects/order#field-Order.fields.processedAt) field. | | | - `processed_at:'2021-01-01T00:00:00Z'` |
     | reference_location_id | id | Filter by the ID of a location that's associated with the order, such as locations from fulfillments, refunds, or the shop's primary location. | | | - `reference_location_id:123` |
     | return_status | string | Filter by the order's [`returnStatus`](https://shopify.dev/api/admin-graphql/latest/objects/Order#field-Order.fields.returnStatus) to monitor returns processing and track which orders have active returns. | - `return_requested`<br/> - `in_progress`<br/> - `inspection_complete`<br/> - `returned`<br/> - `return_failed`<br/> - `no_return` | | - `return_status:in_progress` |
     | risk_level | string | Filter by the order risk assessment [`riskLevel`](https://shopify.dev/api/admin-graphql/latest/objects/OrderRiskAssessment#field-OrderRiskAssessment.fields.riskLevel) field. | - `high`<br/> - `medium`<br/> - `low`<br/> - `none`<br/> - `pending` | | - `risk_level:high` |
@@ -40918,7 +40918,7 @@ type Shop implements HasMetafieldDefinitions & HasMetafields & HasPublishedTrans
     | tag_not | string | Filter by objects that don’t have the specified tag. | | | - `tag_not:my_tag` |
     | test | boolean | Filter by test orders. Test orders are made using the [Shopify Bogus Gateway](https://help.shopify.com/manual/checkout-settings/test-orders/payments-test-mode#bogus-gateway) or a payment provider with test mode enabled. | | | - `test:true` |
     | total_weight | string | Filter by the order weight. This filter supports both exact values and ranges, and is to be used to filter orders by the total weight of all items (excluding packaging). It takes a unit of measurement as a suffix. It accepts the following units: g, kg, lb, oz. | | | - `total_weight:10.5kg`<br/> - `total_weight:>=5g total_weight:<=20g`<br/> - `total_weight:.5 lb` |
-    | updated_at | time | Filter by the date and time when the order was last updated in Shopify's system. | | | - `updated_at:2020-10-21T23:39:20Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
+    | updated_at | time | Filter by the date and time when the order was last updated in Shopify's system. | | | - `updated_at:'2020-10-21T23:39:20Z'`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
     query: String,
@@ -41000,7 +41000,7 @@ type Shop implements HasMetafieldDefinitions & HasMetafields & HasPublishedTrans
     | tag_not | string | Filter by objects that don’t have the specified tag. | | | - `tag_not:my_tag` |
     | taxable | boolean | Filter by the product variant [`taxable`](https://shopify.dev/api/admin-graphql/latest/objects/ProductVariant#field-taxable) field. | | | - `taxable:false` |
     | title | string | Filter by the product variant [`title`](https://shopify.dev/api/admin-graphql/latest/objects/ProductVariant#field-title) field. | | | - `title:ice` |
-    | updated_at | time | Filter by date and time when the product variant was updated. | | | - `updated_at:>2020-10-21T23:39:20Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
+    | updated_at | time | Filter by date and time when the product variant was updated. | | | - `updated_at:>'2020-10-21T23:39:20Z'`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
     | vendor | string | Filter by the origin or source of the product variant. Learn more about [vendors and managing vendor information](https://help.shopify.com/manual/products/managing-vendor-info). | | | - `vendor:Snowdevil`<br/> - `vendor:Snowdevil,Icedevil`<br/> - `vendor:Snowdevil OR vendor:Icedevil` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
@@ -41054,7 +41054,7 @@ type Shop implements HasMetafieldDefinitions & HasMetafields & HasPublishedTrans
     | product_type | string | Filter by a comma-separated list of [product types](https://help.shopify.com/manual/products/details/product-type). | | | - `product_type:snowboard` |
     | publication_ids | string | Filter by a comma-separated list of publication IDs that are associated with the product. | | | - `publication_ids:184111530305,184111694145` |
     | publishable_status | string | **Deprecated:** This parameter is deprecated as of 2025-12 and will be removed in a future API version. Use [published_status](https://shopify.dev/api/admin-graphql/latest/queries/products#argument-query-filter-publishable_status) for visibility checks. Filter by the publishable status of the resource on a channel. The value is a composite of the [channel `app` ID](https://shopify.dev/api/admin-graphql/latest/objects/Channel#app-price) (`Channel.app.id`) and one of the valid status values. | - `* {channel_app_id}-unset`<br/> - `* {channel_app_id}-pending`<br/> - `* {channel_app_id}-approved`<br/> - `* {channel_app_id}-not_approved` | | - `publishable_status:580111-unset`<br/> - `publishable_status:580111-pending` |
-    | published_at | time | Filter by the date and time when the product was published to the online store and other sales channels. | | | - `published_at:>2020-10-21T23:39:20Z`<br/> - `published_at:<now`<br/> - `published_at:<=2024` |
+    | published_at | time | Filter by the date and time when the product was published to the online store and other sales channels. | | | - `published_at:>'2020-10-21T23:39:20Z'`<br/> - `published_at:<now`<br/> - `published_at:<=2024` |
     | published_status | string | Filter resources by their visibility and publication state on a channel. Online store channel filtering: - `online_store_channel`: Returns all resources in the online store channel, regardless of publication status. - `published`/`visible`: Returns resources that are published to the online store. - `unpublished`: Returns resources that are not published to the online store. Channel-specific filtering using a channel ID, channel handle, [channel `app` ID](https://shopify.dev/api/admin-graphql/latest/objects/Channel#app-price) (`Channel.app.id`), or app handle with suffixes: - `{id_or_handle}-published`: Returns resources published to the specified channel. - `{id_or_handle}-visible`: Same as `{id_or_handle}-published` (kept for backwards compatibility). - `{id_or_handle}-intended`: Returns resources added to the channel but not yet published. - `{id_or_handle}-hidden`: Returns resources not added to the channel or not published. Other: - `unavailable`: Returns resources not published to any channel. | - `online_store_channel`<br/> - `published`<br/> - `visible`<br/> - `unpublished`<br/> - `* {channel_id_or_handle}-published`<br/> - `* {channel_id_or_handle}-visible`<br/> - `* {channel_id_or_handle}-intended`<br/> - `* {channel_id_or_handle}-hidden`<br/> - `* {channel_app_id_or_handle}-published`<br/> - `* {channel_app_id_or_handle}-visible`<br/> - `* {channel_app_id_or_handle}-intended`<br/> - `* {channel_app_id_or_handle}-hidden`<br/> - `unavailable` | | - `published_status:online_store_channel`<br/> - `published_status:published`<br/> - `published_status:580111-published`<br/> - `published_status:580111-hidden`<br/> - `published_status:my-channel-handle-published`<br/> - `published_status:unavailable` |
     | sku | string | Filter by the product variant [`sku`](https://shopify.dev/api/admin-graphql/latest/objects/ProductVariant#field-sku) field. [Learn more about SKUs](https://help.shopify.com/manual/products/details/sku). | | | - `sku:XYZ-12345` |
     | status | string | Filter by a comma-separated list of statuses. You can use statuses to manage inventory. Shopify only displays products with an `ACTIVE` status in online stores, sales channels, and apps. | - `active`<br/> - `archived`<br/> - `draft`<br/> - `unlisted` | `active` | - `status:active,draft` |
@@ -45365,13 +45365,13 @@ type Validation implements HasMetafieldDefinitions & HasMetafields & Node {
     | name | type | description | acceptable_values | default_value | example_use |
     | ---- | ---- | ---- | ---- | ---- | ---- |
     | default | string | Filter by a case-insensitive search of multiple fields in a document. | | | - `query=Bob Norman`<br/> - `query=title:green hoodie` |
-    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>2020-10-21T23:39:20Z`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
+    | created_at | time | Filter by the date and time when the metafield definition was created. | | | - `created_at:>'2020-10-21T23:39:20Z'`<br/> - `created_at:<now`<br/> - `created_at:<=2024` |
     | id | id | Filter by `id` range. | | | - `id:1234`<br/> - `id:>=1234`<br/> - `id:<=1234` |
     | key | string | Filter by the metafield definition [`key`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-key) field. | | | - `key:some-key` |
     | namespace | string | Filter by the metafield definition [`namespace`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-namespace) field. | | | - `namespace:some-namespace` |
     | owner_type | string | Filter by the metafield definition [`ownerType`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-ownertype) field. | | | - `owner_type:PRODUCT` |
     | type | string | Filter by the metafield definition [`type`](https://shopify.dev/docs/api/admin-graphql/latest/objects/MetafieldDefinition#field-type) field. | | | - `type:single_line_text_field` |
-    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>2020-10-21T23:39:20Z`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
+    | updated_at | time | Filter by the date and time when the metafield definition was last updated. | | | - `updated_at:>'2020-10-21T23:39:20Z'`<br/> - `updated_at:<now`<br/> - `updated_at:<=2024` |
     You can apply one or more filters to a query. Learn more about [Shopify API search syntax](https://shopify.dev/api/usage/search-syntax).
     """
     query: String,
@@ -52177,6 +52177,8 @@ enum MarketUserErrorCode {
   EXCEEDS_MAX_MULTI_CONTEXT_MARKETS
   "An error occurred. See the message for details."
   GENERIC_ERROR
+  "Global-e pricing configurations can only be edited by Global-e."
+  GLOBAL_E_PRICING_STRATEGY_NOT_PERMITTED
   "The input value isn't included in the list."
   INCLUSION
   "Inclusive pricing cannot be added to a market with the specified condition types."
@@ -57286,6 +57288,8 @@ enum StandardMetafieldDefinitionEnableUserErrorCode {
   INVALID_CAPABILITY
   "The input combination is invalid."
   INVALID_INPUT_COMBINATION
+  "The associated standard metaobject definition template is not valid for the metafield definition and prevented enabling it."
+  INVALID_STANDARD_METAOBJECT
   "The maximum number of definitions per owner type has been exceeded."
   LIMIT_EXCEEDED
   "You have reached the maximum allowed definitions to be used as admin filters."

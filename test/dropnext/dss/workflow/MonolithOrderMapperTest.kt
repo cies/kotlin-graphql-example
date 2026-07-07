@@ -13,9 +13,9 @@ import kotlin.test.Test
 class MonolithOrderMapperTest {
 
   @Test
-  fun `maps financial status to lowercase`() {
+  fun `maps financial status to PascalCase`() {
     val req = orderToCreateShopifyOrderRequest("dropnext-staging", minimalOrder(financial = OrderDisplayFinancialStatus.PAID))
-    assert(req.financialStatus == "paid")
+    assert(req.financialStatus == "Paid")
   }
 
   @Test
@@ -35,7 +35,7 @@ class MonolithOrderMapperTest {
         "dropnext-staging",
         minimalOrder(fulfillment = OrderDisplayFulfillmentStatus.FULFILLED),
       )
-    assert(req.fulfillmentStatus == "fulfilled")
+    assert(req.fulfillmentStatus == "Fulfilled")
   }
 
   @Test
@@ -58,7 +58,7 @@ class MonolithOrderMapperTest {
         "dropnext-staging",
         minimalOrder(fulfillment = OrderDisplayFulfillmentStatus.PARTIALLY_FULFILLED),
       )
-    assert(req.fulfillmentStatus == "partial")
+    assert(req.fulfillmentStatus == "Partial")
   }
 
   @Test
@@ -68,7 +68,7 @@ class MonolithOrderMapperTest {
         "dropnext-staging",
         minimalOrder(fulfillment = OrderDisplayFulfillmentStatus.IN_PROGRESS),
       )
-    assert(req.fulfillmentStatus == "partial")
+    assert(req.fulfillmentStatus == "Partial")
   }
 
   @Test
@@ -78,7 +78,7 @@ class MonolithOrderMapperTest {
         "dropnext-staging",
         minimalOrder(fulfillment = OrderDisplayFulfillmentStatus.RESTOCKED),
       )
-    assert(req.fulfillmentStatus == "restocked")
+    assert(req.fulfillmentStatus == "Restocked")
   }
 
   @Test
@@ -108,7 +108,7 @@ class MonolithOrderMapperTest {
         "dropnext-staging",
         minimalOrder(financial = OrderDisplayFinancialStatus.__UNKNOWN_VALUE),
       )
-    assert(req.financialStatus == "unknown")
+    assert(req.financialStatus == "Unknown")
   }
 
   @Test
@@ -118,17 +118,17 @@ class MonolithOrderMapperTest {
         "dropnext-staging",
         minimalOrder(financial = OrderDisplayFinancialStatus.REFUNDED),
       )
-    assert(req.financialStatus == "refunded")
+    assert(req.financialStatus == "Refunded")
   }
 
   @Test
-  fun `maps PARTIALLY_PAID financial status to partially_paid`() {
+  fun `maps PARTIALLY_PAID financial status to PartiallyPaid`() {
     val req =
       orderToCreateShopifyOrderRequest(
         "dropnext-staging",
         minimalOrder(financial = OrderDisplayFinancialStatus.PARTIALLY_PAID),
       )
-    assert(req.financialStatus == "partially_paid")
+    assert(req.financialStatus == "PartiallyPaid")
   }
 
   @Test

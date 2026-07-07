@@ -63,7 +63,7 @@ fun orderToCreateShopifyOrderRequest(
     shopifySubdomain = shopifySubdomain,
     shopifyOrderId = orderLegacy,
     name = order.name,
-    financialStatus = order.displayFinancialStatus?.toFinancialString() ?: "unknown",
+    financialStatus = order.displayFinancialStatus?.toFinancialString() ?: "Unknown",
     fulfillmentStatus = order.displayFulfillmentStatus.toMonolithFulfillmentStatus(),
     createdAt = formatCreatedAtUtcZ(order.createdAt),
     shippingAddress = shipping,
@@ -91,23 +91,21 @@ internal fun resolveOrderTotalAsString(
   return minorUnitsToShopifyDecimal(lineSumMinor)
 }
 
-private fun OrderDisplayFinancialStatus.toFinancialString(): String {
-  val n = name
-  return if (n == "__UNKNOWN_VALUE") "unknown" else n.lowercase(Locale.ROOT)
-}
+private fun OrderDisplayFinancialStatus.toFinancialString(): String =
+  if (name == "__UNKNOWN_VALUE") "Unknown" else enumNameToPascalCase(name)
 
 /**
- * Monolith expects REST-style fulfillment: `fulfilled` / `partial` / `restocked`, or **`null`**
- * when nothing is shipped yet (do not send Graphql labels like `unfulfilled`).
+ * Monolith expects PascalCase fulfillment labels (`Fulfilled` / `Partial` / `Restocked`), or **`null`**
+ * when nothing is shipped yet (do not send Graphql labels like `Unfulfilled`).
  */
 private fun OrderDisplayFulfillmentStatus.toMonolithFulfillmentStatus(): String? =
   when (this) {
-    OrderDisplayFulfillmentStatus.FULFILLED -> "fulfilled"
+    OrderDisplayFulfillmentStatus.FULFILLED -> "Fulfilled"
 
     OrderDisplayFulfillmentStatus.PARTIALLY_FULFILLED,
-    OrderDisplayFulfillmentStatus.IN_PROGRESS -> "partial"
+    OrderDisplayFulfillmentStatus.IN_PROGRESS -> "Partial"
 
-    OrderDisplayFulfillmentStatus.RESTOCKED -> "restocked"
+    OrderDisplayFulfillmentStatus.RESTOCKED -> "Restocked"
 
     OrderDisplayFulfillmentStatus.UNFULFILLED,
     OrderDisplayFulfillmentStatus.OPEN,
@@ -146,6 +144,12 @@ private fun MailingAddress.toDto(): ShippingAddress =
     zip = zip,
     phone = phone,
   )
+
+/** Converts Graphql enum names (`PARTIALLY_PAID`) to monolith PascalCase (`PartiallyPaid`). */
+private fun enumNameToPascalCase(enumName: String): String =
+  enumName.split('_').joinToString("") { part ->
+    part.lowercase(Locale.ROOT).replaceFirstChar { char -> char.titlecase(Locale.ROOT) }
+  }
 
 /** Normalizes Shopify Admin `DateTime` strings to UTC `…Z` (second precision), e.g. `2026-04-25T10:30:00Z`. */
 private fun formatCreatedAtUtcZ(createdAt: String): String =

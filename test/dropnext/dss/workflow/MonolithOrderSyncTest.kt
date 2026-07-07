@@ -113,7 +113,7 @@ class MonolithOrderSyncTest {
       shopifySubdomain = "dropnext-staging",
       shopifyOrderId = 1001L,
       name = "#1001",
-      financialStatus = "paid",
+      financialStatus = "Paid",
       fulfillmentStatus = null,
       createdAt = "2026-04-25T10:30:00Z",
       shippingAddress = ShippingAddress(
