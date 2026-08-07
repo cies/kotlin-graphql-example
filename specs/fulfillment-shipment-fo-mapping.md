@@ -50,7 +50,7 @@ When a supplier adds tracking first and reorganizes splits later, the DSS handle
 | **Line item (LI)** | A row on the Shopify order or on a fulfillment order, identified in this flow by `product_variant_id` (Shopify variant `legacyResourceId`). |
 | **Fulfillment order (FO)** | Shopify's unit of fulfillment work. An order may have multiple FOs (e.g. different locations). Status must be `OPEN` or `IN_PROGRESS` to accept new fulfillments. |
 | **Fulfillment (FI)** | A Shopify fulfillment record with tracking info, created via `fulfillmentCreate`. One FI per DropNext shipment when at least one line matches. |
-| **FO line item** | A line on a fulfillment order with its own `remainingQuantity`. Matching consumes from this quantity. |
+| **FO line item** | A line on a fulfillment order with `remainingQuantity` (live) and `totalQuantity` (post-cancel capacity). Dry-run consumes from `totalQuantity`; the create loop consumes from live `remainingQuantity`. |
 
 
 ## API surface
@@ -165,7 +165,7 @@ Validation errors accumulate; all are returned in one 400 response.
 
 ### Phase 1 — Load order
 
-`GetOrderForDss` loads the order, open fulfillment orders, FO line items (with `remainingQuantity`), and existing fulfillments.
+`GetOrderForDss` loads the order, open fulfillment orders, FO line items (with `remainingQuantity` and `totalQuantity`), and existing fulfillments.
 
 Order not found → **404**, no mutations.
 
@@ -173,15 +173,17 @@ Order not found → **404**, no mutations.
 
 [`dryRunAllShipments`](../src/dropnext/dss/lib/shopify/graphql/fulfillment/FulfillmentOrderMatcher.kt) simulates matching **all** shipments against a single in-memory [`FulfillmentQuantityLedger`](../src/dropnext/dss/lib/shopify/graphql/fulfillment/FulfillmentOrderMatcher.kt). No Shopify mutations occur in this phase.
 
+Dry-run validates against **post-cancel capacity** (`totalQuantity`), not live `remainingQuantity`. Sync always cancels existing fulfillments before create, so a payload that fits `totalQuantity` must pass even when prior fulfillments have already reduced `remainingQuantity`.
+
 For each shipment:
 
 1. **Normalize** line items: aggregate duplicate `product_variant_id` rows (sum quantities) via [`normalizeShipmentLineItems`](../src/dropnext/dss/lib/shopify/graphql/fulfillment/FulfillmentOrderMatcher.kt).
 2. For each normalized line, [`matchShipmentLineItem`](../src/dropnext/dss/lib/shopify/graphql/fulfillment/FulfillmentOrderMatcher.kt):
    - Find open FO lines (`OPEN` or `IN_PROGRESS`) whose variant `legacyResourceId` equals the requested `product_variant_id`.
-   - Skip FO lines with `remainingQuantity <= 0` or unparseable variant IDs.
-   - Select the **best candidate**: the open FO line with the **highest available quantity**. Tie-break: first candidate in Graphql response order (strictly greater wins).
+   - Skip FO lines with unparseable variant IDs. During dry-run, skip only when `totalQuantity <= 0` (cancel restores capacity toward `totalQuantity`).
+   - Select the **best candidate**: the open FO line with the **highest available quantity** from the ledger. Tie-break: first candidate in Graphql response order (strictly greater wins).
    - If no candidate and variant never seen on an open FO → **skip** (`NO_OPEN_FO`).
-   - If variant seen but all open FO lines have zero remaining → **skip** (`ZERO_REMAINING`).
+   - If variant seen but all open FO lines have zero post-cancel capacity (`totalQuantity`) → **skip** (`ZERO_REMAINING`).
    - If requested quantity exceeds available (per line or ledger after prior shipments) → **hard error** (blocks entire sync).
    - If matched → consume quantity from ledger and group by FO for `fulfillmentCreate`.
 
@@ -235,7 +237,8 @@ sync-shipments skipped line shop=acme orderId=1001 tracking=1Z999 variant=999 re
 |-----------|--------|------|
 | Shipment line matches open FO with sufficient qty | Include in `fulfillmentCreate` | 200 |
 | Shipment line: variant not on any open FO | Skip line, log warning | 200 |
-| Shipment line: qty > remaining (single line or cross-shipment total) | Fail **before cancel** | 400 |
+| Shipment line: qty > post-cancel capacity / `totalQuantity` (single line or cross-shipment total) | Fail **before cancel** | 400 |
+| Payload fits `totalQuantity` but live `remainingQuantity` is reduced by existing fulfillments | Dry-run passes → cancel → recreate | 200 |
 | Duplicate `tracking_number` in payload | Fail **before cancel** | 400 |
 | All lines in a shipment skipped | Skip create for that shipment, log warning | 200 |
 | Supplier reorganizes splits | Cancel all → recreate from payload | 200 |
@@ -250,19 +253,19 @@ sync-shipments skipped line shop=acme orderId=1001 tracking=1Z999 variant=999 re
 
 ### Validate before mutate
 
-**Never cancel existing fulfillments until the full payload is validated against current order state.**
+**Never cancel existing fulfillments until the full payload is validated against post-cancel capacity.**
 
 ```
-load order → dry-run match ALL shipments → if ANY hard error → return 400, NO cancels
+load order → dry-run match ALL shipments against totalQuantity → if ANY hard error → return 400, NO cancels
            → cancel all existing fulfillments
            → reload order
-           → create fulfillments one-by-one (reload after each success)
+           → create fulfillments one-by-one (reload after each success; match on live remainingQuantity)
 ```
 
 Hard errors that block the entire sync:
 
 - Order not found
-- Any shipment line: `quantity > remainingQuantity` on matched FO line
+- Any shipment line: `quantity > totalQuantity` (post-cancel capacity) on matched FO line
 - Duplicate `tracking_number` within the same payload
 - Cross-shipment over-allocation detected by the in-memory ledger during dry-run
 
@@ -275,7 +278,7 @@ Soft outcomes (do **not** block sync):
 | Condition | Behavior |
 |-----------|----------|
 | Unmatched variant (no open FO) | Skip line, warn, 200 |
-| Qty exceeds remaining (single line or cross-shipment total) | **400 before cancel** |
+| Qty exceeds post-cancel capacity / `totalQuantity` (single line or cross-shipment total) | **400 before cancel** |
 | Cancel mutation fails (non-"already canceled") | **Abort**, return error |
 | Create fails mid-loop (after some creates succeeded) | **Return error**; monolith retries full payload → next sync cancels partial state and recreates |
 | Reload fails after successful create | **Return upstream error** with explicit log for manual verification |
@@ -297,9 +300,9 @@ Before matching, each shipment is normalized:
 
 ### In-memory quantity ledger
 
-[`FulfillmentQuantityLedger`](../src/dropnext/dss/lib/shopify/graphql/fulfillment/FulfillmentOrderMatcher.kt) tracks `remainingQuantity` per FO line item GID:
+[`FulfillmentQuantityLedger`](../src/dropnext/dss/lib/shopify/graphql/fulfillment/FulfillmentOrderMatcher.kt) tracks **post-cancel capacity** (`totalQuantity`) per FO line item GID:
 
-- Initialized from open FOs with `remainingQuantity > 0`.
+- Initialized from open FOs with `totalQuantity > 0` (not live `remainingQuantity`).
 - Dry-run uses `tryConsume` to catch cross-shipment over-allocation before cancel.
 - Create loop does **not** use the ledger; it reloads order from Shopify after each create so remaining quantities reflect live state.
 

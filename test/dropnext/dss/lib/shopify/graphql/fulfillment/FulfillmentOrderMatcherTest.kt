@@ -194,6 +194,36 @@ class FulfillmentOrderMatcherTest {
   }
 
   @Test
+  fun `cross-shipment over-allocation vs totalQuantity fails dry-run`() {
+    // remaining already reduced, but payload still exceeds post-cancel total
+    val order =
+      orderWithFulfillmentOrders(openFo(variantId = 101L, remaining = 1, total = 2))
+    val shipments =
+      listOf(
+        shipment(tracking = "TRK-1", variantId = 101L, quantity = 1),
+        shipment(tracking = "TRK-2", variantId = 101L, quantity = 1),
+        shipment(tracking = "TRK-3", variantId = 101L, quantity = 1),
+      )
+    val result = dryRunAllShipments(order, shipments)
+    assert(result is DryRunResult.UserError)
+  }
+
+  @Test
+  fun `partial remaining dry-run uses totalQuantity for resync`() {
+    // One unit already fulfilled (remaining=1); cancel will restore total=2
+    val order =
+      orderWithFulfillmentOrders(openFo(variantId = 101L, remaining = 1, total = 2))
+    val shipments =
+      listOf(
+        shipment(tracking = "TRK-1", variantId = 101L, quantity = 1),
+        shipment(tracking = "TRK-2", variantId = 101L, quantity = 1),
+      )
+    val result = dryRunAllShipments(order, shipments) as DryRunResult.Ok
+    assert(result.perShipment.size == 2)
+    assert(result.totalSkipped == 0)
+  }
+
+  @Test
   fun `cross-shipment allocation within limits succeeds dry-run`() {
     val order = orderWithFulfillmentOrders(openFo(variantId = 101L, remaining = 3))
     val shipments =
@@ -294,25 +324,26 @@ class FulfillmentOrderMatcherTest {
   }
 
   @Test
-  fun `ledger initializes remaining quantities from open fulfillment order lines`() {
-    val order = orderWithFulfillmentOrders(openFo(variantId = 101L, remaining = 3))
+  fun `ledger initializes from totalQuantity not remainingQuantity`() {
+    val order =
+      orderWithFulfillmentOrders(openFo(variantId = 101L, remaining = 1, total = 3))
     val ledger = FulfillmentQuantityLedger(order)
     assert(ledger.remaining("gid://shopify/FulfillmentOrderLineItem/401") == 3)
   }
 
   @Test
-  fun `ledger ignores closed fulfillment orders and zero remaining lines`() {
+  fun `ledger ignores closed fulfillment orders and zero totalQuantity lines`() {
     val closed =
       FulfillmentOrder(
         id = "gid://shopify/FulfillmentOrder/301",
         status = FulfillmentOrderStatus.CLOSED,
-        lineItems = foLineItems(variantId = 101L, remaining = 5),
+        lineItems = foLineItems(variantId = 101L, remaining = 5, total = 5),
       )
     val openZero =
       FulfillmentOrder(
         id = "gid://shopify/FulfillmentOrder/302",
         status = FulfillmentOrderStatus.OPEN,
-        lineItems = foLineItems(lineItemId = 402L, variantId = 202L, remaining = 0),
+        lineItems = foLineItems(lineItemId = 402L, variantId = 202L, remaining = 0, total = 0),
       )
     val order = orderWithFulfillmentOrders(closed, openZero)
     val ledger = FulfillmentQuantityLedger(order)
@@ -406,6 +437,7 @@ class FulfillmentOrderMatcherTest {
   private fun openFo(
     variantId: Long,
     remaining: Int,
+    total: Int = remaining,
     foId: Long = 301L,
     lineItemId: Long = 401L,
   ): FulfillmentOrder {
@@ -417,17 +449,22 @@ class FulfillmentOrderMatcherTest {
     return FulfillmentOrder(
       id = "gid://shopify/FulfillmentOrder/$foId",
       status = FulfillmentOrderStatus.OPEN,
-      lineItems = foLineItems(lineItemId, variant, remaining),
+      lineItems = foLineItems(lineItemId, variant, remaining, total),
     )
   }
 
-  private fun foLineItems(variantId: Long, remaining: Int): FulfillmentOrderLineItemConnection =
-    foLineItems(401L, variantId, remaining)
+  private fun foLineItems(
+    variantId: Long,
+    remaining: Int,
+    total: Int = remaining,
+  ): FulfillmentOrderLineItemConnection =
+    foLineItems(401L, variantId, remaining, total)
 
   private fun foLineItems(
     lineItemId: Long,
     variantId: Long,
     remaining: Int,
+    total: Int = remaining,
   ): FulfillmentOrderLineItemConnection =
     foLineItems(
       lineItemId,
@@ -436,12 +473,14 @@ class FulfillmentOrderMatcherTest {
         legacyResourceId = variantId.toString(),
       ),
       remaining,
+      total,
     )
 
   private fun foLineItems(
     lineItemId: Long,
     variant: ProductVariant,
     remaining: Int,
+    total: Int = remaining,
   ): FulfillmentOrderLineItemConnection =
     FulfillmentOrderLineItemConnection(
       edges =
@@ -451,7 +490,7 @@ class FulfillmentOrderMatcherTest {
               FulfillmentOrderLineItem(
                 id = "gid://shopify/FulfillmentOrderLineItem/$lineItemId",
                 remainingQuantity = remaining,
-                totalQuantity = remaining,
+                totalQuantity = total,
                 variant = variant,
               ),
           ),

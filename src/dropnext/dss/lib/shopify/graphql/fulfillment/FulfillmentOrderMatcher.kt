@@ -49,8 +49,9 @@ fun FulfillmentOrderStatus.isOpenForFulfillment(): Boolean =
   }
 
 /**
- * Tracks [remainingQuantity] per fulfillment order line item GID for dry-run and cross-shipment
- * quantity validation.
+ * Tracks post-cancel capacity ([totalQuantity]) per fulfillment order line item GID for dry-run
+ * and cross-shipment quantity validation. Sync cancels existing fulfillments before create, so
+ * dry-run must not use live [remainingQuantity] (which is already reduced by those fulfillments).
  */
 class FulfillmentQuantityLedger(order: Order) {
   private val remainingByLineItemGid = mutableMapOf<String, Int>()
@@ -61,8 +62,8 @@ class FulfillmentQuantityLedger(order: Order) {
       if (!fo.status.isOpenForFulfillment()) continue
       for (lineEdge in fo.lineItems.edges) {
         val node = lineEdge.node
-        if (node.remainingQuantity > 0) {
-          remainingByLineItemGid[node.id] = node.remainingQuantity
+        if (node.totalQuantity > 0) {
+          remainingByLineItemGid[node.id] = node.totalQuantity
         }
       }
     }
@@ -90,8 +91,9 @@ fun normalizeShipmentLineItems(shipment: Shipment): List<ShipmentLineItem> =
     }
 
 /**
- * Simulates matching all shipments against a single in-memory quantity ledger. Catches cross-shipment
- * over-allocation before any Shopify mutations.
+ * Simulates matching all shipments against a single in-memory quantity ledger seeded from
+ * [totalQuantity] (post-cancel capacity). Catches cross-shipment over-allocation before any
+ * Shopify mutations.
  */
 fun dryRunAllShipments(order: Order, shipments: List<Shipment>): DryRunResult {
   val ledger = FulfillmentQuantityLedger(order)
@@ -113,7 +115,8 @@ fun dryRunAllShipments(order: Order, shipments: List<Shipment>): DryRunResult {
 /**
  * Maps shipment line items to open fulfillment orders. Unmatched variants are skipped (partial
  * match). Returns [ShipmentMatchResult.UserError] when requested quantity exceeds available
- * [remainingQuantity].
+ * capacity ([remainingQuantity] when [ledger] is null; ledger/post-cancel [totalQuantity] when
+ * dry-running).
  */
 fun matchShipmentToFulfillmentOrders(
   order: Order,
@@ -178,9 +181,18 @@ private fun matchShipmentLineItem(
 ): LineMatchResult {
   val openLines = findOpenFoLinesForVariant(order, req.productVariantId)
   if (openLines.isEmpty()) {
-    return LineMatchResult.Skip(determineSkipReason(order, req.productVariantId))
+    return LineMatchResult.Skip(determineSkipReason(order, req.productVariantId, ledger))
   }
-  if (openLines.all { it.remainingQuantity <= 0 }) {
+
+  // Create-loop: skip when live remaining is already exhausted.
+  // Dry-run (ledger): cancel restores capacity to totalQuantity — only skip when total is 0.
+  val noCapacity =
+    if (ledger != null) {
+      openLines.all { it.totalQuantity <= 0 }
+    } else {
+      openLines.all { it.remainingQuantity <= 0 }
+    }
+  if (noCapacity) {
     return LineMatchResult.Skip(SkipReason.ZERO_REMAINING)
   }
 
@@ -234,9 +246,12 @@ private fun findOpenFoLinesForVariant(order: Order, variantId: Long): List<Fulfi
 }
 
 
-/** 
+/**
  * Prefers the open FO line with the highest available quantity when the same variant appears in
  * multiple open FOs. Tie-break: first candidate in GraphQL order (strictly greater wins).
+ *
+ * When [ledger] is present (dry-run), availability comes from post-cancel capacity. Otherwise uses
+ * live [remainingQuantity].
  */
 private fun findBestFoLineCandidate(
   order: Order,
@@ -266,9 +281,13 @@ private fun findBestFoLineCandidate(
   return best
 }
 
-private fun determineSkipReason(order: Order, variantId: Long): SkipReason {
+private fun determineSkipReason(
+  order: Order,
+  variantId: Long,
+  ledger: FulfillmentQuantityLedger?,
+): SkipReason {
   var seenOnOpenFo = false
-  var allZeroRemaining = true
+  var allZeroCapacity = true
 
   for (foe in order.fulfillmentOrders.edges) {
     val fo = foe.node
@@ -284,14 +303,15 @@ private fun determineSkipReason(order: Order, variantId: Long): SkipReason {
       }
       if (nodeVariantId != variantId) continue
       seenOnOpenFo = true
-      if (node.remainingQuantity > 0) {
-        allZeroRemaining = false
+      val capacity = if (ledger != null) node.totalQuantity else node.remainingQuantity
+      if (capacity > 0) {
+        allZeroCapacity = false
       }
     }
   }
 
   return when {
-    seenOnOpenFo && allZeroRemaining -> SkipReason.ZERO_REMAINING
+    seenOnOpenFo && allZeroCapacity -> SkipReason.ZERO_REMAINING
     else -> SkipReason.NO_OPEN_FO
   }
 }

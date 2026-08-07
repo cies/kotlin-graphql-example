@@ -82,3 +82,31 @@ internal fun minimalOrder(
     fulfillments = emptyList(),
   )
 }
+
+/** Like [minimalOrder] but with explicit FO line remaining/total (for partial-fulfillment cases). */
+internal fun orderWithFoQuantities(
+  remaining: Int,
+  total: Int = remaining,
+  fulfillment: OrderDisplayFulfillmentStatus = OrderDisplayFulfillmentStatus.UNFULFILLED,
+  financial: OrderDisplayFinancialStatus = OrderDisplayFinancialStatus.PAID,
+): Order {
+  val base = minimalOrder(fulfillment = fulfillment, financial = financial)
+  val foLine =
+    base.fulfillmentOrders.edges.single().node.lineItems.edges.single().node.copy(
+      remainingQuantity = remaining,
+      totalQuantity = total,
+    )
+  val fo =
+    base.fulfillmentOrders.edges.single().node.copy(
+      lineItems =
+        FulfillmentOrderLineItemConnection(
+          edges = listOf(FulfillmentOrderLineItemEdge(node = foLine)),
+        ),
+    )
+  return base.copy(
+    fulfillmentOrders =
+      FulfillmentOrderConnection(
+        edges = listOf(FulfillmentOrderEdge(node = fo)),
+      ),
+  )
+}

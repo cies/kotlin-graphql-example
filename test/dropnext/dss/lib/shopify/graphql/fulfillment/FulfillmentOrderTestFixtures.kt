@@ -54,6 +54,7 @@ internal fun openFulfillmentOrder(
   lineItemId: Long,
   variantId: Long,
   remaining: Int,
+  total: Int = remaining,
   status: FulfillmentOrderStatus = FulfillmentOrderStatus.OPEN,
 ): FulfillmentOrder {
   val variant =
@@ -64,7 +65,7 @@ internal fun openFulfillmentOrder(
   return FulfillmentOrder(
     id = "gid://shopify/FulfillmentOrder/$foId",
     status = status,
-    lineItems = foLineItemConnection(lineItemId, variant, remaining),
+    lineItems = foLineItemConnection(lineItemId, variant, remaining, total),
   )
 }
 
@@ -72,6 +73,7 @@ internal fun foLineItemConnection(
   lineItemId: Long,
   variant: ProductVariant,
   remaining: Int,
+  total: Int = remaining,
 ): FulfillmentOrderLineItemConnection =
   FulfillmentOrderLineItemConnection(
     edges =
@@ -81,7 +83,7 @@ internal fun foLineItemConnection(
             FulfillmentOrderLineItem(
               id = "gid://shopify/FulfillmentOrderLineItem/$lineItemId",
               remainingQuantity = remaining,
-              totalQuantity = remaining,
+              totalQuantity = total,
               variant = variant,
             ),
         ),

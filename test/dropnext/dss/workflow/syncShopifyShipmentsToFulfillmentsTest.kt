@@ -418,8 +418,9 @@ class SyncShopifyShipmentsToFulfillmentsTest {
     assert(fake.calls.count { it.operationName == "FulfillmentCreateWithLineItems" } == 2)
 
     fake.reset()
-    val orderWithPartial =
-      order.copy(
+    // Shopify reduced remaining after the partial create; dry-run must use totalQuantity.
+    val orderWithPartialRemaining =
+      orderWithFoQuantities(remaining = 1, total = 2).copy(
         fulfillments = listOf(
           Fulfillment(
             id = "gid://shopify/Fulfillment/5001",
@@ -428,7 +429,9 @@ class SyncShopifyShipmentsToFulfillmentsTest {
           ),
         ),
       )
-    fake.stubGetOrderForDss(order = orderWithPartial)
+    val orderAfterCancel = orderWithFoQuantities(remaining = 2, total = 2)
+    fake.enqueueGetOrderForDss(order = orderWithPartialRemaining)
+    fake.stubGetOrderForDss(order = orderAfterCancel)
     fake.stubFulfillmentCancelOk(fulfillmentId = 5001L)
     fake.stubSequence(
       "FulfillmentCreateWithLineItems",
@@ -459,6 +462,43 @@ class SyncShopifyShipmentsToFulfillmentsTest {
           "GetOrderForDss",
         ),
     )
+  }
+
+  @Test
+  fun `partial remaining resync cancels and recreates full payload`() = runBlocking {
+    val beforeCancel =
+      orderWithFoQuantities(remaining = 1, total = 2).copy(
+        fulfillments = listOf(
+          Fulfillment(
+            id = "gid://shopify/Fulfillment/8000",
+            legacyResourceId = "8000",
+            trackingInfo = emptyList(),
+          ),
+        ),
+      )
+    val afterCancel = orderWithFoQuantities(remaining = 2, total = 2)
+    fake.enqueueGetOrderForDss(order = beforeCancel)
+    fake.stubGetOrderForDss(order = afterCancel)
+    fake.stubFulfillmentCancelOk(fulfillmentId = 8000L)
+    fake.stubSequence(
+      "FulfillmentCreateWithLineItems",
+      fulfillmentCreateOkJson(9001L),
+      fulfillmentCreateOkJson(9002L),
+    )
+    val result =
+      syncShopifyShipmentsToFulfillments(
+        shopify,
+        syncRequest(
+          shipments = listOf(
+            shipment(tracking = "TRK-1", variantId = 101L, quantity = 1),
+            shipment(tracking = "TRK-2", variantId = 101L, quantity = 1),
+          ),
+        ),
+      )
+    val response = result.unwrapOk<SyncShipmentsWithFulfillmentsResponse>()
+    assert(response.newFulfillmentIds == listOf(9001L, 9002L))
+    assert(fake.calls.any { it.operationName == "FulfillmentCancelMutation" })
+    assert(fake.calls.count { it.operationName == "FulfillmentCreateWithLineItems" } == 2)
   }
 
   // ---------- helpers ----------
