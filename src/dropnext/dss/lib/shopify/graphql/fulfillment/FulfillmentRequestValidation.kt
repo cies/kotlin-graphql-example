@@ -19,16 +19,16 @@ sealed interface RequestValidation {
 private fun List<String>.toResult(): RequestValidation =
   if (isEmpty()) RequestValidation.Valid else RequestValidation.Invalid(this)
 
-fun validateSyncShipmentsRequest(request: SyncShipmentsWithFulfillmentsRequest): RequestValidation {
+fun SyncShipmentsWithFulfillmentsRequest.validate(): RequestValidation {
   val errors = mutableListOf<String>()
-  errors += validateOrderId(request.shopifyOrderId)
-  if (request.shipments.isEmpty()) {
+  errors += validateOrderId(this.shopifyOrderId)
+  if (this.shipments.isEmpty()) {
     errors += "at least one shipment is required"
   } else {
-    request.shipments.forEachIndexed { index, shipment ->
+    this.shipments.forEachIndexed { index, shipment ->
       errors += validateShipment(shipment, index)
     }
-    errors += validateDuplicateTrackingNumbers(request.shipments)
+    errors += validateDuplicateTrackingNumbers(this.shipments)
   }
   return errors.toResult()
 }

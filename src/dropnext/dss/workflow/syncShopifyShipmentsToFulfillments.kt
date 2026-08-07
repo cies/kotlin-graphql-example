@@ -33,39 +33,39 @@ private val log = KotlinLogging.logger {}
  * Validates the full payload (dry-run) before any cancel mutations. Reloads order state after
  * each successful create so subsequent shipments see fresh remaining quantities.
  *
- * Composes the per-shop [shopify] primitives ([ShopifyGraphqlService.cancelFulfillment],
+ * Composes the per-shop [shopifyGqlService] primitives ([ShopifyGraphqlService.cancelFulfillment],
  * [ShopifyGraphqlService.createFulfillmentWithLineItems], [ShopifyGraphqlService.loadOrderForDss]).
  */
 suspend fun syncShopifyShipmentsToFulfillments(
-  shopify: ShopifyGraphqlService,
+  shopifyGqlService: ShopifyGraphqlService,
   payload: SyncShipmentsWithFulfillmentsRequest,
 ): FulfillmentResult<SyncShipmentsWithFulfillmentsResponse> {
-  val orderGid = orderGid(payload.shopifyOrderId)
-  val shop = payload.shopifySubdomain
-  val orderId = payload.shopifyOrderId
+  val shopifyOrderGid = orderGid(payload.shopifyOrderId)
+  val shopifySubdomain = payload.shopifySubdomain
+  val shopifyOrderId = payload.shopifyOrderId
 
-  val orderBefore = loadOrder(shopify, orderGid)
-    ?: return FulfillmentResult.Err.NotFound("order $orderId not found")
+  val currentShopifyOrder = fetchShopifyOrder(shopifyGqlService, shopifyOrderGid)
+    ?: return FulfillmentResult.Err.NotFound("order $shopifyOrderId not found")
 
-  when (val dryRun = dryRunAllShipments(orderBefore, payload.shipments)) {
+  when (val dryRun = dryRunAllShipments(currentShopifyOrder, payload.shipments)) {
     is DryRunResult.UserError -> return FulfillmentResult.Err.UserError(dryRun.messages)
     is DryRunResult.Ok -> Unit
   }
 
-  val existingFulfillmentGids = orderBefore.fulfillments
+  val existingFulfillmentGids = currentShopifyOrder.fulfillments
     .map { it.id }
     .filter { it.isNotBlank() }
   val canceledCount = existingFulfillmentGids.size
 
   existingFulfillmentGids.forEach { fulfillmentGid ->
-    val cancelResult = cancelFulfillment(shopify, fulfillmentGid)
+    val cancelResult = cancelFulfillment(shopifyGqlService, fulfillmentGid)
     if (cancelResult is FulfillmentResult.Err) return cancelResult
   }
 
   var order = if (existingFulfillmentGids.isEmpty()) {
-    orderBefore
+    currentShopifyOrder
   } else {
-    loadOrder(shopify, orderGid)
+    fetchShopifyOrder(shopifyGqlService, shopifyOrderGid)
       ?: return FulfillmentResult.Err.NotFound("order not found after cancel")
   }
 
@@ -79,26 +79,26 @@ suspend fun syncShopifyShipmentsToFulfillments(
       is ShipmentMatchResult.Ok -> {
         totalSkippedLines += matchResult.skipped.size
         matchResult.skipped.forEach { skipped ->
-          logSkippedLine(shop, orderId, skipped)
+          logSkippedLine(shopifySubdomain, shopifyOrderId, skipped)
         }
 
         if (matchResult.groups.isEmpty()) {
           skippedShipments++
           log.warn {
-            "sync-shipments skipped shipment shop=$shop orderId=$orderId " +
+            "sync-shipments skipped shipment shop=$shopifySubdomain orderId=$shopifyOrderId " +
               "tracking=${shipment.trackingNumber} reason=all_lines_unmatched"
           }
           continue
         }
 
-        when (val createResult = createFulfillmentForGroups(shopify, shipment, matchResult.groups)) {
+        when (val createResult = createFulfillmentForGroups(shopifyGqlService, shipment, matchResult.groups)) {
           is FulfillmentResult.Err -> return createResult
           is FulfillmentResult.Ok -> {
             val createdIds = createResult.value
             newFulfillmentIds.addAll(createdIds)
-            order = reloadOrderAfterCreate(shopify, orderGid, shop, orderId, createdIds)
+            order = reloadOrderAfterCreate(shopifyGqlService, shopifyOrderGid, shopifySubdomain, shopifyOrderId, createdIds)
               ?: return FulfillmentResult.Err.Network(
-                buildReloadFailureMessage(shop, orderId, createdIds),
+                buildReloadFailureMessage(shopifySubdomain, shopifyOrderId, createdIds),
               )
           }
         }
@@ -113,7 +113,7 @@ suspend fun syncShopifyShipmentsToFulfillments(
     skippedShipments = skippedShipments,
   )
 
-  log.info { formatSyncShipmentsLogLine(shop, orderId, stats, newFulfillmentIds) }
+  log.info { formatSyncShipmentsLogLine(shopifySubdomain, shopifyOrderId, stats, newFulfillmentIds) }
 
   return FulfillmentResult.Ok(
     SyncShipmentsWithFulfillmentsResponse(newFulfillmentIds = newFulfillmentIds),
@@ -134,7 +134,7 @@ private suspend fun reloadOrderAfterCreate(
   orderId: Long,
   createdIds: List<Long>,
 ): Order? {
-  val reloaded = loadOrder(shopify, orderGid)
+  val reloaded = fetchShopifyOrder(shopify, orderGid)
   if (reloaded == null) {
     log.error {
       buildReloadFailureMessage(shop, orderId, createdIds)
@@ -158,7 +158,7 @@ private fun SkipReason.logLabel(): String =
     SkipReason.ZERO_REMAINING -> "zero_remaining"
   }
 
-private suspend fun loadOrder(shopify: ShopifyGraphqlService, orderGid: String): Order? {
+private suspend fun fetchShopifyOrder(shopify: ShopifyGraphqlService, orderGid: String): Order? {
   val r = runCatching { shopify.loadOrderForDss(orderGid) }.getOrElse { return null }
   return r.data?.order
 }

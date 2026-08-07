@@ -95,13 +95,13 @@ fun normalizeShipmentLineItems(shipment: Shipment): List<ShipmentLineItem> =
  * [totalQuantity] (post-cancel capacity). Catches cross-shipment over-allocation before any
  * Shopify mutations.
  */
-fun dryRunAllShipments(order: Order, shipments: List<Shipment>): DryRunResult {
-  val ledger = FulfillmentQuantityLedger(order)
+fun dryRunAllShipments(currentShopifyOrder: Order, shipments: List<Shipment>): DryRunResult {
+  val ledger = FulfillmentQuantityLedger(currentShopifyOrder)
   val perShipment = mutableListOf<ShipmentMatchResult.Ok>()
   var totalSkipped = 0
 
-  for (shipment in shipments) {
-    when (val result = matchShipmentToFulfillmentOrders(order, shipment, ledger)) {
+  shipments.forEach { shipment ->
+    when (val result = matchShipmentToFulfillmentOrders(currentShopifyOrder, shipment, ledger)) {
       is ShipmentMatchResult.Ok -> {
         perShipment.add(result)
         totalSkipped += result.skipped.size
@@ -126,14 +126,14 @@ fun matchShipmentToFulfillmentOrders(
   val foGroups = mutableMapOf<FulfillmentOrder, MutableList<FulfillmentOrderLineItemInput>>()
   val skipped = mutableListOf<SkippedShipmentLine>()
 
-  for (req in normalizeShipmentLineItems(shipment)) {
-    if (req.quantity <= 0) {
+  normalizeShipmentLineItems(shipment).forEach { shipmentLineItem ->
+    if (shipmentLineItem.quantity <= 0) {
       return ShipmentMatchResult.UserError(
-        listOf("variant ${req.productVariantId} quantity must be positive"),
+        listOf("variant ${shipmentLineItem.productVariantId} quantity must be positive"),
       )
     }
 
-    when (val lineResult = matchShipmentLineItem(order, shipment, req, ledger)) {
+    when (val lineResult = matchShipmentLineItem(order, shipmentLineItem, ledger)) {
       is LineMatchResult.Matched -> {
         foGroups
           .getOrPut(lineResult.fulfillmentOrder) { mutableListOf() }
@@ -142,8 +142,8 @@ fun matchShipmentToFulfillmentOrders(
       is LineMatchResult.Skip ->
         skipped.add(
           SkippedShipmentLine(
-            productVariantId = req.productVariantId,
-            quantity = req.quantity,
+            productVariantId = shipmentLineItem.productVariantId,
+            quantity = shipmentLineItem.quantity,
             reason = lineResult.reason,
             trackingNumber = shipment.trackingNumber,
           ),
@@ -175,13 +175,12 @@ private data class FoLineCandidate(
 
 private fun matchShipmentLineItem(
   order: Order,
-  shipment: Shipment,
-  req: ShipmentLineItem,
+  shipmentLineItem: ShipmentLineItem,
   ledger: FulfillmentQuantityLedger?,
 ): LineMatchResult {
-  val openLines = findOpenFoLinesForVariant(order, req.productVariantId)
+  val openLines = findOpenFoLinesForVariant(order, shipmentLineItem.productVariantId)
   if (openLines.isEmpty()) {
-    return LineMatchResult.Skip(determineSkipReason(order, req.productVariantId, ledger))
+    return LineMatchResult.Skip(determineSkipReason(order, shipmentLineItem.productVariantId, ledger))
   }
 
   // Create-loop: skip when live remaining is already exhausted.
@@ -196,29 +195,29 @@ private fun matchShipmentLineItem(
     return LineMatchResult.Skip(SkipReason.ZERO_REMAINING)
   }
 
-  val candidate = findBestFoLineCandidate(order, req.productVariantId, ledger)
+  val candidate = findBestFoLineCandidate(order, shipmentLineItem.productVariantId, ledger)
   if (candidate == null) {
     return LineMatchResult.UserError(
       listOf(
-        "variant ${req.productVariantId} requested quantity ${req.quantity} exceeds " +
+        "variant ${shipmentLineItem.productVariantId} requested quantity ${shipmentLineItem.quantity} exceeds " +
           "remaining 0 on fulfillment order",
       ),
     )
   }
 
-  if (req.quantity > candidate.availableQuantity) {
+  if (shipmentLineItem.quantity > candidate.availableQuantity) {
     return LineMatchResult.UserError(
       listOf(
-        "variant ${req.productVariantId} requested quantity ${req.quantity} exceeds " +
+        "variant ${shipmentLineItem.productVariantId} requested quantity ${shipmentLineItem.quantity} exceeds " +
           "remaining ${candidate.availableQuantity} on fulfillment order",
       ),
     )
   }
 
-  if (ledger != null && !ledger.tryConsume(candidate.lineItem.id, req.quantity)) {
+  if (ledger != null && !ledger.tryConsume(candidate.lineItem.id, shipmentLineItem.quantity)) {
     return LineMatchResult.UserError(
       listOf(
-        "variant ${req.productVariantId} requested quantity ${req.quantity} exceeds " +
+        "variant ${shipmentLineItem.productVariantId} requested quantity ${shipmentLineItem.quantity} exceeds " +
           "remaining ${ledger.remaining(candidate.lineItem.id)} on fulfillment order",
       ),
     )
@@ -226,16 +225,16 @@ private fun matchShipmentLineItem(
 
   return LineMatchResult.Matched(
     fulfillmentOrder = candidate.fulfillmentOrder,
-    input = FulfillmentOrderLineItemInput(id = candidate.lineItem.id, quantity = req.quantity),
+    input = FulfillmentOrderLineItemInput(id = candidate.lineItem.id, quantity = shipmentLineItem.quantity),
   )
 }
 
 private fun findOpenFoLinesForVariant(order: Order, variantId: Long): List<FulfillmentOrderLineItem> {
   val lines = mutableListOf<FulfillmentOrderLineItem>()
-  for (foe in order.fulfillmentOrders.edges) {
+  order.fulfillmentOrders.edges.forEach { foe ->
     val fo = foe.node
-    if (!fo.status.isOpenForFulfillment()) continue
-    for (lineEdge in fo.lineItems.edges) {
+    if (!fo.status.isOpenForFulfillment()) return@forEach
+    fo.lineItems.edges.forEach { lineEdge ->
       val node = lineEdge.node
       if (node.variant?.legacyResourceId?.toLongOrNull() == variantId) {
         lines.add(node)
@@ -289,9 +288,9 @@ private fun determineSkipReason(
   var seenOnOpenFo = false
   var allZeroCapacity = true
 
-  for (foe in order.fulfillmentOrders.edges) {
+  order.fulfillmentOrders.edges.forEach { foe ->
     val fo = foe.node
-    if (!fo.status.isOpenForFulfillment()) continue
+    if (!fo.status.isOpenForFulfillment()) return@forEach
     for (lineEdge in fo.lineItems.edges) {
       val node = lineEdge.node
       val nodeVariantId = node.variant?.legacyResourceId?.toLongOrNull()

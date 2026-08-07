@@ -78,6 +78,7 @@ data class Config(
         monolithWebhookAuthSecret = monolithWebhookAuthSecret,
       )
     }
+
     /**
      * PaaS UIs sometimes define `PORT=` (empty string), wiping Docker `ENV PORT=9999`;
      * that makes Ktor bind 8080 while Traefik/nginx still proxies 9999 -> 502 Bad Gateway.

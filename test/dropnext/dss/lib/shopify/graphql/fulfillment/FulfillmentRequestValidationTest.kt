@@ -4,9 +4,6 @@ import dropnext.dss.lib.monolith.dto.generated.Shipment
 import dropnext.dss.lib.monolith.dto.generated.ShipmentLineItem
 import dropnext.dss.lib.monolith.dto.generated.SyncShipmentsWithFulfillmentsRequest
 import dropnext.dss.lib.monolith.dto.generated.TrackingUpdateRequest
-import dropnext.dss.lib.shopify.graphql.fulfillment.RequestValidation
-import dropnext.dss.lib.shopify.graphql.fulfillment.validateSyncShipmentsRequest
-import dropnext.dss.lib.shopify.graphql.fulfillment.validateTrackingUpdateRequest
 import kotlin.test.Test
 
 class FulfillmentRequestValidationTest {
@@ -14,7 +11,7 @@ class FulfillmentRequestValidationTest {
   @Test
   fun `rejects non-positive shopify_order_id on sync`() {
     val result =
-        validateSyncShipmentsRequest(
+        validate(
             SyncShipmentsWithFulfillmentsRequest(
                 shopifySubdomain = "acme",
                 shopifyOrderId = 0L,
@@ -27,7 +24,7 @@ class FulfillmentRequestValidationTest {
   @Test
   fun `rejects empty shipments list`() {
     val result =
-        validateSyncShipmentsRequest(
+        validate(
             SyncShipmentsWithFulfillmentsRequest(
                 shopifySubdomain = "acme",
                 shopifyOrderId = 1001L,
@@ -40,7 +37,7 @@ class FulfillmentRequestValidationTest {
   @Test
   fun `rejects blank tracking number on shipment`() {
     val result =
-        validateSyncShipmentsRequest(
+        validate(
             SyncShipmentsWithFulfillmentsRequest(
                 shopifySubdomain = "acme",
                 shopifyOrderId = 1001L,
@@ -53,7 +50,7 @@ class FulfillmentRequestValidationTest {
   @Test
   fun `accepts shipment without carrier`() {
     val result =
-        validateSyncShipmentsRequest(
+        validate(
             SyncShipmentsWithFulfillmentsRequest(
                 shopifySubdomain = "acme",
                 shopifyOrderId = 1001L,
@@ -66,7 +63,7 @@ class FulfillmentRequestValidationTest {
   @Test
   fun `rejects shipment with empty line_items`() {
     val result =
-        validateSyncShipmentsRequest(
+        validate(
             SyncShipmentsWithFulfillmentsRequest(
                 shopifySubdomain = "acme",
                 shopifyOrderId = 1001L,
@@ -115,7 +112,7 @@ class FulfillmentRequestValidationTest {
         lineItems = listOf(ShipmentLineItem(productVariantId = 101L, quantity = 0)),
       )
     val result =
-        validateSyncShipmentsRequest(
+        validate(
             SyncShipmentsWithFulfillmentsRequest(
                 shopifySubdomain = "acme",
                 shopifyOrderId = 1001L,
@@ -128,7 +125,7 @@ class FulfillmentRequestValidationTest {
   @Test
   fun `rejects duplicate tracking numbers`() {
     val result =
-        validateSyncShipmentsRequest(
+        validate(
             SyncShipmentsWithFulfillmentsRequest(
                 shopifySubdomain = "acme",
                 shopifyOrderId = 1001L,
@@ -145,7 +142,7 @@ class FulfillmentRequestValidationTest {
   @Test
   fun `accepts distinct tracking numbers across shipments`() {
     val result =
-        validateSyncShipmentsRequest(
+        validate(
             SyncShipmentsWithFulfillmentsRequest(
                 shopifySubdomain = "acme",
                 shopifyOrderId = 1001L,
@@ -161,7 +158,7 @@ class FulfillmentRequestValidationTest {
   @Test
   fun `accepts valid sync request`() {
     val result =
-        validateSyncShipmentsRequest(
+        validate(
             SyncShipmentsWithFulfillmentsRequest(
                 shopifySubdomain = "acme",
                 shopifyOrderId = 1001L,
@@ -202,7 +199,7 @@ class FulfillmentRequestValidationTest {
   @Test
   fun `accumulates multiple errors instead of short-circuiting on the first`() {
     val result =
-        validateSyncShipmentsRequest(
+        validate(
             SyncShipmentsWithFulfillmentsRequest(
                 shopifySubdomain = "acme",
                 shopifyOrderId = 0L,
