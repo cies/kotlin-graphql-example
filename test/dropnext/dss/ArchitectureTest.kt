@@ -214,6 +214,9 @@ class ArchitectureTest {
     // they map between generated payloads and the FulfillmentResult / WebhookRegistrationReport
     // types handlers consume. Touching generated types is part of the contract here.
     "/dropnext/dss/workflow/syncShopifyShipmentsToFulfillments.kt",
+    "/dropnext/dss/workflow/calculateShopifyMutations.kt",
+    "/dropnext/dss/workflow/determineShopifyMutations.kt",
+    "/dropnext/dss/workflow/effectShopifyMutations.kt",
     "/dropnext/dss/workflow/syncShopifyTrackingEvent.kt",
     "/dropnext/dss/workflow/registerShopifyWebhooks.kt",
     // Maps GetProductById result (Product / variants / media) into monolith UpsertVariants DTOs.

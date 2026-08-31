@@ -59,10 +59,9 @@ See also [`docs/openapi/dss-api.yaml`](openapi/dss-api.yaml) and [`specs/fulfill
 DSS never cancels existing fulfillments until the full payload passes validation against the current order:
 
 ```
-load order → dry-run match ALL shipments → if ANY hard error → 400, NO cancels
+load order → match ALL shipments against totalQuantity → if ANY hard error → 400, NO cancels
            → cancel all existing fulfillments
-           → reload order
-           → create fulfillments one-by-one (reload after each success)
+           → create fulfillments from that match (no rematch, no reload)
 ```
 
 This means a bad quantity in the payload leaves existing Shopify fulfillments untouched.
@@ -76,7 +75,7 @@ When a shipment line's `product_variant_id` does not appear on any open fulfillm
 | Line matches open FO with sufficient qty | 200 | Included in `fulfillmentCreate` |
 | Variant not on any open FO | 200 | Line skipped; matched lines still fulfilled |
 | All lines in a shipment unmatched | 200 | No create for that shipment; `new_fulfillment_ids` omits it |
-| Qty exceeds remaining (single line or cross-shipment total) | **400** (before cancel) | Existing fulfillments untouched |
+| Qty exceeds `totalQuantity` (single line or cross-shipment total) | **400** (before cancel) | Existing fulfillments untouched |
 | Order not found | **404** | No mutations |
 
 **Partial-match manual check:**
@@ -89,13 +88,13 @@ When a shipment line's `product_variant_id` does not appear on any open fulfillm
 **Hard-failure manual check (validate-before-cancel):**
 
 1. Note existing fulfillments on a test order.
-2. POST a payload where a line quantity exceeds remaining FO quantity.
+2. POST a payload where a line quantity exceeds FO `totalQuantity`.
 3. Expect **400**; confirm existing fulfillments are still present in Shopify Admin.
 
 **Failure checks (request validation and sync):**
 
 - Malformed body, missing fields, non-positive `shopify_order_id` → **400**.
-- Quantity greater than remaining on FO (including cross-shipment over-allocation) → **400** before any cancel.
+- Quantity greater than `totalQuantity` on FO (including cross-shipment over-allocation) → **400** before any cancel.
 - Order not found in Shopify → **404**.
 - No resolvable Shopify Admin token for the shop → **401**.
 - Cancel or create GraphQL failure (non–already-canceled) → **4xx/5xx**; partial creates may exist until monolith retries the full payload.
@@ -129,7 +128,7 @@ When a shipment line's `product_variant_id` does not appear on any open fulfillm
 ## Extended manual checklist
 
 1. **Cross-FO shipment** — one shipment spanning two fulfillment orders → one Shopify fulfillment, correct tracking, both FOs reflected.
-2. **Bad quantity** — payload with qty > remaining → **400**, existing fulfillments untouched.
+2. **Bad quantity** — payload with qty > `totalQuantity` → **400**, existing fulfillments untouched.
 3. **Partial match** — one unmatched variant in payload → **200**, partial fulfillment created, skipped line in logs.
 4. **Idempotent retry** — re-send same payload → cancel + recreate, same outcome.
 5. **Reorganized splits** — supplier changes shipment groupings → new fulfillments match new payload.

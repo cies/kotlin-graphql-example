@@ -47,6 +47,10 @@ konsistVersion = "0.17.3"
 # Compile-time-generated DSL only — no JVM reflection.
 kotlinxHtmlVersion = "0.11.0"
 
+# Latest, see: https://central.sonatype.com/artifact/dev.forkhandles/result4k
+# Compile-only transitive is kotlin-stdlib (no kotlin-reflect).
+result4kVersion = "3.0.0.0"
+
 
 [libraries]
 
@@ -66,6 +70,9 @@ ktorServerAuth = { group = "io.ktor", name = "ktor-server-auth", version.ref = "
 
 # HTML rendering (compile-time-generated builder DSL; no reflection).
 kotlinxHtml = { group = "org.jetbrains.kotlinx", name = "kotlinx-html-jvm", version.ref = "kotlinxHtmlVersion" }
+
+# Typed Result (Success / Failure). No JVM reflection.
+result4k = { group = "dev.forkhandles", name = "result4k", version.ref = "result4kVersion" }
 
 # Logging
 kotlinLogging = { group = "io.github.oshai", name = "kotlin-logging-jvm", version.ref = "kotlinLoggingVersion" }

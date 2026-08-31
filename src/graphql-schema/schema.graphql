@@ -24108,7 +24108,7 @@ type Mutation {
     locationId: ID!,
     "The initial on_hand quantity of the inventory item being activated at the location."
     onHand: Int,
-    "Allow activation at or away from fulfillment service location with sku sharing off. This will deactivate inventory at all other locations."
+    "This argument is ignored and has no effect. Previously it allowed activation at or away from a fulfillment service location with SKU sharing off; all fulfillment services now permit SKU sharing."
     stockAtLegacyLocation: Boolean = false
   ): InventoryActivatePayload
   """
@@ -26474,7 +26474,7 @@ type Mutation {
   
   > Note:
   > The refunding behavior of the `refundCreate` mutation is similar to the
-  [`refundReturn`](https://shopify.dev/docs/api/admin-graphql/latest/mutations/returnRefund)
+  [`returnRefund`](https://shopify.dev/docs/api/admin-graphql/latest/mutations/returnRefund)
   mutation. The key difference is that the `refundCreate` mutation lets you to specify restocking behavior
   for line items, whereas the `returnRefund` mutation focuses solely on handling the financial refund without
   any restocking input.
@@ -36219,7 +36219,9 @@ type QueryRoot {
   """
   Returns a paginated list of [`Metaobject`](https://shopify.dev/docs/api/admin-graphql/latest/objects/Metaobject) entries for a specific type. Metaobjects are custom data structures that extend Shopify's data model with merchant or app-specific data types.
   
-  Filter results using the query parameter with a search syntax for metaobject fields. Use `fields.{key}:{value}` to filter by field values, supporting any field previously marked as filterable. The `sortKey` parameter accepts `id`, `type`, `updated_at`, or `display_name` to control result ordering.
+  Filter results using the query parameter with a search syntax for metaobject fields. Use `fields.{key}:{value}` to filter by field values, supporting any field previously marked as filterable.
+  
+  Results are ordered by metaobject ID in ascending order by default. The `sortKey` parameter accepts `id`, `type`, `updated_at`, or `display_name` to control result ordering. Pass `reverse: true` to invert the order.
   
   Learn more about [querying metaobjects by field value](https://shopify.dev/docs/apps/build/custom-data/metafields/query-by-metafield-value).
   """
@@ -42590,7 +42592,7 @@ type StandardMetaobjectDefinitionFieldTemplate {
   "The configured validations for the standard metafield definition."
   validations: [MetafieldDefinitionValidation!]!
   "Whether metafields for the definition are by default visible using the Storefront API."
-  visibleToStorefrontApi: Boolean!
+  visibleToStorefrontApi: Boolean! @deprecated(reason : "Access control at the metaobject field definition level is deprecated and will be removed in 2027-01. Use the access field on the definition instead.")
 }
 
 "Standard metaobject definition templates provide preset configurations to create metaobject definitions."
@@ -47558,8 +47560,22 @@ enum CollectionDuplicateOperationRole {
 
 "Possible error codes that can be returned by `CollectionDuplicateUserError`."
 enum CollectionDuplicateUserErrorCode {
+  "The collection title must not be blank."
+  BLANK
   "The collection was not found. Please check the collection ID and try again."
   COLLECTION_NOT_FOUND
+  "The duplicated collection isn't valid."
+  INVALID
+  "The URL handle generated from the new title is already in use. Please choose a different title."
+  TAKEN
+  "The collection title or URL handle is too long."
+  TOO_LONG
+  "The shop has reached its limit of collection sources with conditions."
+  TOO_MANY_CONDITION_BACKED_SOURCES
+  "The shop has reached its limit of collections with sub-collection exclusions."
+  TOO_MANY_SUB_COLLECTION_EXCLUSION_COLLECTIONS
+  "The shop has reached its limit of collections with sub-collection inclusions."
+  TOO_MANY_SUB_COLLECTION_INCLUSION_COLLECTIONS
 }
 
 "Possible error codes that can be returned by `CollectionReorderProductsUserError`."
@@ -51258,6 +51274,8 @@ enum InventoryTransferDuplicateUserErrorCode {
   IDEMPOTENCY_KEY_PARAMETER_MISMATCH
   "A previous request with this idempotency key failed. Retry with a new idempotency key."
   IDEMPOTENCY_PREVIOUS_ATTEMPT_FAILED
+  "The quantity is invalid."
+  INVALID_QUANTITY
   "The transfer was not found."
   TRANSFER_NOT_FOUND
 }
@@ -57362,6 +57380,8 @@ enum StoreCreditSystemEvent {
   PAYMENT_FAILURE
   "A smaller amount of store credit was captured than was originally authorized."
   PAYMENT_RETURNED
+  "Store credit was used as payment for a recurring order."
+  RECURRING_PAYMENT
   "Tax finalization affected the store credit payment."
   TAX_FINALIZATION
 }

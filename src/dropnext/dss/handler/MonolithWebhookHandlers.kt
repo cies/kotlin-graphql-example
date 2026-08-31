@@ -1,5 +1,7 @@
 package dropnext.dss.handler
 
+import dev.forkhandles.result4k.Failure
+import dev.forkhandles.result4k.Success
 import dropnext.dss.lib.ktor.DssError
 import dropnext.dss.lib.ktor.receiveOr400
 import dropnext.dss.lib.ktor.respondError
@@ -17,14 +19,18 @@ import dropnext.dss.lib.monolith.logMonolithFailure
 import dropnext.dss.lib.shopify.ShopDomain
 import dropnext.dss.lib.shopify.graphql.fulfillment.FulfillmentResult
 import dropnext.dss.lib.shopify.graphql.fulfillment.RequestValidation
+import dropnext.dss.lib.shopify.graphql.fulfillment.SyncShipmentsRunStats
+import dropnext.dss.lib.shopify.graphql.fulfillment.formatSyncShipmentsLogLine
 import dropnext.dss.lib.shopify.graphql.fulfillment.toDssError
 import dropnext.dss.lib.shopify.graphql.fulfillment.validate
 import dropnext.dss.lib.shopify.graphql.fulfillment.validateTrackingUpdateRequest
 import dropnext.dss.path.Paths
-import dropnext.dss.workflow.syncShopifyShipmentsToFulfillments
+import dropnext.dss.workflow.ShopifyMutation
+import dropnext.dss.workflow.determineShopifyMutations
+import dropnext.dss.workflow.effectShopifyMutations
 import dropnext.dss.workflow.syncShopifyTrackingEvent
+import dropnext.dss.workflow.toDssError
 import io.github.oshai.kotlinlogging.KotlinLogging
-import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.respond
 
@@ -56,73 +62,72 @@ class MonolithWebhookHandlers(
       return
     }
     val shop = call.normalizeShopOrRespond(rawShop = syncRequest.shopifySubdomain) ?: return
-    val shopifyGqlService = shopifyGraphqlServiceFactory.forShop(shop) ?: this.run {
+    val shopifyGqlService = shopifyGraphqlServiceFactory.forShop(shop)
+    if (shopifyGqlService == null) {
       call.respondError(DssError.MissingShopifyAdminToken)
       return
     }
-    // Step 1: determine what has to be changed in Shopify, delivers the data structure describing this, this is READ ONLY.
-    // fun determineShopifyMutations(shopifyGqlService, syncRequest.shopifyOrderId, syncRequest.shipments):
-    //         Result4k<List<ShopifyMutation>, DetermineShopifyMutationsError>
-    // ShopifyMutation: FulfillmentCancel(id) or FulfillmentCreate(List<FulfillmentOrderLineItem>, trackingNumber, notifyUser)
-    // FulfillmentOrderLineItem(foId, lineItemId)
 
-    // Step 2: respond with an error in case determineShopifyMutations returned an error, else continue
-
-    // Step 3: effect the changes from step 1 in Shopify, DESTRUCTIVE.
-
-    // Step 4: respond with an HTTP error status or an OK/success, based off of the result of step 3.
-
-    // fun determineShopifyMutations(...): Result4k<List<ShopifyMutation>, DetermineShopifyMutationsError> {
-    //       // pull in all the relevant data
-
-    //       // calculate the result (pure: only works on it's input values w/o any side effects)
-    //       return calculateShopifyMutations(...)
-    // }
-
-    // /** This is a pure function, so it can be easily tested. */
-    // fun calculateShopifyMutations(...): Result4k<List<ShopifyMutation>, DetermineShopifyMutationsError>
-
-    // fun effectShopifyMutations(...): List<ShopifyError> // where empty list means success...
-
-    when (val result = syncShopifyShipmentsToFulfillments(shopifyGqlService, syncRequest)) {
-      // Workflows that return no body use `Unit` (e.g. legacy no-op responses). Typed responses
-      // (e.g. sync-shipments `new_fulfillment_ids`, tracking-update `fulfillment_event_id`) are JSON-serialized.
-      is FulfillmentResult.Ok ->
-        if (result.value == Unit) call.respond<HttpStatusCode>(HttpStatusCode.OK)
-        else call.respond<SyncShipmentsWithFulfillmentsResponse>(result.value)
-
-      is FulfillmentResult.Err -> {
-        val mapped = result.toDssError()
-        log.warn { "${"sync-shipments"} failed shop=${shop.normalizedShopifyHost}: ${mapped.message}" }
+    val determined = determineShopifyMutations(
+      shopifyGqlService = shopifyGqlService,
+      shopifyOrderId = syncRequest.shopifyOrderId,
+      shipments = syncRequest.shipments,
+    )
+    val mutations = when (determined) {
+      is Failure -> {
+        val mapped = determined.reason.toDssError()
+        log.warn { "sync-shipments failed shop=${shop.normalizedShopifyHost}: ${mapped.message}" }
         call.respondError(mapped)
+        return
       }
+      is Success -> determined.value
     }
 
-  }
+    val effected = effectShopifyMutations(shopifyGqlService, mutations)
+    if (effected.errors.isNotEmpty()) {
+      val mapped = effected.errors.first().toDssError()
+      log.warn { "sync-shipments failed shop=${shop.normalizedShopifyHost}: ${mapped.message}" }
+      call.respondError(mapped)
+      return
+    }
 
+    val stats = SyncShipmentsRunStats(
+      canceledCount = mutations.count { it is ShopifyMutation.FulfillmentCancel },
+      createdCount = effected.newFulfillmentIds.size,
+      skippedLines = 0,
+      skippedShipments = syncRequest.shipments.size -
+        mutations.count { it is ShopifyMutation.FulfillmentCreate },
+    )
+    log.info {
+      formatSyncShipmentsLogLine(
+        shop.subdomainOnly,
+        syncRequest.shopifyOrderId,
+        stats,
+        effected.newFulfillmentIds,
+      )
+    }
+    call.respond(
+      SyncShipmentsWithFulfillmentsResponse(newFulfillmentIds = effected.newFulfillmentIds),
+    )
+  }
 
   suspend fun handleTrackingUpdate(call: ApplicationCall) {
     val body = call.receiveOr400<TrackingUpdateRequest>() ?: return
-    if (call.validateOrRespond(validation = validateTrackingUpdateRequest(body))) {
-      val shop = call.normalizeShopOrRespond(rawShop = body.shopifySubdomain)
-      if (shop != null) {
-        val shopify = shopifyGraphqlServiceFactory.forShop(shop) ?: this.run {
-          call.respondError(DssError.MissingShopifyAdminToken)
-          return
-        }
-        when (val result = syncShopifyTrackingEvent(shopify, body)) {
-          // Workflows that return no body use `Unit` (e.g. legacy no-op responses). Typed responses
-          // (e.g. sync-shipments `new_fulfillment_ids`, tracking-update `fulfillment_event_id`) are JSON-serialized.
-          is FulfillmentResult.Ok ->
-            if (result.value == Unit) call.respond<HttpStatusCode>(HttpStatusCode.OK)
-            else call.respond<TrackingUpdateResponse>(result.value)
+    if (!call.validateOrRespond(validation = validateTrackingUpdateRequest(body))) return
+    val shop = call.normalizeShopOrRespond(rawShop = body.shopifySubdomain) ?: return
+    val shopify = shopifyGraphqlServiceFactory.forShop(shop)
+    if (shopify == null) {
+      call.respondError(DssError.MissingShopifyAdminToken)
+      return
+    }
+    when (val result = syncShopifyTrackingEvent(shopify, body)) {
+      is FulfillmentResult.Ok ->
+        call.respond<TrackingUpdateResponse>(result.value)
 
-          is FulfillmentResult.Err -> {
-            val mapped = result.toDssError()
-            log.warn { "${"tracking-update"} failed shop=${shop.normalizedShopifyHost}: ${mapped.message}" }
-            call.respondError(mapped)
-          }
-        }
+      is FulfillmentResult.Err -> {
+        val mapped = result.toDssError()
+        log.warn { "tracking-update failed shop=${shop.normalizedShopifyHost}: ${mapped.message}" }
+        call.respondError(mapped)
       }
     }
   }

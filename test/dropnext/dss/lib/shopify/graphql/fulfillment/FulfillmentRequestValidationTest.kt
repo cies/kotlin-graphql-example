@@ -8,6 +8,9 @@ import kotlin.test.Test
 
 class FulfillmentRequestValidationTest {
 
+  private fun validate(request: SyncShipmentsWithFulfillmentsRequest): RequestValidation =
+    request.validate()
+
   @Test
   fun `rejects non-positive shopify_order_id on sync`() {
     val result =

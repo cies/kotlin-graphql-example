@@ -100,13 +100,13 @@ class SyncShopifyShipmentsToFulfillmentsTest {
     assert(response.newFulfillmentIds == listOf(5000L))
     assert(
       fake.calls.map { it.operationName } ==
-        listOf("GetOrderForDss", "FulfillmentCreateWithLineItems", "GetOrderForDss"),
+        listOf("GetOrderForDss", "FulfillmentCreateWithLineItems"),
     )
     assert(fake.calls.first().authorization == "tok")
   }
 
   @Test
-  fun `syncShipments cancels existing fulfillments and then reloads order before creating`() = runBlocking {
+  fun `syncShipments cancels existing fulfillments then creates without reloading`() = runBlocking {
     fake.stubGetOrderForDss(order = orderWithFulfillment(id = 8000L))
     fake.stubFulfillmentCancelOk(fulfillmentId = 8000L)
     fake.stubFulfillmentCreateOk(fulfillmentId = 9000L)
@@ -118,9 +118,7 @@ class SyncShopifyShipmentsToFulfillmentsTest {
         listOf(
           "GetOrderForDss",
           "FulfillmentCancelMutation",
-          "GetOrderForDss",
           "FulfillmentCreateWithLineItems",
-          "GetOrderForDss",
         ),
     )
   }
@@ -152,13 +150,14 @@ class SyncShopifyShipmentsToFulfillmentsTest {
   }
 
   @Test
-  fun `syncShipments treats Graphql errors on GetOrder as NotFound`() = runBlocking {
+  fun `syncShipments treats Graphql errors on GetOrder as GraphqlError`() = runBlocking {
     fake.stubRaw(
       "GetOrderForDss",
       """{"data":{"order":null},"errors":[{"message":"throttled"}]}""",
     )
     val result = syncShopifyShipmentsToFulfillments(shopify, syncRequest())
-    assert(result is FulfillmentResult.Err.NotFound)
+    assert(result is FulfillmentResult.Err.GraphqlError)
+    assert("throttled" in (result as FulfillmentResult.Err.GraphqlError).raw)
   }
 
   @Test
@@ -174,7 +173,7 @@ class SyncShopifyShipmentsToFulfillmentsTest {
   }
 
   @Test
-  fun `syncShipments returns NotFound when initial loadOrder fails entirely (server down)`() = runBlocking {
+  fun `syncShipments returns Network when initial loadOrder fails entirely (server down)`() = runBlocking {
     // Bind and immediately close to acquire a port nothing is listening on — connection refused.
     val ghost = FakeShopifyGraphqlServer()
     val deadPort = ghost.start()
@@ -187,7 +186,7 @@ class SyncShopifyShipmentsToFulfillmentsTest {
     )
 
     val result = syncShopifyShipmentsToFulfillments(deadShopify, syncRequest())
-    assert(result is FulfillmentResult.Err.NotFound)
+    assert(result is FulfillmentResult.Err.Network)
   }
 
   @Test
@@ -197,18 +196,6 @@ class SyncShopifyShipmentsToFulfillmentsTest {
     fake.stubRaw("FulfillmentCancelMutation", "{not-valid-json")
     val result = syncShopifyShipmentsToFulfillments(shopify, syncRequest())
     assert(result is FulfillmentResult.Err.Network)
-  }
-
-  @Test
-  fun `syncShipments returns Network error when order reload fails after create`() = runBlocking {
-    fake.enqueueGetOrderForDss(order = minimalOrder().copy(fulfillments = emptyList()))
-    fake.enqueueResponse("GetOrderForDss", """{"data":{"order":null}}""")
-    fake.stubFulfillmentCreateOk(fulfillmentId = 5000L)
-    val result = syncShopifyShipmentsToFulfillments(shopify, syncRequest())
-    assert(result is FulfillmentResult.Err.Network)
-    val message = (result as FulfillmentResult.Err.Network).message
-    assert("fulfillmentId=5000 created but order reload failed" in message)
-    assert("manual verify required" in message)
   }
 
   @Test
@@ -265,7 +252,7 @@ class SyncShopifyShipmentsToFulfillmentsTest {
   }
 
   @Test
-  fun `reloads order between two shipments`() = runBlocking {
+  fun `does not reload the order between two shipment creates`() = runBlocking {
     fake.stubGetOrderForDss(order = minimalOrder().copy(fulfillments = emptyList()))
     fake.stubSequence(
       "FulfillmentCreateWithLineItems",
@@ -282,19 +269,8 @@ class SyncShopifyShipmentsToFulfillmentsTest {
       ),
     )
     val getOrderCalls = fake.calls.filter { it.operationName == "GetOrderForDss" }
-    assert(getOrderCalls.size == 3)
-    val createIndices =
-      fake.calls.mapIndexedNotNull { index, call ->
-        if (call.operationName == "FulfillmentCreateWithLineItems") index else null
-      }
-    assert(createIndices.size == 2)
-    val reloadBetweenCreates =
-      fake.calls.withIndex().any { (index, call) ->
-        call.operationName == "GetOrderForDss" &&
-          index > createIndices.first() &&
-          index < createIndices.last()
-      }
-    assert(reloadBetweenCreates)
+    assert(getOrderCalls.size == 1)
+    assert(fake.calls.count { it.operationName == "FulfillmentCreateWithLineItems" } == 2)
   }
 
   @Test
@@ -455,11 +431,8 @@ class SyncShopifyShipmentsToFulfillmentsTest {
         listOf(
           "GetOrderForDss",
           "FulfillmentCancelMutation",
-          "GetOrderForDss",
           "FulfillmentCreateWithLineItems",
-          "GetOrderForDss",
           "FulfillmentCreateWithLineItems",
-          "GetOrderForDss",
         ),
     )
   }

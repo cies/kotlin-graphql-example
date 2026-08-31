@@ -12,7 +12,6 @@ internal fun parseBool(raw: String?): Boolean =
   normalizeQuoted(raw)?.equals("true", ignoreCase = true) == true
 
 /** Pure normalization step extracted from [optionalNormalized] for unit testing. */
-// TODO: normalize?
 internal fun normalizeQuoted(raw: String?): String? {
   if (raw == null) return null
   var s = raw.trim()

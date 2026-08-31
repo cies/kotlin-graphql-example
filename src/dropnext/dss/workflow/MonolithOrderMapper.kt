@@ -4,8 +4,9 @@ import dropnext.dss.lib.monolith.dto.generated.CreateShopifyOrderRequest
 import dropnext.dss.lib.monolith.dto.generated.OrderLineItem
 import dropnext.dss.lib.monolith.dto.generated.ShippingAddress
 import dropnext.dss.lib.shopify.legacyIdFromGid
-import dropnext.dss.shopify.minorUnitsToShopifyDecimal
-import dropnext.dss.shopify.shopifyDecimalToMinorUnits
+import dropnext.dss.shopify.currencyFractionDigits
+import dropnext.dss.shopify.minorUnitsToShopifyAmount
+import dropnext.dss.shopify.shopifyAmountToMinorUnits
 import dropnext.dss.shopify.shopifyMoneyAmountForWire
 import dropnext.graphql.generated.enums.OrderDisplayFinancialStatus
 import dropnext.graphql.generated.enums.OrderDisplayFulfillmentStatus
@@ -42,23 +43,24 @@ fun orderToCreateShopifyOrderRequest(
     val li = edge.node
     val variant = li.variant ?: return@mapNotNull null
     val variantLegacy = variant.legacyResourceId.toLongOrNull() ?: return@mapNotNull null
-    val foId = findFulfillmentOrderLegacyIdForVariant(order, variant) ?: return@mapNotNull null
+    val fulfillmentOrderId = findFulfillmentOrderLegacyIdForVariant(order, variant) ?: return@mapNotNull null
     val lineId = legacyIdFromGid(li.id) ?: return@mapNotNull null
     OrderLineItem(
       shopifyLineItemId = lineId,
       productVariantId = variantLegacy,
       quantity = li.quantity,
-      fulfillmentOrderId = foId,
+      fulfillmentOrderId = fulfillmentOrderId,
       snapshotOfVariantTitle = li.name,
       snapshotOfProductTitle = li.title,
       snapshotOfPriceAsString = shopifyMoneyAmountForWire(li.originalUnitPriceSet.shopMoney.amount),
     )
   }
+  val currency = order.totalPriceSet.shopMoney.currencyCode.name
   val totalString = resolveOrderTotalAsString(
     orderTotalAmount = order.totalPriceSet.shopMoney.amount,
     lineItems = lineItems,
+    currencyCode = currency,
   )
-  val currency = order.totalPriceSet.shopMoney.currencyCode.name
   return CreateShopifyOrderRequest(
     shopifySubdomain = shopifySubdomain,
     shopifyOrderId = orderLegacy,
@@ -80,15 +82,20 @@ fun orderToCreateShopifyOrderRequest(
 internal fun resolveOrderTotalAsString(
   orderTotalAmount: String?,
   lineItems: List<OrderLineItem>,
+  currencyCode: String,
 ): String {
   val normalizedOrderTotal = shopifyMoneyAmountForWire(orderTotalAmount)
-  if (shopifyDecimalToMinorUnits(normalizedOrderTotal) > 0L) {
+  val fractionDigits = currencyFractionDigits(currencyCode)
+  if (fractionDigits == null) {
+    return normalizedOrderTotal
+  }
+  if (shopifyAmountToMinorUnits(normalizedOrderTotal, currencyCode) > 0L) {
     return normalizedOrderTotal
   }
   val lineSumMinor = lineItems.sumOf { item ->
-    shopifyDecimalToMinorUnits(item.snapshotOfPriceAsString) * item.quantity.toLong()
+    shopifyAmountToMinorUnits(item.snapshotOfPriceAsString, currencyCode) * item.quantity.toLong()
   }.coerceAtLeast(0L)
-  return minorUnitsToShopifyDecimal(lineSumMinor)
+  return minorUnitsToShopifyAmount(lineSumMinor, currencyCode)
 }
 
 private fun OrderDisplayFinancialStatus.toFinancialString(): String =

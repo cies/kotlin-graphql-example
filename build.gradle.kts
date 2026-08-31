@@ -156,6 +156,9 @@ dependencies {
   // HTML rendering for the OAuth install success page (no reflection).
   implementation(libs.kotlinxHtml)
 
+  // Typed Result used by determineShopifyMutations / calculateShopifyMutations (kotlin-stdlib only).
+  implementation(libs.result4k)
+
   // Logging
   implementation(libs.kotlinLogging) // Kotlinesque wrapper over SLF4J
   implementation(libs.slf4jApi)      // facade API (also used directly for MDC)

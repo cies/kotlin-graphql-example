@@ -48,7 +48,7 @@ class FulfillmentOrderMatcherTest {
   }
 
   @Test
-  fun `returns user error when quantity exceeds remaining`() {
+  fun `returns user error when quantity exceeds totalQuantity`() {
     val order = orderWithFulfillmentOrders(openFo(variantId = 101L, remaining = 1))
     val result = matchShipmentToFulfillmentOrders(order, shipment(variantId = 101L, quantity = 2))
     assert(result is ShipmentMatchResult.UserError)
@@ -287,7 +287,7 @@ class FulfillmentOrderMatcherTest {
   }
 
   @Test
-  fun `prefers fulfillment order with highest remaining quantity`() {
+  fun `prefers fulfillment order with highest available totalQuantity`() {
     val foLow =
       FulfillmentOrder(
         id = "gid://shopify/FulfillmentOrder/301",
@@ -328,7 +328,7 @@ class FulfillmentOrderMatcherTest {
     val order =
       orderWithFulfillmentOrders(openFo(variantId = 101L, remaining = 1, total = 3))
     val ledger = FulfillmentQuantityLedger(order)
-    assert(ledger.remaining("gid://shopify/FulfillmentOrderLineItem/401") == 3)
+    assert(ledger.available("gid://shopify/FulfillmentOrderLineItem/401") == 3)
   }
 
   @Test
@@ -347,28 +347,28 @@ class FulfillmentOrderMatcherTest {
       )
     val order = orderWithFulfillmentOrders(closed, openZero)
     val ledger = FulfillmentQuantityLedger(order)
-    assert(ledger.remaining("gid://shopify/FulfillmentOrderLineItem/401") == 0)
-    assert(ledger.remaining("gid://shopify/FulfillmentOrderLineItem/402") == 0)
+    assert(ledger.available("gid://shopify/FulfillmentOrderLineItem/401") == 0)
+    assert(ledger.available("gid://shopify/FulfillmentOrderLineItem/402") == 0)
   }
 
   @Test
-  fun `ledger tryConsume decrements remaining quantity`() {
+  fun `ledger tryConsume decrements available quantity`() {
     val order = orderWithFulfillmentOrders(openFo(variantId = 101L, remaining = 3))
     val ledger = FulfillmentQuantityLedger(order)
     val gid = "gid://shopify/FulfillmentOrderLineItem/401"
     assert(ledger.tryConsume(gid, 2))
-    assert(ledger.remaining(gid) == 1)
+    assert(ledger.available(gid) == 1)
     assert(ledger.tryConsume(gid, 1))
-    assert(ledger.remaining(gid) == 0)
+    assert(ledger.available(gid) == 0)
   }
 
   @Test
-  fun `ledger tryConsume returns false when quantity exceeds remaining`() {
+  fun `ledger tryConsume returns false when quantity exceeds available`() {
     val order = orderWithFulfillmentOrders(openFo(variantId = 101L, remaining = 2))
     val ledger = FulfillmentQuantityLedger(order)
     val gid = "gid://shopify/FulfillmentOrderLineItem/401"
     assert(!ledger.tryConsume(gid, 3))
-    assert(ledger.remaining(gid) == 2)
+    assert(ledger.available(gid) == 2)
   }
 
   @Test

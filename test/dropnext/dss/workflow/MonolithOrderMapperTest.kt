@@ -1,8 +1,8 @@
 package dropnext.dss.workflow
 
 import dropnext.dss.lib.monolith.dto.generated.OrderLineItem
-import dropnext.dss.shopify.minorUnitsToShopifyDecimal
-import dropnext.dss.shopify.shopifyDecimalToMinorUnits
+import dropnext.dss.shopify.minorUnitsToShopifyAmount
+import dropnext.dss.shopify.shopifyAmountToMinorUnits
 import dropnext.graphql.generated.enums.CountryCode
 import dropnext.graphql.generated.enums.OrderDisplayFinancialStatus
 import dropnext.graphql.generated.enums.OrderDisplayFulfillmentStatus
@@ -208,6 +208,7 @@ class MonolithOrderMapperTest {
       resolveOrderTotalAsString(
         orderTotalAmount = "39.98",
         lineItems = emptyList(),
+        currencyCode = "USD",
       ) == "39.98",
     )
   }
@@ -225,7 +226,7 @@ class MonolithOrderMapperTest {
         snapshotOfPriceAsString = "19.99",
       ),
     )
-    assert(resolveOrderTotalAsString(orderTotalAmount = "0.00", lineItems = lineItems) == "39.98")
+    assert(resolveOrderTotalAsString(orderTotalAmount = "0.00", lineItems = lineItems, currencyCode = "USD") == "39.98")
   }
 
   @Test
@@ -240,9 +241,9 @@ class MonolithOrderMapperTest {
     )
     val req = orderToCreateShopifyOrderRequest("dropnext-staging", order)
     val lineSumMinor = req.lineItems.sumOf {
-      shopifyDecimalToMinorUnits(it.snapshotOfPriceAsString) * it.quantity.toLong()
+      shopifyAmountToMinorUnits(it.snapshotOfPriceAsString, "USD") * it.quantity.toLong()
     }
-    assert(req.totalAsString == minorUnitsToShopifyDecimal(lineSumMinor))
+    assert(req.totalAsString == minorUnitsToShopifyAmount(lineSumMinor, "USD"))
   }
 
   @Test
@@ -257,9 +258,9 @@ class MonolithOrderMapperTest {
     )
     val req = orderToCreateShopifyOrderRequest("dropnext-staging", order)
     val lineSumMinor = req.lineItems.sumOf {
-      shopifyDecimalToMinorUnits(it.snapshotOfPriceAsString) * it.quantity.toLong()
+      shopifyAmountToMinorUnits(it.snapshotOfPriceAsString, "USD") * it.quantity.toLong()
     }
-    assert(req.totalAsString == minorUnitsToShopifyDecimal(lineSumMinor))
+    assert(req.totalAsString == minorUnitsToShopifyAmount(lineSumMinor, "USD"))
   }
 
   @Test

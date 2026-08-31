@@ -49,34 +49,35 @@ fun FulfillmentOrderStatus.isOpenForFulfillment(): Boolean =
   }
 
 /**
- * Tracks post-cancel capacity ([totalQuantity]) per fulfillment order line item GID for dry-run
- * and cross-shipment quantity validation. Sync cancels existing fulfillments before create, so
- * dry-run must not use live [remainingQuantity] (which is already reduced by those fulfillments).
+ * Tracks post-cancel capacity ([totalQuantity]) per fulfillment order line item GID.
+ * Sync cancels existing fulfillments before create, so matching must not use live
+ * [remainingQuantity] (which is already reduced by those fulfillments).
  */
 class FulfillmentQuantityLedger(order: Order) {
-  private val remainingByLineItemGid = mutableMapOf<String, Int>()
+  private val availableByLineItemGid = mutableMapOf<String, Int>()
 
   init {
-    for (foe in order.fulfillmentOrders.edges) {
-      val fo = foe.node
-      if (!fo.status.isOpenForFulfillment()) continue
-      for (lineEdge in fo.lineItems.edges) {
+    for (fulfillmentOrderEdge in order.fulfillmentOrders.edges) {
+      val fulfillmentOrder = fulfillmentOrderEdge.node
+      if (!fulfillmentOrder.status.isOpenForFulfillment()) continue
+      for (lineEdge in fulfillmentOrder.lineItems.edges) {
         val node = lineEdge.node
         if (node.totalQuantity > 0) {
-          remainingByLineItemGid[node.id] = node.totalQuantity
+          availableByLineItemGid[node.id] = node.totalQuantity
         }
       }
     }
   }
 
-  fun tryConsume(foLineItemGid: String, qty: Int): Boolean {
-    val current = remainingByLineItemGid[foLineItemGid] ?: return false
-    if (qty > current) return false
-    remainingByLineItemGid[foLineItemGid] = current - qty
+  fun tryConsume(fulfillmentOrderLineItemGid: String, quantity: Int): Boolean {
+    val current = availableByLineItemGid[fulfillmentOrderLineItemGid] ?: return false
+    if (quantity > current) return false
+    availableByLineItemGid[fulfillmentOrderLineItemGid] = current - quantity
     return true
   }
 
-  fun remaining(foLineItemGid: String): Int = remainingByLineItemGid[foLineItemGid] ?: 0
+  fun available(fulfillmentOrderLineItemGid: String): Int =
+    availableByLineItemGid[fulfillmentOrderLineItemGid] ?: 0
 }
 
 /** Aggregates duplicate [ShipmentLineItem.productVariantId] rows within a shipment (sum quantities). */
@@ -91,7 +92,7 @@ fun normalizeShipmentLineItems(shipment: Shipment): List<ShipmentLineItem> =
     }
 
 /**
- * Simulates matching all shipments against a single in-memory quantity ledger seeded from
+ * Matches all shipments against a single in-memory quantity ledger seeded from
  * [totalQuantity] (post-cancel capacity). Catches cross-shipment over-allocation before any
  * Shopify mutations.
  */
@@ -115,15 +116,16 @@ fun dryRunAllShipments(currentShopifyOrder: Order, shipments: List<Shipment>): D
 /**
  * Maps shipment line items to open fulfillment orders. Unmatched variants are skipped (partial
  * match). Returns [ShipmentMatchResult.UserError] when requested quantity exceeds available
- * capacity ([remainingQuantity] when [ledger] is null; ledger/post-cancel [totalQuantity] when
- * dry-running).
+ * post-cancel capacity ([totalQuantity]). Matching always uses post-cancel capacity.
  */
 fun matchShipmentToFulfillmentOrders(
   order: Order,
   shipment: Shipment,
   ledger: FulfillmentQuantityLedger? = null,
 ): ShipmentMatchResult {
-  val foGroups = mutableMapOf<FulfillmentOrder, MutableList<FulfillmentOrderLineItemInput>>()
+  val quantityLedger = ledger ?: FulfillmentQuantityLedger(order)
+  val fulfillmentOrderGroups =
+    mutableMapOf<FulfillmentOrder, MutableList<FulfillmentOrderLineItemInput>>()
   val skipped = mutableListOf<SkippedShipmentLine>()
 
   normalizeShipmentLineItems(shipment).forEach { shipmentLineItem ->
@@ -133,9 +135,9 @@ fun matchShipmentToFulfillmentOrders(
       )
     }
 
-    when (val lineResult = matchShipmentLineItem(order, shipmentLineItem, ledger)) {
+    when (val lineResult = matchShipmentLineItem(order, shipmentLineItem, quantityLedger)) {
       is LineMatchResult.Matched -> {
-        foGroups
+        fulfillmentOrderGroups
           .getOrPut(lineResult.fulfillmentOrder) { mutableListOf() }
           .add(lineResult.input)
       }
@@ -153,7 +155,7 @@ fun matchShipmentToFulfillmentOrders(
     }
   }
 
-  return ShipmentMatchResult.Ok(foGroups, skipped)
+  return ShipmentMatchResult.Ok(fulfillmentOrderGroups, skipped)
 }
 
 private sealed interface LineMatchResult {
@@ -167,7 +169,7 @@ private sealed interface LineMatchResult {
   data class UserError(val messages: List<String>) : LineMatchResult
 }
 
-private data class FoLineCandidate(
+private data class FulfillmentOrderLineCandidate(
   val fulfillmentOrder: FulfillmentOrder,
   val lineItem: FulfillmentOrderLineItem,
   val availableQuantity: Int,
@@ -176,26 +178,19 @@ private data class FoLineCandidate(
 private fun matchShipmentLineItem(
   order: Order,
   shipmentLineItem: ShipmentLineItem,
-  ledger: FulfillmentQuantityLedger?,
+  ledger: FulfillmentQuantityLedger,
 ): LineMatchResult {
-  val openLines = findOpenFoLinesForVariant(order, shipmentLineItem.productVariantId)
+  val openLines = findOpenFulfillmentOrderLinesForVariant(order, shipmentLineItem.productVariantId)
   if (openLines.isEmpty()) {
-    return LineMatchResult.Skip(determineSkipReason(order, shipmentLineItem.productVariantId, ledger))
+    return LineMatchResult.Skip(determineSkipReason(order, shipmentLineItem.productVariantId))
   }
 
-  // Create-loop: skip when live remaining is already exhausted.
-  // Dry-run (ledger): cancel restores capacity to totalQuantity — only skip when total is 0.
-  val noCapacity =
-    if (ledger != null) {
-      openLines.all { it.totalQuantity <= 0 }
-    } else {
-      openLines.all { it.remainingQuantity <= 0 }
-    }
-  if (noCapacity) {
+  // Matching always uses post-cancel capacity (totalQuantity).
+  if (openLines.all { it.totalQuantity <= 0 }) {
     return LineMatchResult.Skip(SkipReason.ZERO_REMAINING)
   }
 
-  val candidate = findBestFoLineCandidate(order, shipmentLineItem.productVariantId, ledger)
+  val candidate = findBestFulfillmentOrderLineCandidate(order, shipmentLineItem.productVariantId, ledger)
   if (candidate == null) {
     return LineMatchResult.UserError(
       listOf(
@@ -214,11 +209,11 @@ private fun matchShipmentLineItem(
     )
   }
 
-  if (ledger != null && !ledger.tryConsume(candidate.lineItem.id, shipmentLineItem.quantity)) {
+  if (!ledger.tryConsume(candidate.lineItem.id, shipmentLineItem.quantity)) {
     return LineMatchResult.UserError(
       listOf(
         "variant ${shipmentLineItem.productVariantId} requested quantity ${shipmentLineItem.quantity} exceeds " +
-          "remaining ${ledger.remaining(candidate.lineItem.id)} on fulfillment order",
+          "remaining ${ledger.available(candidate.lineItem.id)} on fulfillment order",
       ),
     )
   }
@@ -229,12 +224,15 @@ private fun matchShipmentLineItem(
   )
 }
 
-private fun findOpenFoLinesForVariant(order: Order, variantId: Long): List<FulfillmentOrderLineItem> {
+private fun findOpenFulfillmentOrderLinesForVariant(
+  order: Order,
+  variantId: Long,
+): List<FulfillmentOrderLineItem> {
   val lines = mutableListOf<FulfillmentOrderLineItem>()
-  order.fulfillmentOrders.edges.forEach { foe ->
-    val fo = foe.node
-    if (!fo.status.isOpenForFulfillment()) return@forEach
-    fo.lineItems.edges.forEach { lineEdge ->
+  order.fulfillmentOrders.edges.forEach { fulfillmentOrderEdge ->
+    val fulfillmentOrder = fulfillmentOrderEdge.node
+    if (!fulfillmentOrder.status.isOpenForFulfillment()) return@forEach
+    fulfillmentOrder.lineItems.edges.forEach { lineEdge ->
       val node = lineEdge.node
       if (node.variant?.legacyResourceId?.toLongOrNull() == variantId) {
         lines.add(node)
@@ -244,33 +242,30 @@ private fun findOpenFoLinesForVariant(order: Order, variantId: Long): List<Fulfi
   return lines
 }
 
-
 /**
- * Prefers the open FO line with the highest available quantity when the same variant appears in
- * multiple open FOs. Tie-break: first candidate in GraphQL order (strictly greater wins).
- *
- * When [ledger] is present (dry-run), availability comes from post-cancel capacity. Otherwise uses
- * live [remainingQuantity].
+ * Prefers the open fulfillment-order line with the highest available quantity when the same
+ * variant appears in multiple open fulfillment orders. Tie-break: first candidate in Graphql
+ * order (strictly greater wins). Availability comes from post-cancel capacity.
  */
-private fun findBestFoLineCandidate(
+private fun findBestFulfillmentOrderLineCandidate(
   order: Order,
   variantId: Long,
-  ledger: FulfillmentQuantityLedger?,
-): FoLineCandidate? {
-  var best: FoLineCandidate? = null
+  ledger: FulfillmentQuantityLedger,
+): FulfillmentOrderLineCandidate? {
+  var best: FulfillmentOrderLineCandidate? = null
 
-  for (foe in order.fulfillmentOrders.edges) {
-    val fo = foe.node
-    if (!fo.status.isOpenForFulfillment()) continue
-    for (lineEdge in fo.lineItems.edges) {
+  for (fulfillmentOrderEdge in order.fulfillmentOrders.edges) {
+    val fulfillmentOrder = fulfillmentOrderEdge.node
+    if (!fulfillmentOrder.status.isOpenForFulfillment()) continue
+    for (lineEdge in fulfillmentOrder.lineItems.edges) {
       val node = lineEdge.node
       val nodeVariantId = node.variant?.legacyResourceId?.toLongOrNull() ?: continue
       if (nodeVariantId != variantId) continue
 
-      val available = ledger?.remaining(node.id) ?: node.remainingQuantity
+      val available = ledger.available(node.id)
       if (available <= 0) continue
 
-      val candidate = FoLineCandidate(fo, node, available)
+      val candidate = FulfillmentOrderLineCandidate(fulfillmentOrder, node, available)
       if (best == null || candidate.availableQuantity > best.availableQuantity) {
         best = candidate
       }
@@ -283,34 +278,32 @@ private fun findBestFoLineCandidate(
 private fun determineSkipReason(
   order: Order,
   variantId: Long,
-  ledger: FulfillmentQuantityLedger?,
 ): SkipReason {
-  var seenOnOpenFo = false
+  var seenOnOpenFulfillmentOrder = false
   var allZeroCapacity = true
 
-  order.fulfillmentOrders.edges.forEach { foe ->
-    val fo = foe.node
-    if (!fo.status.isOpenForFulfillment()) return@forEach
-    for (lineEdge in fo.lineItems.edges) {
+  order.fulfillmentOrders.edges.forEach { fulfillmentOrderEdge ->
+    val fulfillmentOrder = fulfillmentOrderEdge.node
+    if (!fulfillmentOrder.status.isOpenForFulfillment()) return@forEach
+    for (lineEdge in fulfillmentOrder.lineItems.edges) {
       val node = lineEdge.node
       val nodeVariantId = node.variant?.legacyResourceId?.toLongOrNull()
       if (nodeVariantId == null) {
         if (node.variant != null) {
-          seenOnOpenFo = true
+          seenOnOpenFulfillmentOrder = true
         }
         continue
       }
       if (nodeVariantId != variantId) continue
-      seenOnOpenFo = true
-      val capacity = if (ledger != null) node.totalQuantity else node.remainingQuantity
-      if (capacity > 0) {
+      seenOnOpenFulfillmentOrder = true
+      if (node.totalQuantity > 0) {
         allZeroCapacity = false
       }
     }
   }
 
   return when {
-    seenOnOpenFo && allZeroCapacity -> SkipReason.ZERO_REMAINING
+    seenOnOpenFulfillmentOrder && allZeroCapacity -> SkipReason.ZERO_REMAINING
     else -> SkipReason.NO_OPEN_FO
   }
 }

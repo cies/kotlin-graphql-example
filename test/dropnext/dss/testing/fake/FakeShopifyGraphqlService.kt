@@ -61,6 +61,7 @@ class FakeShopifyGraphqlService(
     okResponse(GetOrderForDss.Result(order = null))
   val loadOrderForDssResponseQueue: MutableList<GraphQLClientResponse<GetOrderForDss.Result>> = mutableListOf()
   val loadOrderForDssCalls: MutableList<String> = mutableListOf()
+  var loadOrderForDssException: Throwable? = null
 
   var cancelFulfillmentResponse: GraphQLClientResponse<FulfillmentCancelMutation.Result> =
     okResponse(
@@ -114,6 +115,7 @@ class FakeShopifyGraphqlService(
 
   override suspend fun loadOrderForDss(orderGid: String): GraphQLClientResponse<GetOrderForDss.Result> {
     loadOrderForDssCalls.add(orderGid)
+    loadOrderForDssException?.let { throw it }
     if (loadOrderForDssResponseQueue.isNotEmpty()) {
       return loadOrderForDssResponseQueue.removeAt(0)
     }
