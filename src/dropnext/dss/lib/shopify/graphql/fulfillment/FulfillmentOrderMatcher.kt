@@ -49,9 +49,9 @@ fun FulfillmentOrderStatus.isOpenForFulfillment(): Boolean =
   }
 
 /**
- * Tracks post-cancel capacity ([totalQuantity]) per fulfillment order line item GID.
- * Sync cancels existing fulfillments before create, so matching must not use live
- * [remainingQuantity] (which is already reduced by those fulfillments).
+ * Tracks live remaining quantity ([remainingQuantity]) per fulfillment order line item GID.
+ * Sync is additive and does not cancel existing fulfillments, so matching must not use
+ * [totalQuantity] (which includes already-fulfilled units).
  */
 class FulfillmentQuantityLedger(order: Order) {
   private val availableByLineItemGid = mutableMapOf<String, Int>()
@@ -62,8 +62,8 @@ class FulfillmentQuantityLedger(order: Order) {
       if (!fulfillmentOrder.status.isOpenForFulfillment()) continue
       for (lineEdge in fulfillmentOrder.lineItems.edges) {
         val node = lineEdge.node
-        if (node.totalQuantity > 0) {
-          availableByLineItemGid[node.id] = node.totalQuantity
+        if (node.remainingQuantity > 0) {
+          availableByLineItemGid[node.id] = node.remainingQuantity
         }
       }
     }
@@ -93,8 +93,7 @@ fun normalizeShipmentLineItems(shipment: Shipment): List<ShipmentLineItem> =
 
 /**
  * Matches all shipments against a single in-memory quantity ledger seeded from
- * [totalQuantity] (post-cancel capacity). Catches cross-shipment over-allocation before any
- * Shopify mutations.
+ * [remainingQuantity]. Catches cross-shipment over-allocation before any Shopify mutations.
  */
 fun dryRunAllShipments(currentShopifyOrder: Order, shipments: List<Shipment>): DryRunResult {
   val ledger = FulfillmentQuantityLedger(currentShopifyOrder)
@@ -116,7 +115,7 @@ fun dryRunAllShipments(currentShopifyOrder: Order, shipments: List<Shipment>): D
 /**
  * Maps shipment line items to open fulfillment orders. Unmatched variants are skipped (partial
  * match). Returns [ShipmentMatchResult.UserError] when requested quantity exceeds available
- * post-cancel capacity ([totalQuantity]). Matching always uses post-cancel capacity.
+ * live remaining ([remainingQuantity]). Matching always uses live remaining quantity.
  */
 fun matchShipmentToFulfillmentOrders(
   order: Order,
@@ -185,8 +184,8 @@ private fun matchShipmentLineItem(
     return LineMatchResult.Skip(determineSkipReason(order, shipmentLineItem.productVariantId))
   }
 
-  // Matching always uses post-cancel capacity (totalQuantity).
-  if (openLines.all { it.totalQuantity <= 0 }) {
+  // Matching always uses live remaining quantity.
+  if (openLines.all { it.remainingQuantity <= 0 }) {
     return LineMatchResult.Skip(SkipReason.ZERO_REMAINING)
   }
 
@@ -245,7 +244,7 @@ private fun findOpenFulfillmentOrderLinesForVariant(
 /**
  * Prefers the open fulfillment-order line with the highest available quantity when the same
  * variant appears in multiple open fulfillment orders. Tie-break: first candidate in Graphql
- * order (strictly greater wins). Availability comes from post-cancel capacity.
+ * order (strictly greater wins). Availability comes from live remaining quantity.
  */
 private fun findBestFulfillmentOrderLineCandidate(
   order: Order,
@@ -296,7 +295,7 @@ private fun determineSkipReason(
       }
       if (nodeVariantId != variantId) continue
       seenOnOpenFulfillmentOrder = true
-      if (node.totalQuantity > 0) {
+      if (node.remainingQuantity > 0) {
         allZeroCapacity = false
       }
     }

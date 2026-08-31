@@ -62,7 +62,7 @@ class DetermineShopifyMutationsTest {
   }
 
   @Test
-  fun `existing fulfillment is included as a cancel in the planned list`() = runBlocking {
+  fun `existing fulfillment is not planned as a cancel`() = runBlocking {
     val fake = FakeShopifyGraphqlService()
     fake.loadOrderForDssResponse = okResponse(
       GetOrderForDss.Result(
@@ -79,7 +79,8 @@ class DetermineShopifyMutationsTest {
     )
     val result = determineShopifyMutations(fake, shopifyOrderId = 1001L, shipments = listOf(shipment()))
     val mutations = (result as Success).value
-    assert(mutations.first() is ShopifyMutation.FulfillmentCancel)
+    assert(mutations.none { it is ShopifyMutation.FulfillmentCancel })
+    assert(mutations.single() is ShopifyMutation.FulfillmentCreate)
     assert(fake.cancelFulfillmentCalls.isEmpty())
     assert(fake.createFulfillmentWithLineItemsCalls.isEmpty())
   }

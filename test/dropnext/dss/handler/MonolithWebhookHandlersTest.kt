@@ -175,7 +175,7 @@ class MonolithWebhookHandlersTest {
   }
 
   @Test
-  fun `sync-shipments returns 400 on dry-run quantity failure before cancel`() {
+  fun `sync-shipments returns 400 on dry-run quantity failure before create`() {
     val fakeShopify = FakeShopifyGraphqlService()
     fakeShopify.loadOrderForDssResponse = okResponse(GetOrderForDss.Result(order = minimalOrder()))
     val tokens = ShopAccessTokenCache().apply { this[acmeShop] = "shpat_test" }

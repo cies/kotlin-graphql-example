@@ -12,13 +12,8 @@ import dropnext.dss.lib.shopify.graphql.fulfillment.FulfillmentResult
 import dropnext.dss.lib.shopify.graphql.fulfillment.diagramCrossFoOrder
 import dropnext.dss.lib.shopify.graphql.fulfillment.diagramCrossFoShipment
 import dropnext.dss.testing.fake.FakeShopifyGraphqlServer
-import dropnext.graphql.generated.FulfillmentCancelMutation
 import dropnext.graphql.generated.FulfillmentCreateWithLineItems
 import dropnext.graphql.generated.GetOrderForDss
-import dropnext.graphql.generated.enums.FulfillmentStatus
-import dropnext.graphql.generated.fulfillmentcancelmutation.Fulfillment as CancelledFulfillment
-import dropnext.graphql.generated.fulfillmentcancelmutation.FulfillmentCancelPayload
-import dropnext.graphql.generated.fulfillmentcancelmutation.UserError as CancelUserError
 import dropnext.graphql.generated.fulfillmentcreatewithlineitems.Fulfillment as CreatedFulfillment
 import dropnext.graphql.generated.fulfillmentcreatewithlineitems.FulfillmentCreatePayload
 import dropnext.graphql.generated.fulfillmentcreatewithlineitems.UserError as CreateUserError
@@ -30,12 +25,9 @@ import java.net.URI
 import java.util.concurrent.TimeUnit
 import kotlin.test.BeforeTest
 import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.put
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
@@ -43,8 +35,6 @@ import org.junit.jupiter.api.TestInstance
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class SyncShopifyShipmentsToFulfillmentsTest {
-
-  private val orderJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
   private lateinit var fake: FakeShopifyGraphqlServer
   private lateinit var httpClient: HttpClient
@@ -92,7 +82,7 @@ class SyncShopifyShipmentsToFulfillmentsTest {
   }
 
   @Test
-  fun `syncShipments succeeds when there are no existing fulfillments to cancel`() = runBlocking {
+  fun `syncShipments succeeds when there are no existing fulfillments`() = runBlocking {
     fake.stubGetOrderForDss(order = minimalOrder().copy(fulfillments = emptyList()))
     fake.stubFulfillmentCreateOk(fulfillmentId = 5000L)
     val result = syncShopifyShipmentsToFulfillments(shopify, syncRequest())
@@ -106,39 +96,17 @@ class SyncShopifyShipmentsToFulfillmentsTest {
   }
 
   @Test
-  fun `syncShipments cancels existing fulfillments then creates without reloading`() = runBlocking {
+  fun `syncShipments creates without canceling existing fulfillments`() = runBlocking {
     fake.stubGetOrderForDss(order = orderWithFulfillment(id = 8000L))
-    fake.stubFulfillmentCancelOk(fulfillmentId = 8000L)
     fake.stubFulfillmentCreateOk(fulfillmentId = 9000L)
     val result = syncShopifyShipmentsToFulfillments(shopify, syncRequest())
     val response = result.unwrapOk<SyncShipmentsWithFulfillmentsResponse>()
     assert(response.newFulfillmentIds == listOf(9000L))
     assert(
       fake.calls.map { it.operationName } ==
-        listOf(
-          "GetOrderForDss",
-          "FulfillmentCancelMutation",
-          "FulfillmentCreateWithLineItems",
-        ),
+        listOf("GetOrderForDss", "FulfillmentCreateWithLineItems"),
     )
-  }
-
-  @Test
-  fun `syncShipments ignores already-canceled cancel errors as no-ops`() = runBlocking {
-    fake.stubGetOrderForDss(order = orderWithFulfillment(id = 8000L))
-    fake.stubFulfillmentCancelUserError("Fulfillment is already canceled.")
-    fake.stubFulfillmentCreateOk(fulfillmentId = 9001L)
-    val result = syncShopifyShipmentsToFulfillments(shopify, syncRequest())
-    assert(result is FulfillmentResult.Ok<*>)
-  }
-
-  @Test
-  fun `syncShipments returns UserError on non-already cancel error`() = runBlocking {
-    fake.stubGetOrderForDss(order = orderWithFulfillment(id = 8000L))
-    fake.stubFulfillmentCancelUserError("fulfillment locked")
-    val result = syncShopifyShipmentsToFulfillments(shopify, syncRequest())
-    assert(result is FulfillmentResult.Err.UserError)
-    assert("fulfillment locked" in (result as FulfillmentResult.Err.UserError).messages.single())
+    assert(fake.calls.none { it.operationName == "FulfillmentCancelMutation" })
   }
 
   @Test
@@ -193,7 +161,7 @@ class SyncShopifyShipmentsToFulfillmentsTest {
   fun `syncShipments returns Network error when a mutation call fails`() = runBlocking {
     fake.stubGetOrderForDss(order = orderWithFulfillment(id = 8000L))
     // Malformed JSON forces the graphql client to throw; the workflow maps that to Network.
-    fake.stubRaw("FulfillmentCancelMutation", "{not-valid-json")
+    fake.stubRaw("FulfillmentCreateWithLineItems", "{not-valid-json")
     val result = syncShopifyShipmentsToFulfillments(shopify, syncRequest())
     assert(result is FulfillmentResult.Err.Network)
   }
@@ -220,7 +188,7 @@ class SyncShopifyShipmentsToFulfillmentsTest {
   }
 
   @Test
-  fun `dry-run failure does not call cancel`() = runBlocking {
+  fun `dry-run failure does not call create`() = runBlocking {
     fake.stubGetOrderForDss(order = minimalOrder().copy(fulfillments = emptyList()))
     val result = syncShopifyShipmentsToFulfillments(shopify, syncRequest(quantity = 99))
     assert(result is FulfillmentResult.Err.UserError)
@@ -372,8 +340,8 @@ class SyncShopifyShipmentsToFulfillmentsTest {
   }
 
   @Test
-  fun `partial failure recovery on retry cancels partial and recreates all`() = runBlocking {
-    val order = minimalOrder().copy(fulfillments = emptyList())
+  fun `partial failure recovery on retry skips fulfilled variant and creates the rest`() = runBlocking {
+    val order = orderWithTwoVariantFulfillmentOrders()
     fake.stubGetOrderForDss(order = order)
     fake.stubSequence(
       "FulfillmentCreateWithLineItems",
@@ -386,7 +354,7 @@ class SyncShopifyShipmentsToFulfillmentsTest {
         syncRequest(
           shipments = listOf(
             shipment(tracking = "TRK-1", variantId = 101L, quantity = 1),
-            shipment(tracking = "TRK-2", variantId = 101L, quantity = 1),
+            shipment(tracking = "TRK-2", variantId = 202L, quantity = 1),
           ),
         ),
       )
@@ -394,9 +362,13 @@ class SyncShopifyShipmentsToFulfillmentsTest {
     assert(fake.calls.count { it.operationName == "FulfillmentCreateWithLineItems" } == 2)
 
     fake.reset()
-    // Shopify reduced remaining after the partial create; dry-run must use totalQuantity.
-    val orderWithPartialRemaining =
-      orderWithFoQuantities(remaining = 1, total = 2).copy(
+    val orderAfterPartial =
+      orderWithTwoVariantFulfillmentOrders(
+        firstRemaining = 0,
+        firstTotal = 1,
+        secondRemaining = 1,
+        secondTotal = 1,
+      ).copy(
         fulfillments = listOf(
           Fulfillment(
             id = "gid://shopify/Fulfillment/5001",
@@ -405,41 +377,30 @@ class SyncShopifyShipmentsToFulfillmentsTest {
           ),
         ),
       )
-    val orderAfterCancel = orderWithFoQuantities(remaining = 2, total = 2)
-    fake.enqueueGetOrderForDss(order = orderWithPartialRemaining)
-    fake.stubGetOrderForDss(order = orderAfterCancel)
-    fake.stubFulfillmentCancelOk(fulfillmentId = 5001L)
-    fake.stubSequence(
-      "FulfillmentCreateWithLineItems",
-      fulfillmentCreateOkJson(6001L),
-      fulfillmentCreateOkJson(6002L),
-    )
+    fake.stubGetOrderForDss(order = orderAfterPartial)
+    fake.stubFulfillmentCreateOk(fulfillmentId = 6002L)
     val retry =
       syncShopifyShipmentsToFulfillments(
         shopify,
         syncRequest(
           shipments = listOf(
             shipment(tracking = "TRK-1", variantId = 101L, quantity = 1),
-            shipment(tracking = "TRK-2", variantId = 101L, quantity = 1),
+            shipment(tracking = "TRK-2", variantId = 202L, quantity = 1),
           ),
         ),
       )
     val response = retry.unwrapOk<SyncShipmentsWithFulfillmentsResponse>()
-    assert(response.newFulfillmentIds == listOf(6001L, 6002L))
+    assert(response.newFulfillmentIds == listOf(6002L))
     assert(
       fake.calls.map { it.operationName } ==
-        listOf(
-          "GetOrderForDss",
-          "FulfillmentCancelMutation",
-          "FulfillmentCreateWithLineItems",
-          "FulfillmentCreateWithLineItems",
-        ),
+        listOf("GetOrderForDss", "FulfillmentCreateWithLineItems"),
     )
+    assert(fake.calls.none { it.operationName == "FulfillmentCancelMutation" })
   }
 
   @Test
-  fun `partial remaining resync cancels and recreates full payload`() = runBlocking {
-    val beforeCancel =
+  fun `remaining quantity creates without canceling existing fulfillments`() = runBlocking {
+    val order =
       orderWithFoQuantities(remaining = 1, total = 2).copy(
         fulfillments = listOf(
           Fulfillment(
@@ -449,29 +410,65 @@ class SyncShopifyShipmentsToFulfillmentsTest {
           ),
         ),
       )
-    val afterCancel = orderWithFoQuantities(remaining = 2, total = 2)
-    fake.enqueueGetOrderForDss(order = beforeCancel)
-    fake.stubGetOrderForDss(order = afterCancel)
-    fake.stubFulfillmentCancelOk(fulfillmentId = 8000L)
-    fake.stubSequence(
-      "FulfillmentCreateWithLineItems",
-      fulfillmentCreateOkJson(9001L),
-      fulfillmentCreateOkJson(9002L),
-    )
+    fake.stubGetOrderForDss(order = order)
+    fake.stubFulfillmentCreateOk(fulfillmentId = 9001L)
     val result =
       syncShopifyShipmentsToFulfillments(
         shopify,
-        syncRequest(
-          shipments = listOf(
-            shipment(tracking = "TRK-1", variantId = 101L, quantity = 1),
-            shipment(tracking = "TRK-2", variantId = 101L, quantity = 1),
-          ),
-        ),
+        syncRequest(shipments = listOf(shipment(tracking = "TRK-2", variantId = 101L, quantity = 1))),
       )
     val response = result.unwrapOk<SyncShipmentsWithFulfillmentsResponse>()
-    assert(response.newFulfillmentIds == listOf(9001L, 9002L))
-    assert(fake.calls.any { it.operationName == "FulfillmentCancelMutation" })
-    assert(fake.calls.count { it.operationName == "FulfillmentCreateWithLineItems" } == 2)
+    assert(response.newFulfillmentIds == listOf(9001L))
+    assert(fake.calls.none { it.operationName == "FulfillmentCancelMutation" })
+    assert(fake.calls.count { it.operationName == "FulfillmentCreateWithLineItems" } == 1)
+  }
+
+  @Test
+  fun `second item later creates without canceling the first fulfillment`() = runBlocking {
+    val order = orderWithTwoVariantFulfillmentOrders(
+      firstRemaining = 0,
+      firstTotal = 1,
+      secondRemaining = 1,
+      secondTotal = 1,
+    ).copy(
+      fulfillments = listOf(
+        Fulfillment(
+          id = "gid://shopify/Fulfillment/8000",
+          legacyResourceId = "8000",
+          trackingInfo = emptyList(),
+        ),
+      ),
+    )
+    fake.stubGetOrderForDss(order = order)
+    fake.stubFulfillmentCreateOk(fulfillmentId = 9002L)
+    val result =
+      syncShopifyShipmentsToFulfillments(
+        shopify,
+        syncRequest(shipments = listOf(shipment(tracking = "TRK-O2", variantId = 202L, quantity = 1))),
+      )
+    val response = result.unwrapOk<SyncShipmentsWithFulfillmentsResponse>()
+    assert(response.newFulfillmentIds == listOf(9002L))
+    assert(fake.calls.none { it.operationName == "FulfillmentCancelMutation" })
+    assert(fake.calls.map { it.operationName } == listOf("GetOrderForDss", "FulfillmentCreateWithLineItems"))
+  }
+
+  @Test
+  fun `already fulfilled same variant is skipped with no cancel`() = runBlocking {
+    val order = orderWithFoQuantities(remaining = 0, total = 1).copy(
+      fulfillments = listOf(
+        Fulfillment(
+          id = "gid://shopify/Fulfillment/8000",
+          legacyResourceId = "8000",
+          trackingInfo = emptyList(),
+        ),
+      ),
+    )
+    fake.stubGetOrderForDss(order = order)
+    val result = syncShopifyShipmentsToFulfillments(shopify, syncRequest())
+    val response = result.unwrapOk<SyncShipmentsWithFulfillmentsResponse>()
+    assert(response.newFulfillmentIds.isEmpty())
+    assert(fake.calls.none { it.operationName == "FulfillmentCancelMutation" })
+    assert(fake.calls.none { it.operationName == "FulfillmentCreateWithLineItems" })
   }
 
   // ---------- helpers ----------
@@ -503,17 +500,6 @@ class SyncShopifyShipmentsToFulfillmentsTest {
     GetOrderForDss.Result.serializer(),
   )
 
-  private fun FakeShopifyGraphqlServer.enqueueGetOrderForDss(
-    order: dropnext.graphql.generated.getorderfordss.Order?,
-  ) {
-    val payload = GetOrderForDss.Result(order = order)
-    val dataJson = orderJson.encodeToJsonElement(GetOrderForDss.Result.serializer(), payload)
-    val response = buildJsonObject {
-      put("data", dataJson)
-    }
-    enqueueResponse("GetOrderForDss", response.toString())
-  }
-
   private fun FakeShopifyGraphqlServer.stubFulfillmentCreateOk(fulfillmentId: Long) = stubData(
     "FulfillmentCreateWithLineItems",
     FulfillmentCreateWithLineItems.Result(
@@ -537,31 +523,6 @@ class SyncShopifyShipmentsToFulfillmentsTest {
       ),
     ),
     FulfillmentCreateWithLineItems.Result.serializer(),
-  )
-
-  private fun FakeShopifyGraphqlServer.stubFulfillmentCancelOk(fulfillmentId: Long) = stubData(
-    "FulfillmentCancelMutation",
-    FulfillmentCancelMutation.Result(
-      fulfillmentCancel = FulfillmentCancelPayload(
-        fulfillment = CancelledFulfillment(
-          id = "gid://shopify/Fulfillment/$fulfillmentId",
-          status = FulfillmentStatus.CANCELLED,
-        ),
-        userErrors = emptyList(),
-      ),
-    ),
-    FulfillmentCancelMutation.Result.serializer(),
-  )
-
-  private fun FakeShopifyGraphqlServer.stubFulfillmentCancelUserError(message: String) = stubData(
-    "FulfillmentCancelMutation",
-    FulfillmentCancelMutation.Result(
-      fulfillmentCancel = FulfillmentCancelPayload(
-        fulfillment = null,
-        userErrors = listOf(CancelUserError(field = listOf("id"), message = message)),
-      ),
-    ),
-    FulfillmentCancelMutation.Result.serializer(),
   )
 
   private fun syncRequest(

@@ -13,11 +13,12 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val log = KotlinLogging.logger {}
 
-/** Applies [mutations] to Shopify. */
+/** Applies [mutations] to Shopify. Empty [Success] list when there is nothing to create. */
 suspend fun effectShopifyMutations(
   shopifyGqlService: ShopifyGraphqlService,
   mutations: List<ShopifyMutation>,
 ): Result4k<List<Long>, ShopifyError> {
+  val newFulfillmentIds = mutableListOf<Long>()
   mutations.forEach { mutation ->
     when (mutation) {
       is ShopifyMutation.FulfillmentCancel -> {
@@ -27,14 +28,14 @@ suspend fun effectShopifyMutations(
         }
       }
       is ShopifyMutation.FulfillmentCreate -> {
-        return when (val created = createShopifyFulfillment(shopifyGqlService, mutation)) {
-          is CreateShopifyFulfillmentResult.Err -> Failure(created.error)
-          is CreateShopifyFulfillmentResult.Ok -> Success(created.fulfillmentIds)
+        when (val created = createShopifyFulfillment(shopifyGqlService, mutation)) {
+          is CreateShopifyFulfillmentResult.Err -> return Failure(created.error)
+          is CreateShopifyFulfillmentResult.Ok -> newFulfillmentIds.addAll(created.fulfillmentIds)
         }
       }
     }
   }
-  return Success(emptyList())
+  return Success(newFulfillmentIds)
 }
 
 private suspend fun cancelShopifyFulfillment(

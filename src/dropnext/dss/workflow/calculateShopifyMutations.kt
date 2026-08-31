@@ -19,12 +19,6 @@ fun calculateShopifyMutations(
       return Failure(DetermineShopifyMutationsError.UserError(match.messages))
     is DryRunResult.Ok -> {
       val mutations = mutableListOf<ShopifyMutation>()
-      order.fulfillments
-        .map { it.id }
-        .filter { it.isNotBlank() }
-        .forEach { fulfillmentId ->
-          mutations += ShopifyMutation.FulfillmentCancel(fulfillmentId = fulfillmentId)
-        }
       match.perShipment.forEachIndexed { index, shipmentMatch ->
         if (shipmentMatch.groups.isEmpty()) return@forEachIndexed
         val shipment = shipments[index]

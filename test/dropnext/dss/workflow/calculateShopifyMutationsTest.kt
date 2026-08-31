@@ -26,13 +26,12 @@ class CalculateShopifyMutationsTest {
   }
 
   @Test
-  fun `plans cancels before creates when fulfillments already exist`() {
+  fun `does not plan cancels when fulfillments already exist`() {
     val order = orderWithFulfillment(8000L)
     val result = calculateShopifyMutations(order, listOf(shipment()))
     val mutations = (result as Success).value
-    assert(mutations[0] is ShopifyMutation.FulfillmentCancel)
-    assert((mutations[0] as ShopifyMutation.FulfillmentCancel).fulfillmentId == "gid://shopify/Fulfillment/8000")
-    assert(mutations[1] is ShopifyMutation.FulfillmentCreate)
+    assert(mutations.none { it is ShopifyMutation.FulfillmentCancel })
+    assert(mutations.single() is ShopifyMutation.FulfillmentCreate)
   }
 
   @Test
@@ -62,7 +61,7 @@ class CalculateShopifyMutationsTest {
   }
 
   @Test
-  fun `payload that fits totalQuantity after existing fulfillment still plans cancel then creates`() {
+  fun `payload that exceeds remaining after existing fulfillment fails with no cancels`() {
     val order = orderWithFoQuantities(remaining = 1, total = 2).copy(
       fulfillments = listOf(
         Fulfillment(
@@ -77,9 +76,89 @@ class CalculateShopifyMutationsTest {
       shipment(tracking = "TRK-2", quantity = 1),
     )
     val result = calculateShopifyMutations(order, shipments)
+    assert(result is Failure)
+    assert((result as Failure).reason is DetermineShopifyMutationsError.UserError)
+  }
+
+  @Test
+  fun `second variant shipment does not plan cancel of the first fulfillment`() {
+    val order = orderWithTwoVariantFulfillmentOrders(
+      firstVariantId = 101L,
+      firstRemaining = 0,
+      firstTotal = 1,
+      secondVariantId = 202L,
+      secondRemaining = 1,
+      secondTotal = 1,
+    ).copy(
+      fulfillments = listOf(
+        Fulfillment(
+          id = "gid://shopify/Fulfillment/8000",
+          legacyResourceId = "8000",
+          trackingInfo = emptyList(),
+        ),
+      ),
+    )
+    val result = calculateShopifyMutations(order, listOf(shipment(variantId = 202L, tracking = "TRK-O2")))
     val mutations = (result as Success).value
-    assert(mutations.filterIsInstance<ShopifyMutation.FulfillmentCancel>().size == 1)
-    assert(mutations.filterIsInstance<ShopifyMutation.FulfillmentCreate>().size == 2)
+    assert(mutations.none { it is ShopifyMutation.FulfillmentCancel })
+    val create = mutations.single() as ShopifyMutation.FulfillmentCreate
+    assert(create.trackingNumber == "TRK-O2")
+    assert(create.lineItems.single().fulfillmentOrderId == "gid://shopify/FulfillmentOrder/302")
+  }
+
+  @Test
+  fun `same variant remaining quantity plans a create without cancel`() {
+    val order = orderWithFoQuantities(remaining = 2, total = 2)
+    val result = calculateShopifyMutations(order, listOf(shipment(quantity = 1)))
+    val mutations = (result as Success).value
+    assert(mutations.none { it is ShopifyMutation.FulfillmentCancel })
+    val create = mutations.single() as ShopifyMutation.FulfillmentCreate
+    assert(create.lineItems.single().quantity == 1)
+  }
+
+  @Test
+  fun `already fulfilled variant is omitted and does not plan cancel`() {
+    val order = orderWithFoQuantities(remaining = 0, total = 1).copy(
+      fulfillments = listOf(
+        Fulfillment(
+          id = "gid://shopify/Fulfillment/8000",
+          legacyResourceId = "8000",
+          trackingInfo = emptyList(),
+        ),
+      ),
+    )
+    val result = calculateShopifyMutations(order, listOf(shipment(quantity = 1)))
+    assert(result is Success)
+    assert((result as Success).value.isEmpty())
+  }
+
+  @Test
+  fun `mixed already-fulfilled and open variants creates only the open one`() {
+    val order = orderWithTwoVariantFulfillmentOrders(
+      firstVariantId = 101L,
+      firstRemaining = 0,
+      firstTotal = 1,
+      secondVariantId = 202L,
+      secondRemaining = 1,
+      secondTotal = 1,
+    ).copy(
+      fulfillments = listOf(
+        Fulfillment(
+          id = "gid://shopify/Fulfillment/8000",
+          legacyResourceId = "8000",
+          trackingInfo = emptyList(),
+        ),
+      ),
+    )
+    val shipments = listOf(
+      shipment(variantId = 101L, tracking = "TRK-H"),
+      shipment(variantId = 202L, tracking = "TRK-O"),
+    )
+    val result = calculateShopifyMutations(order, shipments)
+    val mutations = (result as Success).value
+    assert(mutations.none { it is ShopifyMutation.FulfillmentCancel })
+    val create = mutations.single() as ShopifyMutation.FulfillmentCreate
+    assert(create.trackingNumber == "TRK-O")
   }
 
   private fun shipment(

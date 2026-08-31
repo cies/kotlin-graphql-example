@@ -14,11 +14,11 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 private val log = KotlinLogging.logger {}
 
 /**
- * Cancels every open Shopify fulfillment on the order and creates new fulfillments from the
- * supplied shipments. Fulfillment orders are resolved automatically by matching
- * `product_variant_id` against fulfillment order line items.
+ * Creates Shopify fulfillments from the supplied shipments without canceling existing ones.
+ * Fulfillment orders are resolved automatically by matching `product_variant_id` against
+ * fulfillment order line items and live remaining quantity.
  *
- * Composes [determineShopifyMutations] (read-only) and [effectShopifyMutations] (destructive).
+ * Composes [determineShopifyMutations] (read-only) and [effectShopifyMutations] (creates).
  */
 suspend fun syncShopifyShipmentsToFulfillments(
   shopifyGqlService: ShopifyGraphqlService,

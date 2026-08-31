@@ -110,3 +110,74 @@ internal fun orderWithFoQuantities(
       ),
   )
 }
+
+/** Two open fulfillment orders, each with one variant (for incremental second-item cases). */
+internal fun orderWithTwoVariantFulfillmentOrders(
+  firstVariantId: Long = 101L,
+  firstRemaining: Int = 1,
+  firstTotal: Int = firstRemaining,
+  firstFoId: Long = 301L,
+  firstLineItemId: Long = 401L,
+  secondVariantId: Long = 202L,
+  secondRemaining: Int = 1,
+  secondTotal: Int = secondRemaining,
+  secondFoId: Long = 302L,
+  secondLineItemId: Long = 402L,
+): Order {
+  val firstVariant =
+    ProductVariant(
+      id = "gid://shopify/ProductVariant/$firstVariantId",
+      legacyResourceId = firstVariantId.toString(),
+    )
+  val secondVariant =
+    ProductVariant(
+      id = "gid://shopify/ProductVariant/$secondVariantId",
+      legacyResourceId = secondVariantId.toString(),
+    )
+  val firstFo =
+    FulfillmentOrder(
+      id = "gid://shopify/FulfillmentOrder/$firstFoId",
+      status = FulfillmentOrderStatus.OPEN,
+      lineItems =
+        FulfillmentOrderLineItemConnection(
+          edges =
+            listOf(
+              FulfillmentOrderLineItemEdge(
+                node =
+                  FulfillmentOrderLineItem(
+                    id = "gid://shopify/FulfillmentOrderLineItem/$firstLineItemId",
+                    remainingQuantity = firstRemaining,
+                    totalQuantity = firstTotal,
+                    variant = firstVariant,
+                  ),
+              ),
+            ),
+        ),
+    )
+  val secondFo =
+    FulfillmentOrder(
+      id = "gid://shopify/FulfillmentOrder/$secondFoId",
+      status = FulfillmentOrderStatus.OPEN,
+      lineItems =
+        FulfillmentOrderLineItemConnection(
+          edges =
+            listOf(
+              FulfillmentOrderLineItemEdge(
+                node =
+                  FulfillmentOrderLineItem(
+                    id = "gid://shopify/FulfillmentOrderLineItem/$secondLineItemId",
+                    remainingQuantity = secondRemaining,
+                    totalQuantity = secondTotal,
+                    variant = secondVariant,
+                  ),
+              ),
+            ),
+        ),
+    )
+  return minimalOrder().copy(
+    fulfillmentOrders =
+      FulfillmentOrderConnection(
+        edges = listOf(FulfillmentOrderEdge(node = firstFo), FulfillmentOrderEdge(node = secondFo)),
+      ),
+  )
+}

@@ -48,7 +48,7 @@ class FulfillmentOrderMatcherTest {
   }
 
   @Test
-  fun `returns user error when quantity exceeds totalQuantity`() {
+  fun `returns user error when quantity exceeds remainingQuantity`() {
     val order = orderWithFulfillmentOrders(openFo(variantId = 101L, remaining = 1))
     val result = matchShipmentToFulfillmentOrders(order, shipment(variantId = 101L, quantity = 2))
     assert(result is ShipmentMatchResult.UserError)
@@ -194,25 +194,22 @@ class FulfillmentOrderMatcherTest {
   }
 
   @Test
-  fun `cross-shipment over-allocation vs totalQuantity fails dry-run`() {
-    // remaining already reduced, but payload still exceeds post-cancel total
+  fun `cross-shipment over-allocation vs remainingQuantity fails dry-run`() {
+    // remaining already reduced; payload must not use post-cancel totalQuantity
     val order =
       orderWithFulfillmentOrders(openFo(variantId = 101L, remaining = 1, total = 2))
     val shipments =
       listOf(
         shipment(tracking = "TRK-1", variantId = 101L, quantity = 1),
         shipment(tracking = "TRK-2", variantId = 101L, quantity = 1),
-        shipment(tracking = "TRK-3", variantId = 101L, quantity = 1),
       )
     val result = dryRunAllShipments(order, shipments)
     assert(result is DryRunResult.UserError)
   }
 
   @Test
-  fun `partial remaining dry-run uses totalQuantity for resync`() {
-    // One unit already fulfilled (remaining=1); cancel will restore total=2
-    val order =
-      orderWithFulfillmentOrders(openFo(variantId = 101L, remaining = 1, total = 2))
+  fun `two qty-1 shipments match when remaining is 2`() {
+    val order = orderWithFulfillmentOrders(openFo(variantId = 101L, remaining = 2, total = 2))
     val shipments =
       listOf(
         shipment(tracking = "TRK-1", variantId = 101L, quantity = 1),
@@ -221,6 +218,16 @@ class FulfillmentOrderMatcherTest {
     val result = dryRunAllShipments(order, shipments) as DryRunResult.Ok
     assert(result.perShipment.size == 2)
     assert(result.totalSkipped == 0)
+    assert(result.perShipment.all { it.groups.isNotEmpty() })
+  }
+
+  @Test
+  fun `zero remainingQuantity skips as ZERO_REMAINING`() {
+    val order = orderWithFulfillmentOrders(openFo(variantId = 101L, remaining = 0, total = 1))
+    val result = matchShipmentToFulfillmentOrders(order, shipment(variantId = 101L, quantity = 1))
+    val ok = result as ShipmentMatchResult.Ok
+    assert(ok.groups.isEmpty())
+    assert(ok.skipped.single().reason == SkipReason.ZERO_REMAINING)
   }
 
   @Test
@@ -287,7 +294,7 @@ class FulfillmentOrderMatcherTest {
   }
 
   @Test
-  fun `prefers fulfillment order with highest available totalQuantity`() {
+  fun `prefers fulfillment order with highest available remainingQuantity`() {
     val foLow =
       FulfillmentOrder(
         id = "gid://shopify/FulfillmentOrder/301",
@@ -324,15 +331,15 @@ class FulfillmentOrderMatcherTest {
   }
 
   @Test
-  fun `ledger initializes from totalQuantity not remainingQuantity`() {
+  fun `ledger initializes from remainingQuantity not totalQuantity`() {
     val order =
       orderWithFulfillmentOrders(openFo(variantId = 101L, remaining = 1, total = 3))
     val ledger = FulfillmentQuantityLedger(order)
-    assert(ledger.available("gid://shopify/FulfillmentOrderLineItem/401") == 3)
+    assert(ledger.available("gid://shopify/FulfillmentOrderLineItem/401") == 1)
   }
 
   @Test
-  fun `ledger ignores closed fulfillment orders and zero totalQuantity lines`() {
+  fun `ledger ignores closed fulfillment orders and zero remainingQuantity lines`() {
     val closed =
       FulfillmentOrder(
         id = "gid://shopify/FulfillmentOrder/301",

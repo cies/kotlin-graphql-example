@@ -96,7 +96,6 @@ class EffectShopifyMutationsTest {
         ),
       ),
     )
-    assert(fake.createFulfillmentWithLineItemsCalls.size == 2)
     val result = effectShopifyMutations(
       fake,
       listOf(
@@ -104,13 +103,9 @@ class EffectShopifyMutationsTest {
         createMutation(tracking = "TRK-2"),
       ),
     )
-    assert(result !is Failure)
-    when (result) {
-      is Failure -> {}
-      is Success -> {
-        assert(result.value == listOf(5001L))
-      }
-    }
+    assert(result is Failure)
+    assert((result as Failure).reason is ShopifyError.UserError)
+    assert(fake.createFulfillmentWithLineItemsCalls.size == 2)
   }
 
   @Test
@@ -129,11 +124,9 @@ class EffectShopifyMutationsTest {
         createMutation(tracking = "TRK-2"),
       ),
     )
-    when (result) {
-      is Failure -> assert(result.reason is ShopifyError.GraphqlError)
-      is Success -> {}
-    }
-    // assert(fake.createFulfillmentWithLineItemsCalls.size == 1)
+    assert(result is Failure)
+    assert((result as Failure).reason is ShopifyError.GraphqlError)
+    assert(fake.createFulfillmentWithLineItemsCalls.size == 1)
   }
 
   private fun createOk(fulfillmentId: Long) = okResponse(
