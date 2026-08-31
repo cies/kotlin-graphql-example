@@ -34,29 +34,26 @@ suspend fun syncShopifyShipmentsToFulfillments(
     is Success -> determined.value
   }
 
-  val effected = effectShopifyMutations(shopifyGqlService, mutations)
-  if (effected.errors.isNotEmpty()) {
-    return effected.errors.first().toFulfillmentResult()
+  when (val effected = effectShopifyMutations(shopifyGqlService, mutations)) {
+    is Failure -> return effected.reason.toFulfillmentResult()
+    is Success -> {
+      val stats = SyncShipmentsRunStats(
+        canceledCount = mutations.count { it is ShopifyMutation.FulfillmentCancel },
+        createdCount = effected.value.size,
+        skippedLines = 0,
+        skippedShipments = payload.shipments.size - mutations.count { it is ShopifyMutation.FulfillmentCreate },
+      )
+      log.info {
+        formatSyncShipmentsLogLine(
+          shopifyGqlService.shop.subdomainOnly,
+          payload.shopifyOrderId,
+          stats,
+          effected.value,
+        )
+      }
+      return FulfillmentResult.Ok(SyncShipmentsWithFulfillmentsResponse(effected.value))
+    }
   }
-
-  val stats = SyncShipmentsRunStats(
-    canceledCount = mutations.count { it is ShopifyMutation.FulfillmentCancel },
-    createdCount = effected.newFulfillmentIds.size,
-    skippedLines = 0,
-    skippedShipments = payload.shipments.size - mutations.count { it is ShopifyMutation.FulfillmentCreate },
-  )
-  log.info {
-    formatSyncShipmentsLogLine(
-      shopifyGqlService.shop.subdomainOnly,
-      payload.shopifyOrderId,
-      stats,
-      effected.newFulfillmentIds,
-    )
-  }
-
-  return FulfillmentResult.Ok(
-    SyncShipmentsWithFulfillmentsResponse(newFulfillmentIds = effected.newFulfillmentIds),
-  )
 }
 
 private fun DetermineShopifyMutationsError.toFulfillmentResult(): FulfillmentResult<Nothing> =

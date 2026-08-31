@@ -1,5 +1,6 @@
 package dropnext.dss.workflow
 
+import dev.forkhandles.result4k.Success
 import dropnext.dss.lib.ktor.DssError
 import kotlin.test.Test
 
@@ -20,12 +21,5 @@ class ShopifyMutationTest {
     assert(ShopifyError.UserError(listOf("qty")).toDssError() is DssError.InvalidRequest)
     assert(ShopifyError.GraphqlError("throttled").toDssError() is DssError.UpstreamFailure)
     assert(ShopifyError.Network("down").toDssError() is DssError.UpstreamFailure)
-  }
-
-  @Test
-  fun `empty effect errors means success`() {
-    val result = EffectShopifyMutationsResult(newFulfillmentIds = listOf(1L), errors = emptyList())
-    assert(result.errors.isEmpty())
-    assert(result.newFulfillmentIds == listOf(1L))
   }
 }

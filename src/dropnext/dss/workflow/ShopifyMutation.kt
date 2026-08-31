@@ -47,12 +47,6 @@ sealed interface ShopifyError {
   data class Network(val message: String) : ShopifyError
 }
 
-/** Empty [errors] means success. [newFulfillmentIds] are legacy ids from successful creates. */
-data class EffectShopifyMutationsResult(
-  val newFulfillmentIds: List<Long>,
-  val errors: List<ShopifyError>,
-)
-
 fun DetermineShopifyMutationsError.toDssError(): DssError = when (this) {
   is DetermineShopifyMutationsError.NotFound -> DssError.NotFound(detail)
   is DetermineShopifyMutationsError.UserError -> DssError.InvalidRequest(messages.joinToString("; "))

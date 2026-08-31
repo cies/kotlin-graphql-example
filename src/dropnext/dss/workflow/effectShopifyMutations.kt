@@ -1,5 +1,8 @@
 package dropnext.dss.workflow
 
+import dev.forkhandles.result4k.Failure
+import dev.forkhandles.result4k.Result4k
+import dev.forkhandles.result4k.Success
 import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlService
 import dropnext.dss.lib.shopify.graphql.fulfillment.parseCreatedFulfillmentId
 import dropnext.graphql.generated.inputs.FulfillmentOrderLineItemInput
@@ -10,36 +13,28 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val log = KotlinLogging.logger {}
 
-/**
- * Applies [mutations] to Shopify. Empty [EffectShopifyMutationsResult.errors] means success.
- */
+/** Applies [mutations] to Shopify. */
 suspend fun effectShopifyMutations(
   shopifyGqlService: ShopifyGraphqlService,
   mutations: List<ShopifyMutation>,
-): EffectShopifyMutationsResult {
-  val newFulfillmentIds = mutableListOf<Long>()
+): Result4k<List<Long>, ShopifyError> {
   mutations.forEach { mutation ->
     when (mutation) {
       is ShopifyMutation.FulfillmentCancel -> {
         val error = cancelShopifyFulfillment(shopifyGqlService, mutation.fulfillmentId)
         if (error != null) {
-          return EffectShopifyMutationsResult(newFulfillmentIds = newFulfillmentIds, errors = listOf(error))
+          return Failure(error)
         }
       }
       is ShopifyMutation.FulfillmentCreate -> {
-        when (val created = createShopifyFulfillment(shopifyGqlService, mutation)) {
-          is CreateShopifyFulfillmentResult.Err ->
-            return EffectShopifyMutationsResult(
-              newFulfillmentIds = newFulfillmentIds,
-              errors = listOf(created.error),
-            )
-          is CreateShopifyFulfillmentResult.Ok ->
-            newFulfillmentIds.addAll(created.fulfillmentIds)
+        return when (val created = createShopifyFulfillment(shopifyGqlService, mutation)) {
+          is CreateShopifyFulfillmentResult.Err -> Failure(created.error)
+          is CreateShopifyFulfillmentResult.Ok -> Success(created.fulfillmentIds)
         }
       }
     }
   }
-  return EffectShopifyMutationsResult(newFulfillmentIds = newFulfillmentIds, errors = emptyList())
+  return Success(emptyList())
 }
 
 private suspend fun cancelShopifyFulfillment(

@@ -2,6 +2,7 @@ package dropnext.dss.handler
 
 import dev.forkhandles.result4k.Failure
 import dev.forkhandles.result4k.Success
+import dev.forkhandles.result4k.valueOrNull
 import dropnext.dss.lib.ktor.DssError
 import dropnext.dss.lib.ktor.receiveOr400
 import dropnext.dss.lib.ktor.respondError
@@ -68,47 +69,54 @@ class MonolithWebhookHandlers(
       return
     }
 
-    val determined = determineShopifyMutations(
+    val determinedMutationsResult = determineShopifyMutations(
       shopifyGqlService = shopifyGqlService,
       shopifyOrderId = syncRequest.shopifyOrderId,
       shipments = syncRequest.shipments,
     )
-    val mutations = when (determined) {
+    val determinedMutations = when (determinedMutationsResult) {
       is Failure -> {
-        val mapped = determined.reason.toDssError()
+        val mapped = determinedMutationsResult.reason.toDssError()
         log.warn { "sync-shipments failed shop=${shop.normalizedShopifyHost}: ${mapped.message}" }
         call.respondError(mapped)
         return
       }
-      is Success -> determined.value
+
+      is Success -> determinedMutationsResult.value
     }
 
-    val effected = effectShopifyMutations(shopifyGqlService, mutations)
-    if (effected.errors.isNotEmpty()) {
-      val mapped = effected.errors.first().toDssError()
-      log.warn { "sync-shipments failed shop=${shop.normalizedShopifyHost}: ${mapped.message}" }
-      call.respondError(mapped)
-      return
-    }
 
-    val stats = SyncShipmentsRunStats(
-      canceledCount = mutations.count { it is ShopifyMutation.FulfillmentCancel },
-      createdCount = effected.newFulfillmentIds.size,
-      skippedLines = 0,
-      skippedShipments = syncRequest.shipments.size -
-        mutations.count { it is ShopifyMutation.FulfillmentCreate },
-    )
-    log.info {
-      formatSyncShipmentsLogLine(
-        shop.subdomainOnly,
-        syncRequest.shopifyOrderId,
-        stats,
-        effected.newFulfillmentIds,
-      )
+    when (val effected = effectShopifyMutations(shopifyGqlService, determinedMutations)) {
+      is Failure -> {
+        val mapped = effected.reason.toDssError()
+        log.warn { "sync-shipments failed shop=${shop.normalizedShopifyHost}: ${mapped.message}" }
+        call.respondError(mapped)
+        return
+      }
+
+      is Success -> {
+
+        val stats = SyncShipmentsRunStats(
+          canceledCount = determinedMutations.count { it is ShopifyMutation.FulfillmentCancel },
+          createdCount = effected.value.size,
+          skippedLines = 0,
+          skippedShipments = syncRequest.shipments.size -
+            determinedMutations.count { it is ShopifyMutation.FulfillmentCreate },
+        )
+
+        log.info {
+          formatSyncShipmentsLogLine(
+            shop.subdomainOnly,
+            syncRequest.shopifyOrderId,
+            stats,
+            effected.value,
+          )
+        }
+        call.respond(
+          SyncShipmentsWithFulfillmentsResponse(newFulfillmentIds = effected.value),
+        )
+      }
     }
-    call.respond(
-      SyncShipmentsWithFulfillmentsResponse(newFulfillmentIds = effected.newFulfillmentIds),
-    )
   }
 
   suspend fun handleTrackingUpdate(call: ApplicationCall) {
@@ -176,7 +184,10 @@ class MonolithWebhookHandlers(
     }
 
   /** Parses [rawShop] to a [ShopDomain], or responds 400 and returns `null`. */
-  private suspend fun ApplicationCall.normalizeShopOrRespond(rawShop: String): ShopDomain? =
+  private suspend fun ApplicationCall.normalizeShopOrRespond(rawShop: String)
+
+    : ShopDomain
+  ? =
     ShopDomain.parse(rawShop) ?: run {
       respondError(DssError.InvalidParameter("shopify_subdomain"))
       null
