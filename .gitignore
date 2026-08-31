@@ -3,11 +3,21 @@ build/
 out/
 .gradle/
 .kotlin/
+*.log
+.env
 
 /.idea/*
 !/.idea/dictionaries/
 /.idea/dictionaries/*
 !/.idea/dictionaries/project.xml
-.env
+!/.idea/runConfigurations/
+/.idea/runConfigurations/*
+!/.idea/runConfigurations/dss__*_.xml
+
+/.claude/*
+!/.claude/settings.local.json
+!/.claude/hooks
+!/.claude/rules
+
 
 
