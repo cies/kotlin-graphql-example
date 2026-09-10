@@ -6,6 +6,8 @@ import dropnext.dss.domain.ShopDomain.Companion.parse
 /** Subdomain part: letters, numbers, single hyphens; no leading/trailing dot/hyphen. */
 private val subdomainPartPattern = Regex("^[a-z0-9]([a-z0-9\\-]*[a-z0-9])?$")
 
+private const val MYSHOPIFY_SUFFIX = ".myshopify.com"
+
 /**
  * A canonical `*.myshopify.com` hostname.
  *
@@ -30,16 +32,18 @@ value class ShopDomain private constructor(val normalizedShopifyHost: String) {
      */
     fun parse(raw: String): ShopDomain? = normalise(raw)?.let(::ShopDomain)
 
+    /**
+     * Whatever precedes the suffix must be a valid subdomain on its own: `/install?shop=` feeds this
+     * into a redirect, and a browser reads `evil.com#.myshopify.com` as the host `evil.com`.
+     */
     private fun normalise(raw: String): String? {
       val hostOnly = raw.trim().lowercase()
         .removePrefix("https://")
         .removePrefix("http://")
         .substringBefore('/')
-      if (hostOnly.endsWith(".myshopify.com")) return hostOnly
-      if (!hostOnly.contains('.') && subdomainPartPattern.matches(hostOnly)) {
-        return "$hostOnly.myshopify.com"
-      }
-      return null
+      val subdomain = hostOnly.removeSuffix(MYSHOPIFY_SUFFIX)
+      if (!subdomainPartPattern.matches(subdomain)) return null
+      return "$subdomain$MYSHOPIFY_SUFFIX"
     }
   }
 }

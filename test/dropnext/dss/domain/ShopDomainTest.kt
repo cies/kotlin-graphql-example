@@ -60,6 +60,25 @@ class ShopDomainTest {
   }
 
   @Test
+  fun `returns null for a foreign host that merely ends in the myshopify suffix`() {
+    // Each of these would send an `/install` redirect to `evil.com`: the browser stops reading the
+    // host at `#`, `?` or `\`, so what follows the suffix check is not where it goes.
+    assert(ShopDomain.parse("evil.com#.myshopify.com") == null)
+    assert(ShopDomain.parse("evil.com?x=.myshopify.com") == null)
+    assert(ShopDomain.parse("evil.com\\.myshopify.com") == null)
+    assert(ShopDomain.parse("evil.com@acme.myshopify.com") == null)
+  }
+
+  @Test
+  fun `returns null for a nested or malformed subdomain on the myshopify suffix`() {
+    assert(ShopDomain.parse("a.b.myshopify.com") == null)
+    assert(ShopDomain.parse("-leading.myshopify.com") == null)
+    assert(ShopDomain.parse("trailing-.myshopify.com") == null)
+    assert(ShopDomain.parse(".myshopify.com") == null)
+    assert(ShopDomain.parse("acme.myshopify.com:443") == null)
+  }
+
+  @Test
   fun `lowercases uppercase short handle`() {
     assert(ShopDomain.parse("UPPER")?.normalizedShopifyHost == "upper.myshopify.com")
   }
