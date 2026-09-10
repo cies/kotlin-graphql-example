@@ -5,7 +5,7 @@ A stateless service that bridges retailer Shopify stores to the DropNext platfor
 * OAuth install flow,
 * catalog/order webhooks,
 * typed Admin Graphql calls, and
-* forwarding of order events to the [`dropnext-monolith`](../dropnext/dropnext-monolith).
+* forwarding of order events to the [`dropnext-monolith`](../dropnext-monolith).
 
 
 ### The stack
@@ -27,7 +27,7 @@ the producing error at runtime.
 Powerful and minimalistic (no reflection) lib for JSON. Used for both inbound Shopify payloads
 and outbound monolith DTOs.
 * [openapi-generator](https://github.com/OpenAPITools/openapi-generator) —
-Generates Kotlin DTOs from [`openapi.json`](./openapi.json) (the canonical `DSS <-> monolith` contract).
+Generates Kotlin DTOs from [`src/resources/monolith-dss-openapi.json`](./src/resources/monolith-dss-openapi.json) (the checked-in copy of the canonical `DSS <-> monolith` contract).
 Handwritten copies of those DTOs are explicitly forbidden by `ArchitectureTest`.
 * [Konsist](https://docs.konsist.lemonappdev.com/) —
 Kotlin-native architecture tests; enforces package-layer dependencies and the "no reflection" rule.
@@ -35,11 +35,12 @@ Kotlin-native architecture tests; enforces package-layer dependencies and the "n
 
 ### Project goals
 
-* Be a thin, stateless bridge between Shopify and the monolith — no in-memory session/token state.
+* Be a thin, stateless bridge between Shopify and the monolith — no database, no sessions; the only state is an
+  in-memory cache of per-shop Admin tokens that the monolith is the durable store for.
 * Discoverable and functional architecture (CTRL-click yourself to mastery).
 * Quick developer cycles (fast recompiles, few dependencies, no JVM reflection).
 * 12-factor principles (configuration by env vars).
-* Test with **fakes**, not mocks (see [docs/TESTING.md](docs/TESTING.md)).
+* Test with **fakes**, not mocks (see [`.claude/rules/tests.md`](.claude/rules/tests.md)).
 
 Non-goals:
 * Multi-tenant session storage — the platform boundary is responsible for idempotency and dedup.
@@ -52,23 +53,25 @@ All Kotlin lives under `src/dropnext/dss/` (we set `srcDir("src")` in Gradle to 
 
 | Package | Role |
 | ------- | ---- |
-| [`app.kt`](src/dropnext/dss/app.kt) | `main` — reads config, builds the dependency graph, starts Ktor. |
+| [`app.kt`](src/dropnext/dss/app.kt) | `main` — reads config (env plus a local `.env`), builds the dependency graph, starts Ktor. |
+| [`dssModule.kt`](src/dropnext/dss/dssModule.kt) | The one composition root: plugins and every route family; `main` and the request → response tests both install it. |
 | [`dependencies.kt`](src/dropnext/dss/dependencies.kt) | Assembles `DssDependencies` (HTTP clients, services, handlers); tests override per-collaborator. |
-| [`config/`](src/dropnext/dss/config) | Flat env-var parsing in top-level `Config`, plus stateless token map helpers. |
-| [`path/`](src/dropnext/dss/path) | URL path constants — `Paths` (inbound), `OutBoundMonolithPaths`, `OutBoundShopifyPaths`. Single source of truth. |
-| [`shopify/`](src/dropnext/dss/shopify) | Shopify-domain mappers (`ProductMapper`, `MoneyMinorUnits`). |
-| [`domain/`](src/dropnext/dss/domain) | Internal value objects shared across layers (e.g. `MonolithPersistOutcome`). |
-| [`workflow/`](src/dropnext/dss/workflow) | Multi-step orchestration that doesn't touch HTTP types directly (e.g. webhook → load order → map → post to monolith). |
-| [`handler/`](src/dropnext/dss/handler) | Ktor handlers — `ApplicationCall → response`. Where validation, auth, and transport concerns live. |
-| [`routing/`](src/dropnext/dss/routing) | Thin Ktor route bindings — one `Route.install*Routes(handlers)` function per handler family. |
-| [`presentation/`](src/dropnext/dss/presentation) | Pure view layer — data in, HTML out. No Ktor/HTTP types. |
-| [`lib/shopify/`](src/dropnext/dss/lib/shopify) | Shopify protocol primitives: `ShopDomain`, GID helpers, `ShopifyOAuthService`, `ShopifyHmacVerifierService`, `ShopifyGraphqlService` + fulfillment helpers + webhook id/topic parsers. |
-| [`lib/monolith/`](src/dropnext/dss/lib/monolith) | Outbound monolith client: `MonolithService` interface, `HttpMonolithService` impl, error body parsing, structured logging, `ShopAccessTokenCache`, `ShopifyGraphqlServiceFactory` (Admin-token resolution). |
+| [`config/`](src/dropnext/dss/config) | `Config.from(env)`: every env var read once, secrets wrapped; plus the `.env` reader. |
+| [`path/`](src/dropnext/dss/path) | URL path constants — `Paths` (inbound), `OutBoundMonolithPaths` (generated), `OutBoundShopifyOAuthPaths`. Single source of truth. |
+| [`domain/`](src/dropnext/dss/domain) | The vocabulary every layer shares and that depends on nothing: `ShopDomain`, ids and secrets as value classes, the install report; `fulfillment/` holds the pure shipment ↔ fulfillment-order matcher and request validation. |
+| [`mapper/`](src/dropnext/dss/mapper) | Shopify snapshot → monolith contract DTO (order, product, money). |
+| [`workflow/`](src/dropnext/dss/workflow) | Multi-step orchestration that doesn't touch HTTP types directly: shop install, order/product sync, shipment ↔ fulfillment sync, tracking events, webhook registration. |
+| [`handler/`](src/dropnext/dss/handler) | Ktor handlers — `ApplicationCall → response`: decode, validate, resolve the shop, call a workflow, map its answer. |
+| [`routing/`](src/dropnext/dss/routing) | Thin Ktor route bindings — one `Route.*Routes(handlers)` function per handler family. |
+| [`presentation/`](src/dropnext/dss/presentation) | Pure view layer — a report in, HTML out. No Ktor/HTTP types. |
+| [`lib/shopify/`](src/dropnext/dss/lib/shopify) | Shopify protocol primitives: GID helpers, `ShopifyOAuthService`, `ShopifyHmacVerifierService`, `ShopifyGraphqlService` (typed results) + its factory, the `ShopTokenStore`, webhook shop/id/topic parsers. |
+| [`lib/monolith/`](src/dropnext/dss/lib/monolith) | Outbound monolith client: `MonolithService` interface answering `MonolithResult`, `HttpMonolithService` impl, error body parsing, structured failure logging. |
 | [`lib/json/`](src/dropnext/dss/lib/json) | Shared `kotlinx.serialization` configs: `AppJson` (inbound) and `MonolithJson` (outbound). |
-| [`lib/ktor/`](src/dropnext/dss/lib/ktor) | Ktor server extensions: trace-id MDC interceptor, error helpers, shared HTTP client builders, monolith-webhook auth plugin. |
+| [`lib/crypto/`](src/dropnext/dss/lib/crypto), [`lib/logging/`](src/dropnext/dss/lib/logging) | The one HMAC-SHA256 and constant-time compare; the MDC trace-id key. |
+| [`lib/ktor/`](src/dropnext/dss/lib/ktor) | Ktor server glue: one `install*` function per plugin (`CallId` for the trace id, `CallLogging` with `callIdMdc`, `StatusPages`, JSON, `RequestValidation`, the `bearer` auth for the monolith), `DssError` helpers, shared HTTP client builders. |
 | `src/resources/` | `.graphql` queries (compile-time-typed by the Gradle plugin), `logback.xml`. |
 | `src/graphql-schema/` | Committed Shopify Admin schema (regenerated via `./gradlew graphqlIntrospectSchema`). |
-| [`openapi.json`](openapi.json) | Canonical DSS ↔ monolith contract. DTOs under `dropnext.dss.lib.dto` are **generated** from this by `openApiGenerate`. |
+| [`src/resources/monolith-dss-openapi.json`](src/resources/monolith-dss-openapi.json) | Checked-in copy of the canonical DSS ↔ monolith contract (the monolith serves it at `/openapi.json`). DTOs under `dropnext.dss.contract` and `OutBoundMonolithPaths` are **generated** from this. |
 
 
 ### Our preferred IDE
@@ -78,7 +81,7 @@ See [docs/setup-intellij-idea.md](./docs/setup-intellij-idea.md) for IntelliJ ID
 
 ### Running the project for development
 
-1. Copy `.env.example` to `.env` and fill in the required Shopify credentials.
+1. Copy `.env.example` to `.env` and fill in the required Shopify credentials (the app reads `.env` itself, layered over the process environment).
 2. Expose the server with HTTPS (e.g. [ngrok](https://ngrok.com/)) and set `DSS_BASE_URL` to that origin (no trailing slash). Shopify requires HTTPS for OAuth and webhook callbacks.
 3. Run the app:
 
@@ -112,7 +115,7 @@ The project targets Admin API **`2026-04`**. Keep these in sync when changing ve
 
 * `graphql.client.endpoint` in `build.gradle.kts`
 * `graphql.config.yml` (IDE plugin URL, if present)
-* `SHOPIFY_API_VERSION` env var (default in `ShopifyConfig.kt`)
+* `SHOPIFY_API_VERSION` env var (default in `Config.kt`)
 
 After bumping the version, run `./gradlew graphqlIntrospectSchema graphqlGenerateClient` and fix any schema drift.
 
@@ -120,20 +123,20 @@ The schema is committed at `src/graphql-schema/schema.graphql` (so the IDE plugi
 
 #### OpenAPI (monolith DTOs)
 
-Monolith request/response bodies are **generated** from [`openapi.json`](openapi.json)
-(OpenAPI 3.0, spec validation enabled in Gradle).
-Inbound DSS webhook contracts live under `x-webhooks` in the spec (3.0 has no root `webhooks` key).
+Monolith request/response bodies are **generated** from [`src/resources/monolith-dss-openapi.json`](src/resources/monolith-dss-openapi.json)
+(OpenAPI 3.0, spec validation enabled in Gradle). The same spec describes both directions: the monolith
+endpoints DSS calls and the DSS endpoints the monolith calls.
 
 ```sh
 ./gradlew openApiGenerate
 ```
 
 * Generator: `kotlin` + `jvm-ktor`
-* Output: `build/generated/openapi/.../dropnext/dss/lib/dto/` (`modelPackage = "dropnext.dss.lib.dto"` in `build.gradle.kts`)
+* Output: `build/generated/openapi/.../dropnext/dss/contract/` (`modelPackage` is derived from `monolithContractGeneratedDtoPath` in `build.gradle.kts`)
 * Policy: **Models only** (`apis=false`) — HTTP stays in handwritten `HttpMonolithService`
 
 Do not add handwritten copies of `CreateShopifyOrderRequest` or other spec DTOs.
-If codegen fails, fix the schema in `openapi.json`, then re-run `openApiGenerate` (or any compile task).
+If codegen fails, fix the schema in `src/resources/monolith-dss-openapi.json` (and in the monolith that serves it), then re-run `openApiGenerate` (or any compile task).
 
 
 ### The JetBrains [Graphql IDE plugin](https://plugins.jetbrains.com/plugin/8097-graphql)
@@ -174,19 +177,18 @@ Subscriptions all use the same HTTPS callback: `{DSS_BASE_URL}/webhooks/shopify`
 * `PRODUCTS_CREATE`, `PRODUCTS_UPDATE`, `PRODUCTS_DELETE`
 * `ORDERS_CREATE`, `ORDERS_UPDATED`
 
-On `products/create` and `products/update`, the app parses the webhook body for the resource id and runs `GetProductById`. On `orders/create`, if `MONOLITH_BASE_URL` is set, it runs `GetOrderForDss` and POSTs to the monolith. On `orders/updated`, the webhook is acknowledged but not mirrored to monolith.
+On `products/create` and `products/update`, the app parses the webhook body for the resource id and runs `GetProductById`. On `orders/create`, it runs `GetOrderForDss` and POSTs to the monolith. On `orders/updated`, the webhook is acknowledged but not mirrored to monolith.
 
-**Shop domain:** webhooks use `X-Shopify-Shop-Domain` (forward this header through your reverse proxy). DSS logs include a per-request `trace_id` (Logback MDC) and may return `X-Trace-Id` on responses. Monolith error JSON may include a separate `monolith_trace_id` in WARN logs.
+**Shop domain:** webhooks use `X-Shopify-Shop-Domain` (forward this header through your reverse proxy). DSS logs include a per-request `trace_id` (Ktor's `CallId` plugin, put in the Logback MDC by `CallLogging` and kept across coroutine suspensions); a caller's `X-Request-Id` or `X-Trace-Id` is adopted, every response carries it as `X-Trace-Id`, and every call to the monolith forwards it as `X-Trace-Id`. A monolith error body carries the monolith's own trace id, logged as `monolith_trace_id`.
 
 
 ### DSS internal REST
 
-OpenAPI (human-readable mirror): [`docs/openapi/dss-api.yaml`](docs/openapi/dss-api.yaml).
-**Canonical:** [`openapi.json`](openapi.json) at repo root (Gradle `openApiGenerate` uses it).
+**Canonical:** the spec the monolith serves at `/openapi.json`, checked in here as [`src/resources/monolith-dss-openapi.json`](src/resources/monolith-dss-openapi.json) (Gradle `openApiGenerate` uses it).
 
 * `POST /sync-shipments-with-fulfillments` — accepts `SyncShipmentsWithFulfillmentsRequest` (sync DropNext shipments ↔ Shopify fulfillments).
 * `POST /tracking-update` — accepts `TrackingUpdateRequest` (tracking status → Shopify FulfillmentEvent).
-* `PUT /stores/api-key` — accepts `PutShopAccessTokenRequest`; caches the Shopify Admin token in memory and forwards it to the monolith when `MONOLITH_BASE_URL` is set.
+* `PUT /stores/api-key` — accepts `UpdateStoreApiKeyRequest`; caches the Shopify Admin token in memory and forwards it to the monolith.
 
 The per-shop Admin token is resolved server-side via the in-memory cache (filled by OAuth, `DSS_SHOP_ACCESS_TOKENS`, or `PUT /stores/api-key`) with a fallback to monolith `GET /stores`. These routes require `Authorization: Bearer <DSS_API_KEY>`.
 
@@ -214,13 +216,16 @@ Unhandled server errors return a generic message; details stay in server logs on
 | `OAUTH_REDIRECT_PATH` | no | Default `/oauth/callback` (must match Partner redirect URL) |
 | `SHOPIFY_API_VERSION` | no | Default `2026-04` (keep in sync with `build.gradle.kts` / `graphql.config.yml`) |
 | `PORT` | no | Default `8080` |
-| `DSS_SHOP_ACCESS_TOKENS` | no | Comma-separated `shop.myshopify.com\|shpat_…` pairs for stateless token lookup (see `ShopAccessTokensEnv.kt`) |
-| `MONOLITH_BASE_URL` | no | **REST root URL** DSS appends segments to (`/orders`, `/stores`, `/stores/api-key`, `/product-variants`). May include a path prefix, e.g. `https://staging.dropnext.com/api/shopify-service/v1` (no trailing slash). Leave `MONOLITH_API_PREFIX` empty when the full prefix is already in this value. |
+| `DSS_SHOP_ACCESS_TOKENS` | no | Comma-separated `shop.myshopify.com\|shpat_…` pairs seeding the in-memory token store (parsed in `Config.kt`) |
+| `MONOLITH_BASE_URL` | yes | **REST root URL** DSS appends segments to (`/orders`, `/stores`, `/stores/api-key`, `/product-variants`). May include a path prefix, e.g. `https://staging.dropnext.com/api/shopify-service/v1` (no trailing slash). Leave `MONOLITH_API_PREFIX` empty when the full prefix is already in this value. |
 | `MONOLITH_API_PREFIX` | no | Inserted **after** base: `{BASE}/{PREFIX}/stores/api-key`. Example env `MONOLITH_API_PREFIX=api/v1`. Omit slashes at edges; empty (default) uses paths directly under base. |
 | `MONOLITH_API_KEY` | no | Optional Bearer token for monolith requests (`Authorization`). |
-| `MONOLITH_CREATE_ORDER_PATH` | no | Default `/orders` (relative URL segment after `{BASE}` and prefix) |
 | `DSS_API_KEY` | yes | Secret used for DSS internal REST auth (`Authorization: Bearer ...`). |
 | `DSS_ALLOW_INSECURE_MONOLITH` | no | Set `true` only for local dev so `MONOLITH_BASE_URL` may use `http://`. Production should use `https://` (default: insecure URLs are rejected at startup). |
+| `LOGFLARE_SOURCE_NAME` | no | Logflare source to ship logs to, e.g. `dropnext.dss` (the monolith ships to `dropnext.app`). Created through the API when it does not exist yet. Shipping needs this **and** `LOGFLARE_API_KEY`; with either missing the service logs to stdout only. |
+| `LOGFLARE_API_KEY` | no | Logflare account key. Lives in AWS Secrets Manager (`dropnext/<env>/dss`), never in a repo. |
+| `LOGFLARE_ENDPOINT` | no | Default `https://api.logflare.app`. Point it at a local stub to try shipping without an account. |
+| `DSS_MODE` | no | `DEV` or `PROD` (default), the same switch as the monolith's `MONOLITH_MODE`. `DEV` logs one line per HTTP request (method, path, status — never the query string); useful while working on a webhook locally. |
 
 Legacy compatibility: `SHOPIFY_API_KEY` and `SHOPIFY_API_SECRET` are still accepted as fallbacks when the new `SHOPIFY_APP_CLIENT_ID` / `SHOPIFY_APP_CLIENT_SECRET` vars are not set.
 
@@ -229,7 +234,7 @@ Legacy compatibility: `SHOPIFY_API_KEY` and `SHOPIFY_API_SECRET` are still accep
 
 * **Startup exits quickly**: verify required vars `SHOPIFY_APP_CLIENT_ID` and `SHOPIFY_APP_CLIENT_SECRET` (or legacy `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET`), plus `SHOPIFY_SCOPES` and `DSS_BASE_URL`.
 * **OAuth callback mismatch in Shopify**: ensure `{DSS_BASE_URL}{OAUTH_REDIRECT_PATH}` exactly matches the Partner Dashboard redirect URL.
-* **DSS auth failures (`401`)**: ensure a Shopify Admin token is resolvable for the shop — seed `DSS_SHOP_ACCESS_TOKENS`, complete OAuth, or `PUT /stores/api-key`; include `Authorization: Bearer <DSS_API_KEY>` on DSS internal REST requests.
+* **DSS auth failures (`401`)**: a bare `401` with a `WWW-Authenticate: Bearer` header means the `Authorization: Bearer <DSS_API_KEY>` header was missing or wrong; a `401` with a JSON body means no Shopify Admin token is resolvable for the shop — seed `DSS_SHOP_ACCESS_TOKENS`, complete OAuth, or `PUT /stores/api-key`.
 * **`DSS_SHOP_ACCESS_TOKENS` parse issues**: use comma-separated `shop.myshopify.com|shpat_...` pairs.
 * **`[monolith] MONOLITH_BASE_URL is unset` despite being configured**: duplicate `MONOLITH_BASE_URL` / `MONOLITH_API_KEY` lines (often empty trailing blocks pasted from templates) cause **last value wins**. Remove the trailing empties so only one assignment remains; redeploy/restart.
 * **`Monolith store api-key … status=404` with HTML `<h1>Not Found`**: DSS hit `{MONOLITH_BASE_URL}/stores/api-key` (before optional prefix). Use the REST API domain (often `api.…`), or set `MONOLITH_API_PREFIX` if routes live under a path (`api/v1`). Confirm with `curl -i -X PUT https://your-api…/stores/api-key` (+ Bearer header) outside DSS.

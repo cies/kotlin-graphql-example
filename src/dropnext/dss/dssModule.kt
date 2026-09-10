@@ -1,0 +1,48 @@
+package dropnext.dss
+
+import dropnext.dss.config.DssMode
+import dropnext.dss.lib.ktor.installCallId
+import dropnext.dss.lib.ktor.installCallLogging
+import dropnext.dss.lib.ktor.installJsonContentNegotiation
+import dropnext.dss.lib.ktor.installMonolithWebhookAuth
+import dropnext.dss.lib.ktor.installRequestValidation
+import dropnext.dss.lib.ktor.installStatusPages
+import dropnext.dss.path.Paths
+import dropnext.dss.routing.diagnosticsRoutes
+import dropnext.dss.routing.monolithWebhookRoutes
+import dropnext.dss.routing.oauthRoutes
+import dropnext.dss.routing.shopifyWebhookRoutes
+import io.ktor.server.application.Application
+import io.ktor.server.application.ApplicationStopped
+import io.ktor.server.routing.routing
+
+
+/**
+ * The whole Ktor application: plugins, then every route family.
+ *
+ * The one-composition root, so a request → response test under
+ * `testApplication { application { dssModule(deps) } }`
+ * runs the exact stack production runs (same auth guard, same error shaping, same trace ids).
+ */
+fun Application.dssModule(deps: DssDependencies) {
+  // The graph's HTTP clients live as long as the application: `main`'s server stop and `testApplication`'s
+  // teardown both end here.
+  monitor.subscribe(ApplicationStopped) { deps.close() }
+
+  installCallId()
+  installCallLogging(enabled = deps.config.mode == DssMode.DEV)
+  installStatusPages(plainTextErrorPaths = setOf(Paths.install, deps.config.oauthRedirectPath))
+  installJsonContentNegotiation()
+  installRequestValidation()
+  installMonolithWebhookAuth(deps.config.dssApiKey)
+
+  routing {
+    diagnosticsRoutes(handlers = deps.diagnosticsHandlers)
+    oauthRoutes(
+      handlers = deps.oauthHandlers,
+      oauthCallbackPath = deps.config.oauthRedirectPath,
+    )
+    shopifyWebhookRoutes(handlers = deps.shopifyWebhookHandlers)
+    monolithWebhookRoutes(handlers = deps.monolithWebhookHandlers)
+  }
+}

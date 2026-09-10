@@ -1,7 +1,6 @@
 package dropnext.dss
 
 import dropnext.dss.config.Config
-import dropnext.dss.config.shopAccessTokensFromEnv
 import dropnext.dss.handler.DiagnosticsHandlers
 import dropnext.dss.handler.MonolithWebhookHandlers
 import dropnext.dss.handler.OAuthHandlers
@@ -9,13 +8,14 @@ import dropnext.dss.handler.ShopifyWebhookHandlers
 import dropnext.dss.lib.ktor.createMonolithHttpClient
 import dropnext.dss.lib.ktor.createSharedHttpClient
 import dropnext.dss.lib.monolith.HttpMonolithService
-import dropnext.dss.lib.monolith.HttpShopifyGraphqlServiceFactory
 import dropnext.dss.lib.monolith.MonolithService
-import dropnext.dss.lib.monolith.OutBoundMonolithPaths
-import dropnext.dss.lib.monolith.ShopAccessTokenCache
-import dropnext.dss.lib.monolith.ShopifyGraphqlServiceFactory
+import dropnext.dss.lib.shopify.graphql.HttpShopifyGraphqlServiceFactory
+import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlServiceFactory
 import dropnext.dss.lib.shopify.oauth.ShopifyOAuthService
+import dropnext.dss.lib.shopify.token.InMemoryShopTokenStore
+import dropnext.dss.lib.shopify.token.ShopTokenStore
 import dropnext.dss.lib.shopify.webhook.ShopifyHmacVerifierService
+import dropnext.dss.workflow.resolveShopTokenFromMonolith
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.client.HttpClient
 
@@ -23,23 +23,23 @@ import io.ktor.client.HttpClient
 private val log = KotlinLogging.logger {}
 
 /**
- * Every collaborator the running app needs, wired once. [main][dropnext.dss.main] passes this graph
- * into the Ktor `embeddedServer` block. Tests assemble the same shape (with fakes substituted via
- * the optional [dssDependencies] parameters) so the routing wired in production runs unchanged
- * under `testApplication`.
+ * Every collaborator the running app needs, wired once.
+ *
+ * [dssModule] installs the handlers into a Ktor application and closes the graph when the application stops;
+ * [main] and the tests both go through it, so the routing under test is the routing in production.
+ * Tests assemble the same shape with fakes substituted via the optional [dssDependencies] parameters.
  */
-data class DssDependencies(
+class DssDependencies(
   val config: Config,
-  val httpClient: HttpClient,
-  val monolithHttpClient: HttpClient,
-  val monolithService: MonolithService,
+  private val httpClient: HttpClient,
+  private val monolithHttpClient: HttpClient,
   val diagnosticsHandlers: DiagnosticsHandlers,
   val oauthHandlers: OAuthHandlers,
   val shopifyWebhookHandlers: ShopifyWebhookHandlers,
   val monolithWebhookHandlers: MonolithWebhookHandlers,
-) {
+) : AutoCloseable {
   /** Closes both HTTP clients with [runCatching] so a single failure doesn't skip the others. */
-  fun close() {
+  override fun close() {
     runCatching { httpClient.close() }
       .onFailure { log.warn(it) { "[shutdown] httpClient.close threw" } }
     runCatching { monolithHttpClient.close() }
@@ -57,10 +57,10 @@ data class DssDependencies(
  * Example test setup:
  * ```
  * val deps = dssDependencies(
- *   testConfig,
+ *   testConfig(),
  *   httpClient = rewritingClient,
  *   monolithService = FakeMonolithService(),
- *   shopTokens = ShopAccessTokenCache(mapOf(shop to "shpat_test")),
+ *   shopTokens = InMemoryShopTokenStore(mapOf(shop to ShopifyAdminToken("shpat_test"))),
  * )
  * val handler = deps.shopifyWebhookHandlers
  * ```
@@ -69,28 +69,32 @@ fun dssDependencies(
   config: Config,
   httpClient: HttpClient = createSharedHttpClient(),
   monolithHttpClient: HttpClient = createMonolithHttpClient(httpClient),
-  shopTokens: ShopAccessTokenCache =
-    ShopAccessTokenCache(shopAccessTokensFromEnv()),
   monolithService: MonolithService = HttpMonolithService(
     httpClient = monolithHttpClient,
     baseUrl = config.monolithBaseUrl,
     apiPathPrefix = config.monolithApiPrefix,
     apiKey = config.monolithApiKey,
-    createOrderPath = OutBoundMonolithPaths.orders,
   ),
+  shopTokens: ShopTokenStore = InMemoryShopTokenStore(config.shopAccessTokens) { shop ->
+    resolveShopTokenFromMonolith(monolithService, shop)
+  },
   shopifyGraphqlServiceFactory: ShopifyGraphqlServiceFactory = HttpShopifyGraphqlServiceFactory(
     httpClient = httpClient,
     tokens = shopTokens,
-    monolith = monolithService,
     apiVersion = config.apiVersion,
   ),
-  oauthClient: ShopifyOAuthService = ShopifyOAuthService(httpClient, config),
+  oauthClient: ShopifyOAuthService = ShopifyOAuthService(
+    httpClient = httpClient,
+    clientId = config.appClientId,
+    clientSecret = config.appClientSecret,
+    scopes = config.scopes,
+    redirectUrl = config.redirectUrl,
+  ),
   shopifyHmacVerifierService: ShopifyHmacVerifierService = ShopifyHmacVerifierService(config.appClientSecret),
 ): DssDependencies = DssDependencies(
   config = config,
   httpClient = httpClient,
   monolithHttpClient = monolithHttpClient,
-  monolithService = monolithService,
   diagnosticsHandlers = DiagnosticsHandlers(config, shopTokens),
   oauthHandlers = OAuthHandlers(
     config.dssBaseUrl,
@@ -103,11 +107,11 @@ fun dssDependencies(
   shopifyWebhookHandlers = ShopifyWebhookHandlers(
     shopifyGraphqlServiceFactory,
     monolithService,
-    shopifyHmacVerifierService
+    shopifyHmacVerifierService,
   ),
   monolithWebhookHandlers = MonolithWebhookHandlers(
     shopifyGraphqlServiceFactory,
     monolithService,
-    shopTokens
+    shopTokens,
   ),
 )

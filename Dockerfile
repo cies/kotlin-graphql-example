@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile:1.7
 #
-# Multi-stage build for the dropnext-shopify-service (DSS).
-# Targets linux/arm64 (AWS Graviton). Build with:
+# Multi-stage build for the dropnext-shopify-service (DSS). Multi-arch: amd64 (what we deploy today) and arm64 both work.
+# `dnc -e <env> deploy` builds and pushes it (default `--arch amd64`); to build by hand:
 #
-#   docker buildx build --platform linux/arm64 \
+#   docker buildx build --platform linux/amd64 \
 #     --build-arg VERSION_TAG=$(git rev-parse --short HEAD) \
 #     -t dropnext-shopify-service:$(git rev-parse --short HEAD) \
 #     --load .

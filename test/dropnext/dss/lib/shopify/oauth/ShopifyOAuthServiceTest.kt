@@ -1,35 +1,40 @@
 package dropnext.dss.lib.shopify.oauth
 
-import dropnext.dss.config.Config
-import dropnext.dss.lib.shopify.ShopDomain
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
+import dev.forkhandles.result4k.Failure
+import dev.forkhandles.result4k.Success
+import dropnext.dss.domain.ShopDomain
+import dropnext.dss.domain.ShopifyAdminToken
+import dropnext.dss.domain.ShopifyAppSecret
+import dropnext.dss.lib.json.AppJson
+import dropnext.dss.lib.shopify.graphql.ShopifyError
+import dropnext.dss.testutil.fake.FakeShopifyGraphqlServer
+import dropnext.dss.testutil.helper.shopifyRewritingHttpClient
+import dropnext.dss.testutil.helper.testHttpClient
+import io.ktor.http.HttpStatusCode
 import java.time.Instant
 import kotlin.test.Test
+import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 
-private val testConfig = Config(
-  appClientId = "client-id-123",
-  appClientSecret = "client-secret-xyz",
-  scopes = "read_orders,write_products",
-  dssBaseUrl = "https://dss.example.com",
-  oauthRedirectPath = "/oauth/callback",
-  apiVersion = "2026-04",
-  serverPort = 8080,
-  monolithBaseUrl = "https://monolith.example.com",
-  monolithApiPrefix = null,
-  monolithApiKey = null,
-  allowInsecureMonolithUrl = false,
-  monolithWebhookAuthSecret = "x".repeat(32),
-)
 
 private val shop = ShopDomain.parse("acme.myshopify.com")!!
 private val now = Instant.parse("2026-05-22T12:00:00Z")
 
 class ShopifyOAuthServiceTest {
 
-  private val httpClient = HttpClient(OkHttp)
-  private val client = ShopifyOAuthService(httpClient, testConfig)
+  // Never used: every case here signs or builds a URL, none of them reaches the network.
+  private val httpClient = testHttpClient()
+  private val client = oauthService(secret = "client-secret-xyz")
+
+  private fun oauthService(secret: String) = ShopifyOAuthService(
+    httpClient = httpClient,
+    clientId = "client-id-123",
+    clientSecret = ShopifyAppSecret(secret),
+    scopes = "read_orders,write_products",
+    redirectUrl = "https://dss.example.com/oauth/callback",
+  )
 
   // ---------- authorizeUrl ----------
 
@@ -79,8 +84,7 @@ class ShopifyOAuthServiceTest {
   @Test
   fun `signedState rejects wrong secret`() {
     val state = client.signedState(shop, now)
-    val otherConfig = testConfig.copy(appClientSecret = "different-secret")
-    val otherClient = ShopifyOAuthService(httpClient, otherConfig)
+    val otherClient = oauthService(secret = "different-secret")
     assert(!otherClient.isSignedStateValid(state, shop, now))
   }
 
@@ -120,4 +124,58 @@ class ShopifyOAuthServiceTest {
     val b = client.signedState(shop, now)
     assert(a != b)
   }
+
+  // ---------- exchangeCode, against a fake Shopify ----------
+
+  @Test
+  fun `exchangeCode posts the app credentials with the code and answers the token`() = withFakeShopify { server, service ->
+    val result = service.exchangeCode(shop, "abc-code")
+
+    assert(result == Success(ShopifyAdminToken("shpat_fake_admin_token")))
+    val sent = AppJson.parseToJsonElement(server.oauthCalls.single()).jsonObject
+    assert(sent["client_id"]?.jsonPrimitive?.content == "client-id-123")
+    assert(sent["client_secret"]?.jsonPrimitive?.content == "client-secret-xyz")
+    assert(sent["code"]?.jsonPrimitive?.content == "abc-code")
+  }
+
+  @Test
+  fun `exchangeCode answers a Network failure when Shopify refuses the code`() = withFakeShopify { server, service ->
+    server.oauthStatus = HttpStatusCode.BadRequest
+    server.oauthAccessTokenResponse = """{"error":"invalid_request","error_description":"code was already used"}"""
+
+    val result = service.exchangeCode(shop, "used-code")
+
+    assert(result is Failure)
+    assert((result as Failure).reason is ShopifyError.Network)
+  }
+
+  @Test
+  fun `exchangeCode answers a Network failure when the token response is not JSON`() = withFakeShopify { server, service ->
+    server.oauthAccessTokenResponse = "<html>maintenance</html>"
+
+    val result = service.exchangeCode(shop, "abc-code")
+
+    assert((result as Failure).reason is ShopifyError.Network)
+    assert("client-secret-xyz" !in result.reason.message)
+  }
+
+  /** A fake Shopify serving the token exchange, reached through the rewriting client so the service keeps its real URL. */
+  private fun withFakeShopify(block: suspend (FakeShopifyGraphqlServer, ShopifyOAuthService) -> Unit) {
+    val server = FakeShopifyGraphqlServer()
+    val rewritingClient = shopifyRewritingHttpClient(server.start())
+    try {
+      val service = ShopifyOAuthService(
+        httpClient = rewritingClient,
+        clientId = "client-id-123",
+        clientSecret = ShopifyAppSecret("client-secret-xyz"),
+        scopes = "read_orders,write_products",
+        redirectUrl = "https://dss.example.com/oauth/callback",
+      )
+      runBlocking { block(server, service) }
+    } finally {
+      rewritingClient.close()
+      server.stop()
+    }
+  }
 }
+

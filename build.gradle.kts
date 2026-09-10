@@ -23,7 +23,7 @@ plugins {
   alias(libs.plugins.openapiGenerator)
 
   // Code coverage reports; JaCoCo's Java agent instruments bytecode at test runtime only (no production deps).
-  // Run `./gradlew jacocoTestReport`; output lands in `build/reports/jacoco/test/`.
+  // Opt-in: run `./gradlew jacocoTestReport -Pcoverage`; output lands in `build/reports/jacoco/test/`.
   jacoco
 
   application
@@ -44,6 +44,13 @@ kotlin {
 
 application {
   mainClass.set("dropnext.dss.AppKt")
+
+  // The JVM runs in UTC, everywhere: some libraries read the default timezone when converting
+  // between time formats, and a host-dependent default is a bug that only shows up in one
+  // environment. It also fixes the timezone of the `%d` in `logback.xml`, so a developer's log
+  // line and a Fargate log line are read the same way. Baked into the start script the
+  // `application` plugin generates, which is what the Dockerfile's ENTRYPOINT runs.
+  applicationDefaultJvmArgs = listOf("-Duser.timezone=UTC")
 }
 
 repositories {
@@ -63,6 +70,10 @@ sourceSets {
     kotlin {
       srcDir("test")
     }
+    // Without this the test resources default to `src/test/resources` (which does not exist), and
+    // anything dropped in `test/resources/` — a fixture, a `junit-platform.properties` — never
+    // reaches the classpath, silently.
+    resources.srcDirs("test/resources")
   }
 }
 
@@ -125,10 +136,40 @@ tasks {
   withType<Test> {
     useJUnitPlatform()
 
+    // JaCoCo attaches its agent to every `Test` task by default, so a plain `./gradlew test` paid
+    // on-the-fly instrumentation — the generated Graphql client, Konsist's embedded compiler — to
+    // write an exec file nothing then read. Coverage is opt-in:
+    //   ./gradlew jacocoTestReport -Pcoverage
+    val coverageRequested = providers.gradleProperty("coverage").isPresent
+    extensions.configure<JacocoTaskExtension> { isEnabled = coverageRequested }
+    if (coverageRequested) {
+      // Gradle does not track a task's extension state as an input, so the run that turns coverage
+      // on is exactly the run that would be skipped as up-to-date — leaving the report no exec data.
+      outputs.upToDateWhen { false }
+    }
+
+    // One fork at a time — avoids OOM when many integration tests spin up Ktor/HTTP fakes.
+    maxParallelForks = 1
+
+    // The HTML report is megabytes of small files per run for something a human opens rarely. The
+    // XML always stays: the IDEs read it, and so does anything that inspects timings after a run.
+    //   ./gradlew test -Ptest.htmlReport
+    reports.html.required.set(providers.gradleProperty("test.htmlReport").isPresent)
+
     jvmArgs(
-      "-XX:MaxMetaspaceSize=512m",
+      // The same UTC default `applicationDefaultJvmArgs` gives the application: without it the test
+      // JVM would run in the host's timezone and only agree with production by luck.
+      "-Duser.timezone=UTC",
+
       "-Xms512m",
-      "-Xmx2g",
+      "-Xmx768m",
+      "-XX:MaxMetaspaceSize=256m",
+
+      // Konsist's bundled `kotlin-compiler-embeddable` (2.0.21, not our 2.3.21) calls
+      // `sun.misc.Unsafe::objectFieldOffset`, which JDK 25 terminally deprecated: four WARNING lines
+      // per test run, from a dependency we do not control. Remove once Konsist ships a compiler that
+      // no longer calls it — drop this line, and if `./gradlew test` stays quiet it is no longer needed.
+      "--sun-misc-unsafe-memory-access=allow",
     )
   }
 
@@ -151,12 +192,15 @@ dependencies {
   implementation(libs.ktorServerStatusPages)
   implementation(libs.ktorServerContentNegotiation)
   implementation(libs.ktorServerCallLogging)
+  implementation(libs.ktorServerCallId)           // `CallId` + `callIdMdc`: the per-request trace id, in the MDC across suspensions
+  implementation(libs.ktorServerRequestValidation) // Runs the domain validators on decoded bodies; failures become 400s in `StatusPages`
   implementation(libs.ktorServerAuth)
+  implementation(libs.ktorClientCallId)           // Forwards the trace id to the monolith as `X-Trace-Id`
 
   // HTML rendering for the OAuth install success page (no reflection).
   implementation(libs.kotlinxHtml)
 
-  // Typed Result used by determineShopifyMutations / calculateShopifyMutations (kotlin-stdlib only).
+  // Typed Result: every outbound call (Shopify, monolith) answers `Result<T, Error>` (kotlin-stdlib only).
   implementation(libs.result4k)
 
   // Logging
@@ -183,23 +227,37 @@ powerAssert {
 }
 
 jacoco {
-  toolVersion = "0.8.14"
+  toolVersion = libs.versions.jacocoVersion.get()
 }
 
+// Without `-Pcoverage` the agent never attached, so there is no exec data. `jacocoTestReport` cannot
+// say so itself: its `executionData` is `@SkipWhenEmpty`, so an empty run leaves the task SKIPPED and
+// the build green with no report and no explanation. This runs either way, and fails with the fix.
+val verifyCoverageRequested by tasks.registering {
+  description = "Fails when jacocoTestReport is asked for without -Pcoverage."
+
+  val coverageRequested = providers.gradleProperty("coverage").isPresent
+  doFirst {
+    require(coverageRequested) {
+      "No coverage data is collected by default. Run: ./gradlew jacocoTestReport -Pcoverage"
+    }
+  }
+}
+
+// Fail the missing-`-Pcoverage` case before paying for a full test run, not after it.
 tasks.test {
-  // One fork at a time — avoids OOM when many integration tests spin up Ktor/HTTP fakes.
-  maxParallelForks = 1
-  jvmArgs("-Xmx768m", "-XX:MaxMetaspaceSize=256m")
+  mustRunAfter(verifyCoverageRequested)
 }
 
-val monolithServiceGeneratedDtoPath = "dropnext/dss/lib/monolith/dto/generated"
+val monolithContractGeneratedDtoPath = "dropnext/dss/contract"
 val monolithPathsGeneratedDir = layout.buildDirectory.dir("generated/monolith-paths")
 val monolithPathsGeneratedFile =
   layout.buildDirectory.file("generated/monolith-paths/dropnext/dss/lib/monolith/OutBoundMonolithPaths.kt")
 
 tasks.named<JacocoReport>("jacocoTestReport") {
   // So `./gradlew jacocoTestReport` runs the tests too; otherwise it would silently report on stale exec data.
-  dependsOn(tasks.named("test"))
+  dependsOn(tasks.named("test"), verifyCoverageRequested)
+
   reports {
     html.required.set(true)
     xml.required.set(true) // Useful for any future CI integrations (Codecov, SonarQube, etc.).
@@ -210,19 +268,39 @@ tasks.named<JacocoReport>("jacocoTestReport") {
       classDirectories.files.map { dir ->
         fileTree(dir) {
           // Exclude generated OpenAPI DTOs (not authored by us).
-          exclude("$monolithServiceGeneratedDtoPath/**")
+          exclude("$monolithContractGeneratedDtoPath/**")
+
+          // Exclude the Graphql client `graphqlGenerateClient` emits from `src/resources/*.graphql`:
+          // thousands of `@Serializable` data holders, also not authored by us.
+          exclude("dropnext/graphql/**")
+
+          // Exclude the path constants `generateOutBoundMonolithPaths` emits. Generated, and every
+          // `const val` in them is inlined at the call site, so the object itself is never loaded —
+          // it would report as wholly uncovered while saying nothing about what is tested.
+          exclude("dropnext/dss/lib/monolith/OutBoundMonolithPaths*")
+
+          // Exclude the application bootstrap (main, shutdown hook, config summary): not unit-testable.
+          exclude("dropnext/dss/AppKt*")
         }
       }
     )
   )
 }
 
+// The committed schema: what the generated client compiles against, and what the IDE's Graphql
+// plugin reads. Refreshed by `graphqlIntrospectSchema` below, never as part of a normal build.
+val shopifyAdminSchemaFile: File = layout.projectDirectory.file("src/graphql-schema/schema.graphql").asFile
+
 graphql {
   client {
     packageName = "dropnext.graphql.generated"
 
-    // endpoint = "https://beta.pokeapi.co/graphql/v1beta"
-    endpoint = "https://shopify.dev/admin-graphql-direct-proxy/2026-04"
+    // `schemaFile` rather than `endpoint` on purpose: setting `endpoint` here makes the plugin wire
+    // `graphqlGenerateClient` onto `graphqlIntrospectSchema`, which puts a network call to
+    // shopify.dev in every build — one that also rewrites the committed schema underneath you, so a
+    // Shopify-side edit lands in your working tree as an unrelated diff. Codegen reads the committed
+    // file; refreshing it is the deliberate, manual step below.
+    schemaFile = shopifyAdminSchemaFile
 
     allowDeprecatedFields = true
     serializer = GraphQLSerializer.KOTLINX
@@ -235,13 +313,29 @@ graphql {
   }
 }
 
+// Refreshes the committed schema: `./gradlew graphqlIntrospectSchema graphqlGenerateClient`.
+// Reads Shopify's public schema proxy, which needs no token. Bumping the version here means bumping
+// it in the other places `.claude/rules/graphql.md` lists.
 tasks.graphqlIntrospectSchema {
-  outputFile = file("src/graphql-schema/schema.graphql")
+  // endpoint = "https://beta.pokeapi.co/graphql/v1beta"
+  endpoint = "https://shopify.dev/admin-graphql-direct-proxy/2026-04"
+  outputFile = shopifyAdminSchemaFile
+
+  // Asking for a refresh means asking for a download. Gradle would otherwise call the task
+  // up-to-date whenever the endpoint is unchanged and the file exists — which is every refresh that
+  // is not a version bump, i.e. exactly the ones that pick up Shopify's edits within a version.
+  // Free: nothing depends on this task, so it only ever runs when named on the command line.
+  outputs.upToDateWhen { false }
 }
 
 tasks.graphqlGenerateClient {
   // The plugin defaults to `src/main/resources`; we moved resources to `src/resources`.
   queryFileDirectory.set(layout.projectDirectory.dir("src/resources"))
+
+  // Codegen reads the file introspection writes, so on the one command that runs both
+  // (`graphqlIntrospectSchema graphqlGenerateClient`) Gradle needs the order spelled out. Not a
+  // `dependsOn`: that is exactly the build-time network call this arrangement removes.
+  mustRunAfter(tasks.graphqlIntrospectSchema)
 }
 
 private val openApiSpecFile: File =
@@ -418,7 +512,7 @@ openApiGenerate {
   inputSpec.set(openApiSpecRewrittenFile.toURI().toString())
   skipValidateSpec.set(false)
   outputDir.set("${layout.buildDirectory.get()}/generated/openapi")
-  modelPackage.set(monolithServiceGeneratedDtoPath.replace('/', '.'))
+  modelPackage.set(monolithContractGeneratedDtoPath.replace('/', '.'))
   generateApiTests.set(false)
   generateModelTests.set(false)
   globalProperties.set(

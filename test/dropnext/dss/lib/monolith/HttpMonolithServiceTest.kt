@@ -1,25 +1,38 @@
 package dropnext.dss.lib.monolith
 
-import dropnext.dss.lib.monolith.dto.generated.DeleteProductVariantsRequest
-import dropnext.dss.lib.monolith.dto.generated.ProductStatus
-import dropnext.dss.lib.monolith.dto.generated.ProductVariantItem
-import dropnext.dss.lib.monolith.dto.generated.UpdateStoreApiKeyRequest
-import dropnext.dss.lib.monolith.dto.generated.UpsertProductVariantsRequest
-import dropnext.dss.lib.json.AppJson
-import dropnext.dss.testing.fake.FakeMonolithHttpServer
-import dropnext.dss.workflow.minimalOrder
-import dropnext.dss.workflow.orderToCreateShopifyOrderRequest
+import dev.forkhandles.result4k.Failure
+import dev.forkhandles.result4k.Success
+import dropnext.dss.contract.DeleteProductVariantsRequest
+import dropnext.dss.contract.ProductStatus
+import dropnext.dss.contract.ProductVariantItem
+import dropnext.dss.contract.UpdateStoreApiKeyRequest
+import dropnext.dss.contract.UpsertProductVariantsRequest
+import dropnext.dss.domain.MonolithApiKey
+import dropnext.dss.domain.ShopifyAdminToken
+import dropnext.dss.domain.ShopifyShopId
+import dropnext.dss.domain.StoreId
+import dropnext.dss.lib.json.MonolithJson
+import dropnext.dss.lib.ktor.createMonolithHttpClient
+
+import dropnext.dss.mapper.orderToCreateShopifyOrderRequest
+import dropnext.dss.testutil.fake.FakeFlakyServer
+import dropnext.dss.testutil.fake.FakeMonolithHttpServer
+import dropnext.dss.testutil.fixture.minimalOrder
+import dropnext.dss.testutil.helper.testHttpClient
+import io.ktor.callid.withCallId
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
-import io.ktor.client.plugins.HttpTimeout
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.http.HttpStatusCode
-import io.ktor.serialization.kotlinx.json.json
-import java.util.concurrent.TimeUnit
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
+
+
 
 class HttpMonolithServiceTest {
 
@@ -32,21 +45,7 @@ class HttpMonolithServiceTest {
     server = FakeMonolithHttpServer()
     val port = server.start()
     baseUrl = "http://localhost:$port"
-    httpClient = HttpClient(OkHttp) {
-      engine {
-        config {
-          connectTimeout(2, TimeUnit.SECONDS)
-          readTimeout(5, TimeUnit.SECONDS)
-          writeTimeout(5, TimeUnit.SECONDS)
-        }
-      }
-      install(HttpTimeout) {
-        requestTimeoutMillis = 5_000
-        connectTimeoutMillis = 2_000
-        socketTimeoutMillis = 5_000
-      }
-      install(ContentNegotiation) { json(AppJson) }
-    }
+    httpClient = testHttpClient()
   }
 
   @AfterTest
@@ -57,28 +56,26 @@ class HttpMonolithServiceTest {
 
   private fun service(
     apiPrefix: String? = null,
-    apiKey: String? = null,
-    createOrderPath: String = "/orders",
+    apiKey: MonolithApiKey? = null,
   ): HttpMonolithService =
     HttpMonolithService(
       httpClient = httpClient,
       baseUrl = baseUrl,
       apiPathPrefix = apiPrefix,
       apiKey = apiKey,
-      createOrderPath = createOrderPath,
     )
+
+  private fun rejectedOrNull(result: MonolithResult<*>): MonolithError.Rejected? =
+    ((result as? Failure)?.reason as? MonolithError.Rejected)
 
   // ---------- postCreateOrder ----------
 
   @Test
-  fun `postCreateOrder returns HttpResponseSummary on 200`() = runBlocking {
+  fun `postCreateOrder answers Created on 200`() = runBlocking {
     server.enqueue(HttpStatusCode.OK, """{"shopify_order_id":1001}""")
     val req = orderToCreateShopifyOrderRequest("acme", minimalOrder())
     val result = service().postCreateOrder(req)
-    assert(result is CreateOrderResult.HttpResponseSummary)
-    result as CreateOrderResult.HttpResponseSummary
-    assert(result.status == 200)
-    assert("shopify_order_id" in result.body)
+    assert(result == Success(CreateOrderOutcome.Created))
     val recorded = server.requests.single()
     assert(recorded.method == "POST")
     assert(recorded.path == "/orders")
@@ -86,38 +83,34 @@ class HttpMonolithServiceTest {
   }
 
   @Test
-  fun `postCreateOrder treats 409 as HttpResponseSummary (idempotent duplicate)`() = runBlocking {
+  fun `postCreateOrder treats 409 as AlreadyExisted (idempotent duplicate)`() = runBlocking {
     server.enqueue(HttpStatusCode.Conflict, """{"error":"Order already exists."}""")
     val req = orderToCreateShopifyOrderRequest("acme", minimalOrder())
-    val result = service().postCreateOrder(req)
-    assert(result is CreateOrderResult.HttpResponseSummary)
-    assert((result as CreateOrderResult.HttpResponseSummary).status == 409)
+    assert(service().postCreateOrder(req) == Success(CreateOrderOutcome.AlreadyExisted))
   }
 
   @Test
-  fun `postCreateOrder maps non-2xx, non-409 to Error with parsed body`() = runBlocking {
+  fun `postCreateOrder maps non-2xx, non-409 to Rejected with parsed body`() = runBlocking {
     server.enqueue(HttpStatusCode.BadRequest, """{"error":{"code":"InvalidOrder","message":"bad","trace_id":"t-1"}}""")
     val req = orderToCreateShopifyOrderRequest("acme", minimalOrder())
-    val result = service().postCreateOrder(req)
-    assert(result is CreateOrderResult.Error)
-    result as CreateOrderResult.Error
-    assert(result.status == 400)
-    assert(result.errorMessage == "bad")
-    assert(result.parsed?.monolithTraceId == "t-1")
+    val rejected = rejectedOrNull(service().postCreateOrder(req))
+    assert(rejected != null)
+    assert(rejected!!.status == 400)
+    assert(rejected.message == "bad")
+    assert(rejected.body.monolithTraceId == "t-1")
   }
 
   @Test
-  fun `postCreateOrder returns Error(0) on connection failure`() = runBlocking {
-    // Acquire a port by binding briefly, then close — the just-freed port is reliably refused.
-    val transient = FakeMonolithHttpServer()
-    val deadPort = transient.start()
-    transient.stop()
-    val deadService =
-      HttpMonolithService(httpClient, "http://localhost:$deadPort", null, null)
-    val req = orderToCreateShopifyOrderRequest("acme", minimalOrder())
-    val result = deadService.postCreateOrder(req)
-    assert(result is CreateOrderResult.Error)
-    assert((result as CreateOrderResult.Error).status == 0)
+  fun `postCreateOrder answers Transport on connection failure`() = runBlocking {
+    // A server that accepts and then resets, rather than a just-freed port that another test's
+    // `port = 0` bind could claim between the close and the connect.
+    FakeFlakyServer().use { unreachable ->
+      val deadService = HttpMonolithService(httpClient, unreachable.baseUrl, null, null)
+      val req = orderToCreateShopifyOrderRequest("acme", minimalOrder())
+      val result = deadService.postCreateOrder(req)
+      assert(result is Failure)
+      assert((result as Failure).reason is MonolithError.Transport)
+    }
   }
 
   // ---------- putStoreApiKey ----------
@@ -129,8 +122,7 @@ class HttpMonolithServiceTest {
       service().putStoreApiKey(
         UpdateStoreApiKeyRequest(shopifySubdomain = "acme", shopifyShopId = 99L, apiKey = "shpat_x"),
       )
-    assert(result is StoreApiKeyResult.Ok)
-    assert((result as StoreApiKeyResult.Ok).storeId == 42L)
+    assert(result == Success(StoreId(42L)))
     val recorded = server.requests.single()
     assert(recorded.method == "PUT")
     assert(recorded.path == "/stores/api-key")
@@ -138,12 +130,10 @@ class HttpMonolithServiceTest {
   }
 
   @Test
-  fun `putStoreApiKey on 500 returns Error`() = runBlocking {
+  fun `putStoreApiKey on 500 is Rejected`() = runBlocking {
     server.enqueue(HttpStatusCode.InternalServerError, """{"error":"boom"}""")
-    val result =
-      service().putStoreApiKey(UpdateStoreApiKeyRequest("acme", 99L, "shpat_x"))
-    assert(result is StoreApiKeyResult.Error)
-    assert((result as StoreApiKeyResult.Error).status == 500)
+    val result = service().putStoreApiKey(UpdateStoreApiKeyRequest("acme", 99L, "shpat_x"))
+    assert(rejectedOrNull(result)?.status == 500)
   }
 
   // ---------- getStore ----------
@@ -152,11 +142,7 @@ class HttpMonolithServiceTest {
   fun `getStore on 200 deserialises the StoreResponse`() = runBlocking {
     server.enqueue(HttpStatusCode.OK, """{"store_id":1,"shopify_shop_id":99,"api_key":"shpat_x"}""")
     val result = service().getStore("acme")
-    assert(result is GetStoreResult.Ok)
-    result as GetStoreResult.Ok
-    assert(result.storeId == 1L)
-    assert(result.shopifyShopId == 99L)
-    assert(result.apiKey == "shpat_x")
+    assert(result == Success(MonolithStore(StoreId(1L), ShopifyShopId(99L), ShopifyAdminToken("shpat_x"))))
     val recorded = server.requests.single()
     assert(recorded.method == "GET")
     assert(recorded.path == "/stores")
@@ -164,78 +150,53 @@ class HttpMonolithServiceTest {
   }
 
   @Test
-  fun `getStore on 404 returns NotFound with the subdomain`() = runBlocking {
-    server.enqueue(HttpStatusCode.NotFound, """{"error":"missing"}""")
-    val result = service().getStore("acme")
-    assert(result is GetStoreResult.NotFound)
-    assert((result as GetStoreResult.NotFound).shopifySubdomain == "acme")
+  fun `getStore on 200 without a token answers a store without one`() = runBlocking {
+    server.enqueue(HttpStatusCode.OK, """{"store_id":1,"shopify_shop_id":99,"api_key":null}""")
+    assert(service().getStore("acme") == Success(MonolithStore(StoreId(1L), ShopifyShopId(99L), null)))
   }
 
   @Test
-  fun `getStore on 500 returns Error`() = runBlocking {
+  fun `getStore on 404 is a successful null`() = runBlocking {
+    server.enqueue(HttpStatusCode.NotFound, """{"error":"missing"}""")
+    assert(service().getStore("acme") == Success(null))
+  }
+
+  @Test
+  fun `getStore on 500 is Rejected`() = runBlocking {
     server.enqueue(HttpStatusCode.InternalServerError, """{"error":"boom"}""")
-    val result = service().getStore("acme")
-    assert(result is GetStoreResult.Error)
-    assert((result as GetStoreResult.Error).status == 500)
+    assert(rejectedOrNull(service().getStore("acme"))?.status == 500)
   }
 
   // ---------- upsertProductVariants ----------
 
   @Test
-  fun `upsertProductVariants on 200 returns Ok with upserted count`() = runBlocking {
+  fun `upsertProductVariants on 200 answers the upserted count`() = runBlocking {
     server.enqueue(HttpStatusCode.OK, """{"upserted":3}""")
     val request =
       UpsertProductVariantsRequest(shopifySubdomain = "acme", productVariants = listOf(sampleVariant()))
-    val result = service().upsertProductVariants(request)
-    assert(result is UpsertVariantsResult.Ok)
-    assert((result as UpsertVariantsResult.Ok).upserted == 3)
+    assert(service().upsertProductVariants(request) == Success(3))
     val recorded = server.requests.single()
     assert(recorded.method == "POST")
     assert(recorded.path == "/product-variants")
   }
 
   @Test
-  fun `upsertProductVariants on 502 returns Error`() = runBlocking {
+  fun `upsertProductVariants on 502 is Rejected`() = runBlocking {
     server.enqueue(HttpStatusCode.BadGateway, "")
-    val result =
-      service().upsertProductVariants(
-        UpsertProductVariantsRequest("acme", listOf(sampleVariant())),
-      )
-    assert(result is UpsertVariantsResult.Error)
-    assert((result as UpsertVariantsResult.Error).status == 502)
-  }
-
-  // ---------- getProductVariantIds ----------
-
-  @Test
-  fun `getProductVariantIds on 200 returns Ok with id list`() = runBlocking {
-    server.enqueue(HttpStatusCode.OK, """{"product_variant_ids":[1,2,3]}""")
-    val result = service().getProductVariantIds("acme")
-    assert(result is GetVariantIdsResult.Ok)
-    assert((result as GetVariantIdsResult.Ok).productVariantIds == listOf(1L, 2L, 3L))
-    val recorded = server.requests.single()
-    assert(recorded.method == "GET")
-    assert(recorded.query["shopify_subdomain"] == listOf("acme"))
-  }
-
-  @Test
-  fun `getProductVariantIds on 404 returns NotFound`() = runBlocking {
-    server.enqueue(HttpStatusCode.NotFound, "")
-    val result = service().getProductVariantIds("acme")
-    assert(result is GetVariantIdsResult.NotFound)
+    val result = service().upsertProductVariants(UpsertProductVariantsRequest("acme", listOf(sampleVariant())))
+    assert(rejectedOrNull(result)?.status == 502)
   }
 
   // ---------- deleteProductVariants ----------
 
   @Test
-  fun `deleteProductVariants on 200 returns Ok with deleted count`() = runBlocking {
+  fun `deleteProductVariants on 200 answers the deleted count`() = runBlocking {
     server.enqueue(HttpStatusCode.OK, """{"deleted":2}""")
     val result =
       service().deleteProductVariants(
         DeleteProductVariantsRequest(shopifySubdomain = "acme", productVariantIds = listOf(11L, 22L)),
       )
-    assert(result is DeleteVariantsResult.Ok)
-    assert((result as DeleteVariantsResult.Ok).deleted == 2)
+    assert(result == Success(2))
     val recorded = server.requests.single()
     assert(recorded.method == "DELETE")
     assert(recorded.path == "/product-variants")
@@ -243,32 +204,86 @@ class HttpMonolithServiceTest {
   }
 
   @Test
-  fun `deleteProductVariants on 500 returns Error`() = runBlocking {
+  fun `deleteProductVariants on 500 is Rejected`() = runBlocking {
     server.enqueue(HttpStatusCode.InternalServerError, """{"error":"nope"}""")
-    val result =
-      service().deleteProductVariants(
-        DeleteProductVariantsRequest("acme", listOf(1L)),
-      )
-    assert(result is DeleteVariantsResult.Error)
-    assert((result as DeleteVariantsResult.Error).status == 500)
+    val result = service().deleteProductVariants(DeleteProductVariantsRequest("acme", listOf(1L)))
+    assert(rejectedOrNull(result)?.status == 500)
+  }
+
+  // ---------- the bodies as the monolith's parser sees them ----------
+
+  /**
+   * The body is the contract: snake_case keys and every nullable field written out, because the
+   * monolith's parser treats a missing key and a `null` differently. Pinned key by key, so a
+   * regenerated DTO or a changed `MonolithJson` fails here rather than in the monolith.
+   */
+  @Test
+  fun `postCreateOrder sends the order as the contract's snake_case JSON with explicit nulls`() = runBlocking {
+    server.enqueue(HttpStatusCode.OK, """{"shopify_order_id":1001}""")
+    service().postCreateOrder(orderToCreateShopifyOrderRequest("acme", minimalOrder()))
+
+    val sent = MonolithJson.parseToJsonElement(server.requests.single().body).jsonObject
+    assert(
+      sent.keys == setOf(
+        "shopify_subdomain", "shopify_order_id", "name", "financial_status", "fulfillment_status",
+        "created_at", "shipping_address", "line_items", "total_as_string", "currency",
+      ),
+    )
+    assert(sent["shopify_order_id"]?.jsonPrimitive?.long == 1001L)
+    assert(sent["fulfillment_status"] == JsonNull)
+    assert(sent["total_as_string"]?.jsonPrimitive?.content == "39.98")
+    val line = sent["line_items"]!!.jsonArray.single().jsonObject
+    assert(
+      line.keys == setOf(
+        "shopify_line_item_id", "product_variant_id", "quantity", "fulfillment_order_id",
+        "snapshot_of_variant_title", "snapshot_of_product_title", "snapshot_of_price_as_string",
+      ),
+    )
+    assert(line["fulfillment_order_id"]?.jsonPrimitive?.long == 301L)
+    assert(line["snapshot_of_price_as_string"]?.jsonPrimitive?.content == "19.99")
+    val address = sent["shipping_address"]!!.jsonObject
+    assert(address["first_name"] == JsonNull)
+    assert(address["country_code"]?.jsonPrimitive?.content == "")
+  }
+
+  @Test
+  fun `upsertProductVariants sends every variant field in snake_case with explicit nulls`() = runBlocking {
+    server.enqueue(HttpStatusCode.OK, """{"upserted":1}""")
+    service().upsertProductVariants(UpsertProductVariantsRequest(shopifySubdomain = "acme", productVariants = listOf(sampleVariant())))
+
+    val sent = MonolithJson.parseToJsonElement(server.requests.single().body).jsonObject
+    assert(sent.keys == setOf("shopify_subdomain", "product_variants"))
+    val variant = sent["product_variants"]!!.jsonArray.single().jsonObject
+    assert(
+      variant.keys == setOf(
+        "product_variant_id", "product_id", "product_title", "product_description", "product_description_html",
+        "product_vendor", "product_type", "product_tags", "product_handle", "product_status", "product_images",
+        "product_published_at", "product_created_at", "product_updated_at", "title", "sku", "barcode",
+        "price_as_string", "price_currency", "selected_options", "image_url",
+      ),
+    )
+    assert(variant["product_status"]?.jsonPrimitive?.content == "active")
+    assert(variant["sku"] == JsonNull)
+    assert(variant["product_published_at"] == JsonNull)
+    assert(variant["price_as_string"]?.jsonPrimitive?.content == "19.95")
   }
 
   // ---------- MonolithErrorBody integration ----------
 
+
   @Test
-  fun `monolith trace_id is parsed and propagated through CreateOrderResult Error`() = runBlocking {
+  fun `monolith trace_id is parsed and propagated through the rejection`() = runBlocking {
     server.enqueue(
       HttpStatusCode.InternalServerError,
       """{"error":{"code":"InternalError","message":"backend boom","trace_id":"mt-9bf3"}}""",
     )
     val req = orderToCreateShopifyOrderRequest("acme", minimalOrder())
-    val result = service().postCreateOrder(req)
-    assert(result is CreateOrderResult.Error)
-    result as CreateOrderResult.Error
-    assert(result.status == 500)
-    assert(result.errorMessage == "backend boom")
-    assert(result.parsed?.monolithTraceId == "mt-9bf3")
-    assert(result.parsed?.code == "InternalError")
+    val rejected = rejectedOrNull(service().postCreateOrder(req))
+    assert(rejected != null)
+    assert(rejected!!.status == 500)
+    assert(rejected.message == "backend boom")
+    assert(rejected.body.monolithTraceId == "mt-9bf3")
+    assert(rejected.body.code == "InternalError")
   }
 
   @Test
@@ -277,40 +292,35 @@ class HttpMonolithServiceTest {
       HttpStatusCode.InternalServerError,
       """{"error":{"code":"DbDown","message":"unavailable","traceId":"mt-camel"}}""",
     )
-    val result = service().getStore("acme")
-    assert(result is GetStoreResult.Error)
-    result as GetStoreResult.Error
-    assert(result.parsed?.monolithTraceId == "mt-camel")
+    assert(rejectedOrNull(service().getStore("acme"))?.body?.monolithTraceId == "mt-camel")
   }
 
-  // ---------- url composition & auth header ----------
+  // ---------- url composition & headers ----------
 
   @Test
   fun `apiPathPrefix is inserted between baseUrl and path`() = runBlocking {
     server.enqueue(HttpStatusCode.OK, """{"store_id":1,"shopify_shop_id":99,"api_key":null}""")
     service(apiPrefix = "api/v1").getStore("acme")
-    val recorded = server.requests.single()
-    assert(recorded.path == "/api/v1/stores")
+    assert(server.requests.single().path == "/api/v1/stores")
   }
 
   @Test
   fun `apiPathPrefix with surrounding slashes is normalised`() = runBlocking {
     server.enqueue(HttpStatusCode.OK, """{"store_id":1,"shopify_shop_id":99,"api_key":null}""")
     service(apiPrefix = "/api/v1/").getStore("acme")
-    val recorded = server.requests.single()
-    assert(recorded.path == "/api/v1/stores")
+    assert(server.requests.single().path == "/api/v1/stores")
   }
 
   @Test
   fun `apiKey header behavior — null, blank, and non-blank`() = runBlocking {
-    val cases = listOf<Pair<String?, String?>>(
+    val cases = listOf<Pair<MonolithApiKey?, String?>>(
       null to null,
-      "" to null,
-      "   " to null,
-      "key-abc" to "Bearer key-abc",
+      MonolithApiKey("") to null,
+      MonolithApiKey("   ") to null,
+      MonolithApiKey("key-abc") to "Bearer key-abc",
     )
     cases.forEach { (apiKey, expected) ->
-      server.reset()
+      server.clear()
       server.enqueue(HttpStatusCode.OK, """{"store_id":1,"shopify_shop_id":99,"api_key":null}""")
       service(apiKey = apiKey).getStore("acme")
       val actual = server.requests.single().authorization()
@@ -320,12 +330,32 @@ class HttpMonolithServiceTest {
     }
   }
 
+  /**
+   * Forwarding the trace id is the production client's job, not the service's: the server's `CallId` plugin
+   * puts the id in the coroutine context and `createMonolithHttpClient` reads it from there. These two cases
+   * pin the combination the service runs with.
+   */
   @Test
-  fun `custom createOrderPath is honoured`() = runBlocking {
-    server.enqueue(HttpStatusCode.OK, """{"shopify_order_id":1001}""")
-    val req = orderToCreateShopifyOrderRequest("acme", minimalOrder())
-    service(createOrderPath = "/custom/orders").postCreateOrder(req)
-    assert(server.requests.single().path == "/custom/orders")
+  fun `the current trace id is forwarded as X-Trace-Id`() = runBlocking {
+    server.enqueue(HttpStatusCode.OK, """{"store_id":1,"shopify_shop_id":99,"api_key":null}""")
+    withProductionClient { service -> withCallId("trace-42") { service.getStore("acme") } }
+    assert(server.requests.single().headers["X-Trace-Id"] == listOf("trace-42"))
+  }
+
+  @Test
+  fun `no X-Trace-Id is sent outside a request`() = runBlocking {
+    server.enqueue(HttpStatusCode.OK, """{"store_id":1,"shopify_shop_id":99,"api_key":null}""")
+    withProductionClient { service -> service.getStore("acme") }
+    assert(server.requests.single().headers["X-Trace-Id"] == null)
+  }
+
+  private suspend fun withProductionClient(block: suspend (HttpMonolithService) -> Unit) {
+    val monolithClient = createMonolithHttpClient(httpClient)
+    try {
+      block(HttpMonolithService(monolithClient, baseUrl, null, null))
+    } finally {
+      monolithClient.close()
+    }
   }
 
   private fun sampleVariant(): ProductVariantItem =

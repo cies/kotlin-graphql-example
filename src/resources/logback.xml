@@ -1,9 +1,25 @@
 <configuration>
   <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
     <encoder>
-      <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} -- trace_id=%X{trace_id} %msg%n</pattern>
+      <!-- The monolith's pattern plus the trace id. No thread name: under coroutines it is a pool worker's. -->
+      <pattern>%d{HH:mm:ss.SSS} [%-5level] %logger{36} - trace_id=%X{trace_id} %msg%n</pattern>
     </encoder>
   </appender>
+
+  <!--
+    The Logflare appender is added programmatically in `app.kt`, after the environment has been read:
+    Logback initialises long before the application knows its configuration.
+  -->
+
+  <!-- Quiet noisy libraries: none of them says anything at INFO, but a root moved to DEBUG while
+       chasing a bug should not also print HTTP/2 frames and connection-pool bookkeeping. -->
+  <logger name="okhttp3" level="WARN"/>
+  <logger name="io.ktor.client" level="WARN"/>
+  <!-- Pinned, not merely quiet: below INFO the server's CallId and StatusPages plugins log the full request
+       URI, and the OAuth callback's query string carries the authorization code and the HMAC. -->
+  <logger name="io.ktor.server" level="INFO"/>
+
+
   <root level="INFO">
     <appender-ref ref="STDOUT"/>
   </root>

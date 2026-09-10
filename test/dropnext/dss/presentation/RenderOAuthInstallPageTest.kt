@@ -1,28 +1,38 @@
 package dropnext.dss.presentation
 
 import dropnext.dss.domain.MonolithPersistOutcome
-import dropnext.dss.lib.shopify.graphql.webhookregistration.WebhookSubscriptionStatus
-import dropnext.graphql.generated.enums.WebhookSubscriptionTopic
+import dropnext.dss.domain.ShopDomain
+import dropnext.dss.domain.ShopInstallReport
+import dropnext.dss.domain.ShopifyShopId
+import dropnext.dss.domain.StoreId
+import dropnext.dss.domain.WebhookRegistrationFailure
+import dropnext.dss.domain.WebhookRegistrationReport
+import dropnext.dss.domain.WebhookSubscriptionStatus
 import kotlin.test.Test
+
 
 class RenderOAuthInstallPageTest {
 
   private fun renderBase(
     shop: String = "acme.myshopify.com",
-    monolithPersist: MonolithPersistOutcome = MonolithPersistOutcome.Persisted(storeId = 1L),
+    monolithPersist: MonolithPersistOutcome = MonolithPersistOutcome.Persisted(storeId = StoreId(1L)),
     activeSubscriptions: List<WebhookSubscriptionStatus> = emptyList(),
     addedSubscriptions: List<WebhookSubscriptionStatus> = emptyList(),
-    failedTopics: List<Pair<WebhookSubscriptionTopic, String>> = emptyList(),
+    failures: List<WebhookRegistrationFailure> = emptyList(),
   ): String =
     renderOAuthInstallPage(
-      shop = shop,
-      shopId = 9988L,
-      monolithPersist = monolithPersist,
-      productEdgeCount = 3,
-      webhookCallbackUrl = "https://dss.example.com/webhooks/shopify",
-      activeSubscriptions = activeSubscriptions,
-      addedSubscriptions = addedSubscriptions,
-      failedTopics = failedTopics,
+      ShopInstallReport(
+        shop = ShopDomain.parse(shop)!!,
+        shopId = ShopifyShopId(9988L),
+        monolithPersist = monolithPersist,
+        productSampleCount = 3,
+        webhookCallbackUrl = "https://dss.example.com/webhooks/shopify",
+        webhooks = WebhookRegistrationReport(
+          activeSubscriptions = activeSubscriptions,
+          addedSubscriptions = addedSubscriptions,
+          failures = failures,
+        ),
+      ),
     )
 
   @Test
@@ -34,19 +44,9 @@ class RenderOAuthInstallPageTest {
   }
 
   @Test
-  fun `escapes html-significant characters in shop`() {
-    val malicious = "evil<script>alert(1)</script>.myshopify.com"
-    val html = renderBase(shop = malicious)
-    assert("<script>alert(1)</script>" !in html)
-    assert("&lt;script&gt;alert(1)&lt;/script&gt;" in html)
-  }
-
-  @Test
   fun `escapes html-significant characters in failure error messages`() {
     val html = renderBase(
-      failedTopics = listOf(
-        WebhookSubscriptionTopic.PRODUCTS_CREATE to "<img src=x onerror=alert(1)>",
-      ),
+      failures = listOf(WebhookRegistrationFailure("PRODUCTS_CREATE", "<img src=x onerror=alert(1)>")),
     )
     assert("<img src=x onerror=alert(1)>" !in html)
     assert("&lt;img src=x onerror=alert(1)&gt;" in html)
@@ -54,7 +54,7 @@ class RenderOAuthInstallPageTest {
 
   @Test
   fun `monolith persisted renders the success notice with storeId`() {
-    val html = renderBase(monolithPersist = MonolithPersistOutcome.Persisted(storeId = 42L))
+    val html = renderBase(monolithPersist = MonolithPersistOutcome.Persisted(storeId = StoreId(42L)))
     assert("Shopify token saved via monolith" in html)
     assert("store_id=42" in html)
   }
@@ -66,6 +66,13 @@ class RenderOAuthInstallPageTest {
     )
     assert("HTTP status 503" in html)
     assert("upstream timeout" in html)
+  }
+
+  @Test
+  fun `monolith unreachable renders as no response`() {
+    val html = renderBase(monolithPersist = MonolithPersistOutcome.Failed(httpStatus = null, detail = "connection refused"))
+    assert("no response" in html)
+    assert("connection refused" in html)
   }
 
   @Test
@@ -91,12 +98,12 @@ class RenderOAuthInstallPageTest {
     val subs = listOf(
       WebhookSubscriptionStatus(
         id = "gid://shopify/WebhookSubscription/1",
-        topic = WebhookSubscriptionTopic.PRODUCTS_CREATE,
+        topic = "PRODUCTS_CREATE",
         uri = "https://dss.example.com/webhooks/shopify",
       ),
       WebhookSubscriptionStatus(
         id = "gid://shopify/WebhookSubscription/2",
-        topic = WebhookSubscriptionTopic.ORDERS_CREATE,
+        topic = "ORDERS_CREATE",
         uri = "https://dss.example.com/webhooks/shopify",
       ),
     )
@@ -108,17 +115,17 @@ class RenderOAuthInstallPageTest {
   }
 
   @Test
-  fun `no failure block when failedTopics is empty`() {
-    val html = renderBase(failedTopics = emptyList())
+  fun `no failure block when there are no failures`() {
+    val html = renderBase(failures = emptyList())
     assert("Webhook registrations that failed" !in html)
   }
 
   @Test
   fun `failure block lists each failed topic`() {
     val html = renderBase(
-      failedTopics = listOf(
-        WebhookSubscriptionTopic.PRODUCTS_CREATE to "permission denied",
-        WebhookSubscriptionTopic.ORDERS_UPDATED to "scope missing",
+      failures = listOf(
+        WebhookRegistrationFailure("PRODUCTS_CREATE", "permission denied"),
+        WebhookRegistrationFailure("ORDERS_UPDATED", "scope missing"),
       ),
     )
     assert("Webhook registrations that failed" in html)

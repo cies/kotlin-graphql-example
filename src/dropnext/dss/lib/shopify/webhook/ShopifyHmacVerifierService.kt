@@ -1,11 +1,10 @@
 package dropnext.dss.lib.shopify.webhook
 
+import dropnext.dss.domain.ShopifyAppSecret
+import dropnext.dss.lib.crypto.constantTimeEquals
+import dropnext.dss.lib.crypto.hmacSha256
 import io.ktor.http.Parameters
-import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
 import java.util.Base64
-import javax.crypto.Mac
-import javax.crypto.spec.SecretKeySpec
 
 
 /**
@@ -15,7 +14,7 @@ import javax.crypto.spec.SecretKeySpec
  * Stateless aside from the injected [clientSecret], so a single instance is safe to share
  * across requests.
  */
-class ShopifyHmacVerifierService(private val clientSecret: String) {
+class ShopifyHmacVerifierService(private val clientSecret: ShopifyAppSecret) {
 
   fun verifyOAuthCallback(params: Parameters, hmacHex: String): Boolean {
     // Shopify: remove hmac/signature, sort by key, join with "&" as in query string (see OAuth docs).
@@ -28,8 +27,7 @@ class ShopifyHmacVerifierService(private val clientSecret: String) {
         "${e.key}=$value"
       }
     val providedBytes = hexToBytesOrNull(hmacHex) ?: return false
-    val computedBytes = hmacSha256(clientSecret, message)
-    return MessageDigest.isEqual(computedBytes, providedBytes)
+    return constantTimeEquals(hmacSha256(clientSecret.value, message), providedBytes)
   }
 
   fun verifyWebhook(hmacHeader: String?, rawBody: ByteArray): Boolean {
@@ -39,17 +37,7 @@ class ShopifyHmacVerifierService(private val clientSecret: String) {
     } catch (_: IllegalArgumentException) {
       return false
     }
-    val digest = hmacSha256(clientSecret, rawBody)
-    return MessageDigest.isEqual(digest, decoded)
-  }
-
-  private fun hmacSha256(secret: String, message: String): ByteArray =
-    hmacSha256(secret, message.toByteArray(StandardCharsets.UTF_8))
-
-  private fun hmacSha256(secret: String, message: ByteArray): ByteArray {
-    val mac = Mac.getInstance("HmacSHA256")
-    mac.init(SecretKeySpec(secret.toByteArray(StandardCharsets.UTF_8), "HmacSHA256"))
-    return mac.doFinal(message)
+    return constantTimeEquals(hmacSha256(clientSecret.value, rawBody), decoded)
   }
 
   /** Decodes an ASCII hex string to bytes, returning `null` if it is malformed. */

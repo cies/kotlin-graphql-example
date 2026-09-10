@@ -1,5 +1,6 @@
 package dropnext.dss.lib.shopify.webhook
 
+import dropnext.dss.domain.ShopifyAppSecret
 import io.ktor.http.parametersOf
 import java.nio.charset.StandardCharsets
 import java.util.Base64
@@ -10,7 +11,7 @@ import kotlin.test.Test
 class ShopifyHmacVerifierServiceTest {
 
   private val secret = "shpss_test_secret"
-  private val signatures = ShopifyHmacVerifierService(secret)
+  private val signatures = ShopifyHmacVerifierService(ShopifyAppSecret(secret))
 
   @Test
   fun `verifyWebhook accepts a correct base64 hmac`() {

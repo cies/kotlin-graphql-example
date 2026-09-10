@@ -1,21 +1,17 @@
 package dropnext.dss.handler
 
-import dropnext.dss.domain.MonolithPersistOutcome
-import dropnext.dss.lib.monolith.dto.generated.UpdateStoreApiKeyRequest
+import dev.forkhandles.result4k.Failure
+import dev.forkhandles.result4k.Success
 import dropnext.dss.lib.ktor.DssError
 import dropnext.dss.lib.ktor.respondTextError
 import dropnext.dss.lib.monolith.MonolithService
-import dropnext.dss.lib.monolith.ShopAccessTokenCache
-import dropnext.dss.lib.monolith.StoreApiKeyResult
-import dropnext.dss.lib.monolith.logMonolithFailure
-import dropnext.dss.lib.monolith.ShopifyGraphqlServiceFactory
+import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlServiceFactory
 import dropnext.dss.lib.shopify.oauth.ShopifyOAuthService
+import dropnext.dss.lib.shopify.token.ShopTokenStore
 import dropnext.dss.lib.shopify.webhook.ShopifyHmacVerifierService
 import dropnext.dss.path.Paths
 import dropnext.dss.presentation.renderOAuthInstallPage
-import dropnext.dss.lib.shopify.ShopDomain
-import dropnext.dss.lib.shopify.legacyIdFromGid
-import dropnext.dss.workflow.registerShopifyWebhooks
+import dropnext.dss.workflow.installShop
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -24,37 +20,40 @@ import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.header
 import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
+import io.ktor.server.util.getOrFail
 
 
 private val log = KotlinLogging.logger {}
 
-/** Handlers for the Shopify install / OAuth-callback flow. */
+/**
+ * Handlers for the Shopify install / OAuth-callback flow. The callback verifies what Shopify sent
+ * (HMAC, signed state), exchanges the code, and leaves the rest of the installation to
+ * [installShop]. Failures in this flow are plain-text errors, not JSON: a merchant's browser is
+ * what reads them.
+ */
 class OAuthHandlers(
-  private val shopifyPublicBaseUrl: String,
+  private val dssBaseUrl: String,
   private val shopifyOAuthService: ShopifyOAuthService,
   private val shopifyGraphqlServiceFactory: ShopifyGraphqlServiceFactory,
   private val monolithService: MonolithService,
-  private val shopAccessTokenCache: ShopAccessTokenCache,
+  private val shopTokens: ShopTokenStore,
   private val shopifyHmacVerifierService: ShopifyHmacVerifierService,
 ) {
 
   suspend fun handleInstall(call: ApplicationCall) {
-    val rawShop = call.requireParam("shop") ?: return
-    val shop = ShopDomain.parse(rawShop) ?: return call.respondTextError(
-      DssError.InvalidParameter("shop", "not a valid Shopify domain"),
-    )
+    val rawShop = call.request.queryParameters.getOrFail("shop")
+    val shop = call.shopDomainOrRespondText(rawShop, "shop") ?: return
     val state = shopifyOAuthService.signedState(shop)
     call.respondRedirect(shopifyOAuthService.authorizeUrl(shop, state))
   }
 
   suspend fun handleOAuthCallback(call: ApplicationCall) {
     val params = call.request.queryParameters
-    val hmac = call.requireParam("hmac") ?: return
-    val rawShop = call.requireParam("shop") ?: return
-    val shop = ShopDomain.parse(rawShop)
-      ?: return call.respondTextError(DssError.InvalidParameter("shop"))
-    val state = call.requireParam("state") ?: return
-    val code = call.requireParam("code") ?: return
+    val hmac = params.getOrFail("hmac")
+    val rawShop = params.getOrFail("shop")
+    val shop = call.shopDomainOrRespondText(rawShop, "shop") ?: return
+    val state = params.getOrFail("state")
+    val code = params.getOrFail("code")
 
     if (!shopifyHmacVerifierService.verifyOAuthCallback(params, hmac)) {
       return call.respondTextError(DssError.InvalidSignature("Invalid HMAC"))
@@ -63,74 +62,28 @@ class OAuthHandlers(
       return call.respondTextError(DssError.InvalidSignature("Invalid or expired state"))
     }
 
-    val oauthResponse = shopifyOAuthService.exchangeCode(shop, code)
-      .getOrElse { e ->
-        log.warn { "OAuth code exchange failed for shop=${shop.normalizedShopifyHost}: ${e.message}" }
+    val token = when (val exchanged = shopifyOAuthService.exchangeCode(shop, code)) {
+      is Success -> exchanged.value
+      is Failure -> {
+        log.warn { "OAuth code exchange failed for shop=${shop.normalizedShopifyHost}: ${exchanged.reason.message}" }
         return call.respondTextError(DssError.UpstreamFailure("OAuth failed: could not exchange authorization code"))
       }
+    }
 
-    // The just-issued token has not been cached yet, so pass it explicitly to the factory so the
-    // subsequent Graphql calls authorise correctly.
-    val shopify = shopifyGraphqlServiceFactory.forShop(shop, explicitToken = oauthResponse.accessToken)
-      ?: return call.respondTextError(DssError.UpstreamFailure("could not build ShopifyGraphqlService for $shop"))
+    // Remembered under the shop Shopify redirected for; the workflow remembers it again under the
+    // canonical domain once it has asked Shopify, so the factory can hand out a service right away.
+    shopTokens.remember(shop, token)
+    val shopify = shopifyGraphqlServiceFactory.forShop(shop)
+      ?: return call.respondTextError(DssError.UpstreamFailure("could not build a Shopify service for $shop"))
 
-    val identityResult = shopify.shopIdentity()
-    val shopNode = identityResult.data?.shop
-    val shopId = shopNode?.id?.let { legacyIdFromGid(it) } ?: 0L
-    val domain = shopNode?.myshopifyDomain?.let { ShopDomain.parse(it) } ?: shop
-    shopAccessTokenCache[domain] = oauthResponse.accessToken
-    log.info { "OAuth token cached in memory for shop=${domain.normalizedShopifyHost}" }
-
-    val monolithPersist = persistTokenToMonolith(domain, shopId, oauthResponse.accessToken)
-
-    val syncResult = shopify.syncProductsPage(first = 3)
-    val edgeCount = syncResult.data?.products?.edges?.size ?: 0
-    log.info { "SyncProductsPage after OAuth: shop=${shop.normalizedShopifyHost} productEdges=$edgeCount" }
-
-    val callbackUrl = "$shopifyPublicBaseUrl${Paths.webhooksShopify}"
-    val webhookReport = registerShopifyWebhooks(shopify, callbackUrl)
-
-    val html = renderOAuthInstallPage(
-      shop = shop.normalizedShopifyHost,
-      shopId = shopId,
-      monolithPersist = monolithPersist,
-      productEdgeCount = edgeCount,
-      webhookCallbackUrl = callbackUrl,
-      activeSubscriptions = webhookReport.activeSubscriptions,
-      addedSubscriptions = webhookReport.addedSubscriptions,
-      failedTopics = webhookReport.failedTopics,
+    val report = installShop(
+      shopify = shopify,
+      monolith = monolithService,
+      tokens = shopTokens,
+      token = token,
+      webhookCallbackUrl = "$dssBaseUrl${Paths.webhooksShopify}",
     )
     call.response.header(HttpHeaders.CacheControl, "no-store, no-cache, must-revalidate")
-    call.respondText(html, ContentType.Text.Html, HttpStatusCode.OK)
-  }
-
-  private suspend fun ApplicationCall.requireParam(name: String): String? =
-    request.queryParameters[name] ?: run {
-      respondTextError(DssError.MissingParameter(name))
-      null
-    }
-
-  /** Persist the freshly obtained Shopify Admin token to the monolith; return a presentation-layer outcome. */
-  private suspend fun persistTokenToMonolith(
-    shop: ShopDomain,
-    shopId: Long,
-    accessToken: String,
-  ): MonolithPersistOutcome {
-    val apiKeyReq = UpdateStoreApiKeyRequest(
-      shopifySubdomain = shop.subdomainOnly,
-      shopifyShopId = shopId,
-      apiKey = accessToken,
-    )
-    return when (val r = monolithService.putStoreApiKey(apiKeyReq)) {
-      is StoreApiKeyResult.Ok -> {
-        log.info { "Monolith store api-key updated storeId=${r.storeId} shop=${shop.normalizedShopifyHost}" }
-        MonolithPersistOutcome.Persisted(storeId = r.storeId)
-      }
-      is StoreApiKeyResult.Error -> {
-        logMonolithFailure("putStoreApiKey", r.status, r.parsed, "shop=${shop.normalizedShopifyHost}")
-        MonolithPersistOutcome.Failed(httpStatus = r.status, detail = r.parsed?.message)
-      }
-    }
+    call.respondText(renderOAuthInstallPage(report), ContentType.Text.Html, HttpStatusCode.OK)
   }
 }
-

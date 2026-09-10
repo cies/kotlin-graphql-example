@@ -1,20 +1,15 @@
 package dropnext.dss.handler
 
-import dropnext.dss.lib.monolith.DeleteVariantsResult
 import dropnext.dss.lib.monolith.MonolithService
-import dropnext.dss.lib.monolith.ShopifyGraphqlServiceFactory
-import dropnext.dss.lib.monolith.UpsertVariantsResult
-import dropnext.dss.lib.monolith.dto.generated.DeleteProductVariantsRequest
-import dropnext.dss.lib.monolith.dto.generated.UpsertProductVariantsRequest
-import dropnext.dss.lib.monolith.logMonolithFailure
-import dropnext.dss.lib.shopify.ShopDomain
-import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlService
+import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlServiceFactory
 import dropnext.dss.lib.shopify.webhook.ShopifyHmacVerifierService
 import dropnext.dss.lib.shopify.webhook.ShopifyWebhookTopic
 import dropnext.dss.lib.shopify.webhook.graphqlResourceIdFromShopifyWebhook
-import dropnext.dss.lib.shopify.webhook.variantLegacyIdsFromProductWebhook
-import dropnext.dss.shopify.toProductVariantItems
+import dropnext.dss.lib.shopify.webhook.shopDomainFromWebhook
+import dropnext.dss.lib.shopify.webhook.variantIdsFromProductWebhook
+import dropnext.dss.workflow.deleteShopifyProductFromMonolith
 import dropnext.dss.workflow.syncShopifyOrderToMonolith
+import dropnext.dss.workflow.syncShopifyProductToMonolith
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -24,6 +19,12 @@ import io.ktor.server.response.respond
 
 private val log = KotlinLogging.logger {}
 
+/**
+ * The one inbound Shopify webhook endpoint: verifies the body signature, resolves the shop and its
+ * service, and dispatches on the topic to the workflow that mirrors the change into the monolith.
+ * Every verified delivery is answered `200`, whatever happened downstream: Shopify would otherwise
+ * keep retrying a delivery we cannot act on any better the next time.
+ */
 class ShopifyWebhookHandlers(
   private val shopifyGraphqlServiceFactory: ShopifyGraphqlServiceFactory,
   private val monolithService: MonolithService,
@@ -42,12 +43,12 @@ class ShopifyWebhookHandlers(
     val bodyString = body.decodeToString()
     log.info { "Webhook verified topic=${topic.raw} shopDomainHeader=$shopDomainHeader bodyBytes=${body.size}" }
 
-    val shop = ShopDomain.fromWebhook(shopDomainHeader, bodyString)
+    val shop = shopDomainFromWebhook(shopDomainHeader, bodyString)
     val shopify = shop?.let { shopifyGraphqlServiceFactory.forShop(it) }
     if (shop == null || shopify == null) {
       log.error {
         "Webhook: no Admin token topic=${topic.raw} shopDomainHeader=$shopDomainHeader shop=$shop " +
-          "(configure DSS_SHOP_ACCESS_TOKENS or OAuth env entry)"
+          "(configure DSS_SHOP_ACCESS_TOKENS or complete the OAuth install)"
       }
       call.respond(HttpStatusCode.OK)
       return
@@ -55,86 +56,28 @@ class ShopifyWebhookHandlers(
 
     when (topic) {
       ShopifyWebhookTopic.ProductsCreate, ShopifyWebhookTopic.ProductsUpdate ->
-        handleProductUpsert(shopify, bodyString, topic.raw)
+        resourceGidOrLog(topic, bodyString)?.let { syncShopifyProductToMonolith(shopify, monolithService, it) }
+
       ShopifyWebhookTopic.ProductsDelete ->
-        handleProductDelete(shop, bodyString)
+        deleteShopifyProductFromMonolith(monolithService, shop, variantIdsFromProductWebhook(bodyString))
+
       ShopifyWebhookTopic.OrdersCreate ->
-        handleOrderWebhook(shopify, bodyString, topic.raw, syncToMonolith = true)
+        resourceGidOrLog(topic, bodyString)?.let { syncShopifyOrderToMonolith(shopify, monolithService, it, topic.raw) }
+
+      // The `create` already carried the order; an update is acknowledged, not mirrored.
       ShopifyWebhookTopic.OrdersUpdated ->
-        handleOrderWebhook(shopify, bodyString, topic.raw, syncToMonolith = false)
+        log.info { "Webhook ${topic.raw} acknowledged (not mirrored)" }
+
       is ShopifyWebhookTopic.Other ->
         log.info { "Webhook topic not handled: ${topic.raw}" }
     }
     call.respond(HttpStatusCode.OK)
   }
 
-  private suspend fun handleProductUpsert(
-    shopify: ShopifyGraphqlService,
-    bodyStr: String,
-    topic: String,
-  ) {
-    val id = graphqlResourceIdFromShopifyWebhook(topic, bodyStr)
-    if (id == null) {
-      log.warn { "Webhook product: could not parse Graphql id from body" }
-      return
-    }
-    val r = shopify.getProductById(id)
-    val product = r.data?.product
-    log.info { "Webhook product synced id=$id title=${product?.title} errors=${r.errors}" }
-    if (product == null) return
-
-    val currencyCode = r.data?.shop?.currencyCode?.name ?: "USD"
-    val variantItems = product.toProductVariantItems(currencyCode)
-    if (variantItems.isEmpty()) return
-
-    val req = UpsertProductVariantsRequest(
-      shopifySubdomain = shopify.shop.subdomainOnly,
-      productVariants = variantItems,
-    )
-    when (val result = monolithService.upsertProductVariants(req)) {
-      is UpsertVariantsResult.Ok ->
-        log.info { "Monolith upsert variants ok: ${result.upserted} upserted shop=${shopify.shop.normalizedShopifyHost}" }
-      is UpsertVariantsResult.Error -> {
-        val msg = "Monolith upsert variants failed: status=${result.status} ${result.errorMessage}"
-        if (result.status >= 500) log.error { msg } else log.warn { msg }
+  private fun resourceGidOrLog(topic: ShopifyWebhookTopic, bodyString: String): String? =
+    graphqlResourceIdFromShopifyWebhook(topic.raw, bodyString)
+      ?: run {
+        log.warn { "Webhook ${topic.raw}: could not parse Graphql id from body" }
+        null
       }
-    }
-  }
-
-  private suspend fun handleProductDelete(shop: ShopDomain, bodyStr: String) {
-    val id = graphqlResourceIdFromShopifyWebhook(ShopifyWebhookTopic.ProductsDelete.raw, bodyStr)
-    log.info { "Webhook product deleted id=$id" }
-
-    val variantIds = variantLegacyIdsFromProductWebhook(bodyStr)
-    if (variantIds.isEmpty()) return
-
-    val req = DeleteProductVariantsRequest(
-      shopifySubdomain = shop.subdomainOnly,
-      productVariantIds = variantIds,
-    )
-    when (val result = monolithService.deleteProductVariants(req)) {
-      is DeleteVariantsResult.Ok ->
-        log.info { "Monolith delete variants ok: ${result.deleted} deleted shop=${shop.normalizedShopifyHost}" }
-      is DeleteVariantsResult.Error ->
-        logMonolithFailure("deleteProductVariants", result.status, result.parsed, "shop=${shop.normalizedShopifyHost}")
-    }
-  }
-
-  private suspend fun handleOrderWebhook(
-    shopify: ShopifyGraphqlService,
-    bodyStr: String,
-    topic: String,
-    syncToMonolith: Boolean,
-  ) {
-    val id = graphqlResourceIdFromShopifyWebhook(topic, bodyStr)
-    if (id == null) {
-      log.warn { "Webhook order: could not parse Graphql id from body" }
-      return
-    }
-    if (syncToMonolith) {
-      syncShopifyOrderToMonolith(shopify, monolithService, id, topic)
-      return
-    }
-    log.info { "Webhook $topic acknowledged id=$id (monolith sync disabled)" }
-  }
 }

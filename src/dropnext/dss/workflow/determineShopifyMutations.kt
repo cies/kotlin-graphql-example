@@ -1,14 +1,15 @@
 package dropnext.dss.workflow
 
 import dev.forkhandles.result4k.Failure
-import dev.forkhandles.result4k.Result
 import dev.forkhandles.result4k.Success
-import dropnext.dss.lib.monolith.dto.generated.Shipment
+import dropnext.dss.contract.Shipment
+import dropnext.dss.domain.ShopifyOrderId
+import dropnext.dss.domain.fulfillment.DryRunResult
+import dropnext.dss.domain.fulfillment.SkipReason
+import dropnext.dss.domain.fulfillment.SkippedShipmentLine
+import dropnext.dss.domain.fulfillment.dryRunAllShipments
 import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlService
-import dropnext.dss.lib.shopify.graphql.fulfillment.DryRunResult
-import dropnext.dss.lib.shopify.graphql.fulfillment.SkipReason
-import dropnext.dss.lib.shopify.graphql.fulfillment.SkippedShipmentLine
-import dropnext.dss.lib.shopify.graphql.fulfillment.dryRunAllShipments
+import dropnext.dss.lib.shopify.graphql.ShopifyResult
 import dropnext.dss.lib.shopify.orderGid
 import dropnext.graphql.generated.getorderfordss.Order
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -19,11 +20,11 @@ private val log = KotlinLogging.logger {}
 /** Read-only: loads Shopify data, then [calculateShopifyMutations]. */
 suspend fun determineShopifyMutations(
   shopifyGqlService: ShopifyGraphqlService,
-  shopifyOrderId: Long,
+  shopifyOrderId: ShopifyOrderId,
   shipments: List<Shipment>,
-): Result<List<ShopifyMutation>, DetermineShopifyMutationsError> {
-  val order = when (val loaded = loadShopifyOrder(shopifyGqlService, shopifyOrderId)) {
-    is Failure -> return Failure(loaded.reason)
+): ShopifyResult<List<ShopifyMutation>> {
+  val order = when (val loaded = shopifyGqlService.orderForDss(orderGid(shopifyOrderId))) {
+    is Failure -> return loaded
     is Success -> loaded.value
   }
   val calculated = calculateShopifyMutations(order, shipments)
@@ -38,33 +39,9 @@ suspend fun determineShopifyMutations(
   return calculated
 }
 
-private suspend fun loadShopifyOrder(
-  shopifyGqlService: ShopifyGraphqlService,
-  shopifyOrderId: Long,
-): Result<Order, DetermineShopifyMutationsError> {
-  val response = try {
-    shopifyGqlService.loadOrderForDss(orderGid(shopifyOrderId))
-  } catch (e: Exception) {
-    return Failure(DetermineShopifyMutationsError.Network(e.message ?: "network error"))
-  }
-  val order = response.data?.order
-  val graphqlErrors = response.errors
-  if (order == null && !graphqlErrors.isNullOrEmpty()) {
-    return Failure(
-      DetermineShopifyMutationsError.GraphqlError(
-        graphqlErrors.joinToString("; ") { it.message },
-      ),
-    )
-  }
-  if (order == null) {
-    return Failure(DetermineShopifyMutationsError.NotFound("order $shopifyOrderId not found"))
-  }
-  return Success(order)
-}
-
 private fun logSkippedShipmentLines(
   shopifySubdomain: String,
-  shopifyOrderId: Long,
+  shopifyOrderId: ShopifyOrderId,
   order: Order,
   shipments: List<Shipment>,
 ) {
@@ -87,7 +64,7 @@ private fun logSkippedShipmentLines(
   }
 }
 
-private fun logSkippedLine(shop: String, orderId: Long, skipped: SkippedShipmentLine) {
+private fun logSkippedLine(shop: String, orderId: ShopifyOrderId, skipped: SkippedShipmentLine) {
   log.warn {
     "sync-shipments skipped line shop=$shop orderId=$orderId " +
       "tracking=${skipped.trackingNumber} variant=${skipped.productVariantId} " +
@@ -95,9 +72,8 @@ private fun logSkippedLine(shop: String, orderId: Long, skipped: SkippedShipment
   }
 }
 
-private fun SkipReason.logLabel(): String =
-  when (this) {
-    SkipReason.NO_OPEN_FO -> "no_open_fo"
-    SkipReason.VARIANT_NOT_FOUND -> "variant_not_found"
-    SkipReason.ZERO_REMAINING -> "zero_remaining"
-  }
+private fun SkipReason.logLabel(): String = when (this) {
+  SkipReason.NO_OPEN_FO -> "no_open_fo"
+  SkipReason.VARIANT_NOT_FOUND -> "variant_not_found"
+  SkipReason.ZERO_REMAINING -> "zero_remaining"
+}

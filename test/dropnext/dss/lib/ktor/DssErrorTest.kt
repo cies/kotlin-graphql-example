@@ -31,13 +31,6 @@ class DssErrorTest {
   }
 
   @Test
-  fun `unauthorized maps to 401 with default message`() {
-    val e = DssError.Unauthorized()
-    assert(e.message == "unauthorized")
-    assert(e.toHttpStatus() == HttpStatusCode.Unauthorized)
-  }
-
-  @Test
   fun `missing shopify admin token maps to 401`() {
     val e = DssError.MissingShopifyAdminToken
     assert(e.toHttpStatus() == HttpStatusCode.Unauthorized)
@@ -45,7 +38,16 @@ class DssErrorTest {
   }
 
   @Test
+  fun `rejected shopify admin token maps to 401 and says to reinstall`() {
+    val e = DssError.ShopifyAdminTokenRejected(401)
+    assert(e.toHttpStatus() == HttpStatusCode.Unauthorized)
+    assert("HTTP 401" in e.message)
+    assert("reinstall" in e.message)
+  }
+
+  @Test
   fun `invalid signature maps to 403`() {
+
     assert(DssError.InvalidSignature("Invalid HMAC").toHttpStatus() == HttpStatusCode.Forbidden)
   }
 
@@ -57,5 +59,11 @@ class DssErrorTest {
   @Test
   fun `upstream failure maps to 502`() {
     assert(DssError.UpstreamFailure("network down").toHttpStatus() == HttpStatusCode.BadGateway)
+  }
+
+  @Test
+  fun `internal maps to 500 with a message that says nothing`() {
+    assert(DssError.Internal.toHttpStatus() == HttpStatusCode.InternalServerError)
+    assert(DssError.Internal.message == "internal error")
   }
 }

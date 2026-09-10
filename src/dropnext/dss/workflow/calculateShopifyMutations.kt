@@ -1,11 +1,13 @@
 package dropnext.dss.workflow
 
 import dev.forkhandles.result4k.Failure
-import dev.forkhandles.result4k.Result
 import dev.forkhandles.result4k.Success
-import dropnext.dss.lib.monolith.dto.generated.Shipment
-import dropnext.dss.lib.shopify.graphql.fulfillment.DryRunResult
-import dropnext.dss.lib.shopify.graphql.fulfillment.dryRunAllShipments
+import dropnext.dss.contract.Shipment
+import dropnext.dss.domain.fulfillment.DryRunResult
+import dropnext.dss.domain.fulfillment.dryRunAllShipments
+import dropnext.dss.lib.shopify.graphql.FulfillmentLine
+import dropnext.dss.lib.shopify.graphql.ShopifyError
+import dropnext.dss.lib.shopify.graphql.ShopifyResult
 import dropnext.graphql.generated.getorderfordss.Order
 
 
@@ -13,33 +15,29 @@ import dropnext.graphql.generated.getorderfordss.Order
 fun calculateShopifyMutations(
   order: Order,
   shipments: List<Shipment>,
-): Result<List<ShopifyMutation>, DetermineShopifyMutationsError> {
+): ShopifyResult<List<ShopifyMutation>> =
   when (val match = dryRunAllShipments(order, shipments)) {
-    is DryRunResult.UserError ->
-      return Failure(DetermineShopifyMutationsError.UserError(match.messages))
-    is DryRunResult.Ok -> {
-      val mutations = mutableListOf<ShopifyMutation>()
-      match.perShipment.forEachIndexed { index, shipmentMatch ->
-        if (shipmentMatch.groups.isEmpty()) return@forEachIndexed
+    is DryRunResult.UserError -> Failure(ShopifyError.UserError(match.messages))
+    is DryRunResult.Ok -> Success(
+      match.perShipment.mapIndexedNotNull { index, shipmentMatch ->
+        if (shipmentMatch.groups.isEmpty()) return@mapIndexedNotNull null
         val shipment = shipments[index]
         val lineItems = shipmentMatch.groups.flatMap { (fulfillmentOrder, inputs) ->
           inputs.map { input ->
-            FulfillmentOrderLineItem(
+            FulfillmentLine(
               fulfillmentOrderId = fulfillmentOrder.id,
               lineItemId = input.id,
               quantity = input.quantity,
             )
           }
         }
-        mutations += ShopifyMutation.FulfillmentCreate(
+        ShopifyMutation.FulfillmentCreate(
           lineItems = lineItems,
           trackingNumber = shipment.trackingNumber,
           carrier = shipment.carrier,
           trackingUrl = shipment.trackingUrl,
           notifyCustomer = false,
         )
-      }
-      return Success(mutations)
-    }
+      },
+    )
   }
-}

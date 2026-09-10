@@ -1,34 +1,26 @@
 package dropnext.dss.presentation
 
 import dropnext.dss.domain.MonolithPersistOutcome
-import dropnext.dss.lib.shopify.graphql.webhookregistration.WebhookSubscriptionStatus
-import dropnext.graphql.generated.enums.WebhookSubscriptionTopic
+import dropnext.dss.domain.ShopInstallReport
+import dropnext.dss.domain.WebhookRegistrationFailure
+import dropnext.dss.domain.WebhookSubscriptionStatus
 import kotlinx.html.*
 import kotlinx.html.stream.appendHTML
 
 
 /** Renders the post-install confirmation page as a complete HTML document. */
-fun renderOAuthInstallPage(
-  shop: String,
-  shopId: Long,
-  monolithPersist: MonolithPersistOutcome,
-  productEdgeCount: Int,
-  webhookCallbackUrl: String,
-  activeSubscriptions: List<WebhookSubscriptionStatus>,
-  addedSubscriptions: List<WebhookSubscriptionStatus>,
-  failedTopics: List<Pair<WebhookSubscriptionTopic, String>>,
-): String = StringBuilder("<!DOCTYPE html>\n").appendHTML().html {
+fun renderOAuthInstallPage(report: ShopInstallReport): String = StringBuilder("<!DOCTYPE html>\n").appendHTML().html {
   head {
     meta { name = "robots"; content = "noindex, nofollow" }
   }
   body {
     h1 { +"App installed" }
-    p { +"Shop: $shop (id $shopId)" }
-    renderMonolithPersistBlock(monolithPersist)
-    p { +"SyncProductsPage (first 3) product edges: $productEdgeCount" }
+    p { +"Shop: ${report.shop.normalizedShopifyHost} (id ${report.shopId?.value ?: "unknown"})" }
+    renderMonolithPersistBlock(report.monolithPersist)
+    p { +"Products on the first catalogue page: ${report.productSampleCount ?: "unknown (lookup failed)"}" }
     p {
       +"Webhook callback URL: "
-      code { +webhookCallbackUrl }
+      code { +report.webhookCallbackUrl }
     }
     p {
       +"Active "
@@ -37,11 +29,11 @@ fun renderOAuthInstallPage(
       code { +"orders/*" }
       +" webhook subscriptions:"
     }
-    renderSubscriptionList(activeSubscriptions)
+    renderSubscriptionList(report.webhooks.activeSubscriptions)
     p { +"Webhook subscriptions added in this install:" }
-    renderSubscriptionList(addedSubscriptions)
-    if (failedTopics.isNotEmpty()) {
-      renderFailedTopics(failedTopics)
+    renderSubscriptionList(report.webhooks.addedSubscriptions)
+    if (report.webhooks.failures.isNotEmpty()) {
+      renderFailedTopics(report.webhooks.failures)
     }
   }
 }.toString()
@@ -56,10 +48,8 @@ private fun FlowContent.renderMonolithPersistBlock(outcome: MonolithPersistOutco
 
     is MonolithPersistOutcome.Failed -> p {
       style = "color:#b91c1c"
-      strong {
-        +"Monolith PUT /orders failed"
-      }
-      +" (HTTP status ${outcome.httpStatus}). Token is cached in this server's memory only."
+      strong { +"Saving the token to the monolith failed" }
+      +" (${outcome.httpStatus?.let { "HTTP status $it" } ?: "no response"}). Token is cached in this server's memory only."
       if (!outcome.detail.isNullOrBlank()) {
         +" Details: "
         code { +outcome.detail.take(400) }
@@ -75,7 +65,7 @@ private fun FlowContent.renderSubscriptionList(subs: List<WebhookSubscriptionSta
     } else {
       subs.forEach { sub ->
         li {
-          code { +sub.topic.name }
+          code { +sub.topic }
           +" -> "
           code { +sub.uri }
           +" (id "
@@ -87,18 +77,18 @@ private fun FlowContent.renderSubscriptionList(subs: List<WebhookSubscriptionSta
   }
 }
 
-private fun FlowContent.renderFailedTopics(failures: List<Pair<WebhookSubscriptionTopic, String>>) {
+private fun FlowContent.renderFailedTopics(failures: List<WebhookRegistrationFailure>) {
   p {
     style = "color:red"
     strong { +"Webhook registrations that failed (check app scopes in Partner Dashboard):" }
   }
   ul {
-    failures.forEach { (topic, errorMsg) ->
+    failures.forEach { failure ->
       li {
         style = "color:red"
-        code { +topic.name }
+        code { +failure.topic }
         +" — "
-        +errorMsg
+        +failure.error
       }
     }
   }

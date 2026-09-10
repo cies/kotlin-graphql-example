@@ -1,0 +1,118 @@
+package dropnext.dss.testutil.fake
+
+import com.sun.net.httpserver.HttpExchange
+import com.sun.net.httpserver.HttpServer
+import java.net.InetSocketAddress
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+
+
+/**
+ * A stand-in for the Logflare HTTP API, on loopback.
+ *
+ * A real server rather than a stubbed HTTP client: the appender's failure modes are HTTP ones —
+ * a non-2xx on the source handshake, a batch the server rejects — and only a real one exercises the
+ * client the appender actually ships with. `com.sun.net.httpserver` is in the JDK, so this costs no
+ * dependency.
+ *
+ * Recording is concurrent because the flush runs on the appender's own background thread.
+ */
+class FakeLogflareServer : AutoCloseable {
+
+  private val server: HttpServer = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+
+  /** Every batch the sender posted, in arrival order, as the `batch` array's entries flattened. */
+  private val received = ConcurrentLinkedQueue<JsonObject>()
+
+  private val sourceRequestBodies = ConcurrentLinkedQueue<String>()
+
+  private val apiKeysSeen = ConcurrentLinkedQueue<String>()
+
+  /** Set before `start()` to make the source handshake fail, or the batch endpoint reject. */
+  var sourcesStatusCode: Int = 200
+  var logsStatusCode: Int = 200
+
+  /** The sources the fake knows about; empty means the sender has to create one. */
+  var knownSourceName: String? = null
+
+  val endpoint: String get() = "http://127.0.0.1:${server.address.port}"
+
+  val receivedEvents: List<JsonObject> get() = received.toList()
+
+  val receivedApiKeys: List<String> get() = apiKeysSeen.toList()
+
+  val createdSourceNames: List<String>
+    get() = sourceRequestBodies.map { Json.parseToJsonElement(it).jsonObject["name"]!!.jsonPrimitive.content }
+
+  private val batchArrived = java.util.concurrent.atomic.AtomicReference(CountDownLatch(1))
+
+  init {
+    server.createContext("/api/sources") { exchange -> handleSources(exchange) }
+    server.createContext("/api/logs") { exchange -> handleLogs(exchange) }
+    server.executor = null // Handlers run on the server's own thread; nothing here blocks.
+    server.start()
+  }
+
+  /**
+   * Blocks until a batch this call has not already seen arrives, or the timeout passes. The latch is
+   * replaced once it fires, so a second `awaitBatch` waits for a second batch instead of returning
+   * true on the first one all over again.
+   */
+  fun awaitBatch(timeoutSeconds: Long = 5): Boolean {
+    val latch = batchArrived.get()
+    val arrived = latch.await(timeoutSeconds, TimeUnit.SECONDS)
+    if (arrived) batchArrived.compareAndSet(latch, CountDownLatch(1))
+    return arrived
+  }
+
+  /**
+   * Gives a background flush the chance to ship something it should not, then reports that nothing
+   * came. Pair it with an assertion on [receivedEvents]: this call bounds the wait, the other states
+   * the fact.
+   */
+  fun awaitNoBatch(timeoutSeconds: Long = 1): Boolean = !awaitBatch(timeoutSeconds)
+
+  private fun handleSources(exchange: HttpExchange) {
+    apiKeysSeen += exchange.requestHeaders.getFirst("Authorization").orEmpty()
+    if (sourcesStatusCode != 200) return exchange.respond(sourcesStatusCode, """{"error":"nope"}""")
+
+    when (exchange.requestMethod) {
+      "GET" -> {
+        val known = knownSourceName
+        val body = if (known == null) "[]" else """[{"name":"$known","token":"token-for-$known"}]"""
+        exchange.respond(200, body)
+      }
+      else -> {
+        val body = exchange.requestBody.readBytes().decodeToString()
+        sourceRequestBodies += body
+        val name = Json.parseToJsonElement(body).jsonObject["name"]!!.jsonPrimitive.content
+        exchange.respond(200, """{"name":"$name","token":"token-for-$name"}""")
+      }
+    }
+  }
+
+  private fun handleLogs(exchange: HttpExchange) {
+    apiKeysSeen += exchange.requestHeaders.getFirst("X-API-KEY").orEmpty()
+    val body = exchange.requestBody.readBytes().decodeToString()
+    Json.parseToJsonElement(body).jsonObject["batch"]!!.jsonArray.forEach { received += it.jsonObject }
+    exchange.respond(logsStatusCode, """{"message":"ok"}""")
+    batchArrived.get().countDown()
+  }
+
+  private fun HttpExchange.respond(status: Int, body: String) {
+    val bytes = body.toByteArray()
+    responseHeaders.add("Content-Type", "application/json")
+    sendResponseHeaders(status, bytes.size.toLong())
+    responseBody.use { it.write(bytes) }
+  }
+
+  override fun close() {
+    server.stop(0)
+  }
+}

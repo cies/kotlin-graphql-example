@@ -4,59 +4,118 @@ import com.lemonappdev.konsist.api.Konsist
 import com.lemonappdev.konsist.api.architecture.KoArchitectureCreator.assertArchitecture
 import com.lemonappdev.konsist.api.architecture.Layer
 import com.lemonappdev.konsist.api.verify.assertFalse
+import dropnext.dss.testutil.helper.kotlinSourceFileTexts
+import dropnext.dss.testutil.helper.normalizedPath
+import dropnext.dss.testutil.helper.pathContainsAllowListEntry
+import dropnext.dss.testutil.helper.withoutComments
 import org.junit.jupiter.api.Test
 
 
-/** Tests that enforce architecture rules relating to the dependencies that packages have on each other. */
+/**
+ * The conventions of `src/` that can be checked mechanically: the dependencies our packages may
+ * have on each other, the reflection ban, the secret contract, and the boundaries `CLAUDE.md`
+ * states in prose. Every rule prints the offending file **and** the fix, because Konsist's own
+ * failure message names the file and nothing else.
+ *
+ * A rule that greps for code reads the file's `code` (comments blanked out), never its raw text: a
+ * comment explaining why a file avoids a construct must not be read as the construct itself.
+ */
 class ArchitectureTest {
 
-  /** Konsist returns OS-native paths; allow-list entries use forward slashes. */
-  private fun normalizedPath(path: String): String = path.replace('\\', '/')
+  /**
+   * Our sources live in `src/` (not `src/main/kotlin/`), which defeats Konsist's built-in detection.
+   * The path stays relative: Konsist resolves it against the project root it finds itself.
+   */
+  private val srcScope by lazy { Konsist.scopeFromDirectory("src") }
 
-  private fun pathContainsAllowListEntry(path: String, allowList: List<String>): Boolean =
-    allowList.any { allowed -> allowed in normalizedPath(path) }
-
+  /**
+   * Our packages form a stack whose arrows point one way only. The two that carry the most weight:
+   *
+   * - `lib` may not reach into application code, and its packages may not reach into each other
+   *   (only into the generic `lib/json`, `lib/crypto`, `lib/logging`). It is the part of this repo
+   *   that could be lifted out into a library of its own.
+   * - `domain` and `contract` are the vocabulary everything shares; they depend on nothing of ours.
+   *
+   * `contract` is generated under `build/`, so it never appears in this scope: every layer may
+   * import it and no rule needs to say so.
+   */
   @Test
   fun `the project's packages have correct dependencies on each other`() {
-    // Our sources live in `src/` (not `src/main/kotlin/`), which defeats Konsist's
-    // built-in production/test detection. Point Konsist at the directory explicitly instead.
-    Konsist.scopeFromDirectory("src").assertArchitecture {
-      // Define our "layers"
+    srcScope.assertArchitecture {
       val config = Layer("config", "dropnext.dss.config..")
-      val shopify = Layer("shopify", "dropnext.dss.shopify..")
+      val domain = Layer("domain", "dropnext.dss.domain..")
       val handler = Layer("handler", "dropnext.dss.handler..")
+      val mapper = Layer("mapper", "dropnext.dss.mapper..")
+      val path = Layer("path", "dropnext.dss.path..")
+      val presentation = Layer("presentation", "dropnext.dss.presentation..")
       val routing = Layer("routing", "dropnext.dss.routing..")
       val workflow = Layer("workflow", "dropnext.dss.workflow..")
-      val presentation = Layer("presentation", "dropnext.dss.presentation..")
+      val lib = Layer("lib", "dropnext.dss.lib..")
       val libShopify = Layer("lib/shopify", "dropnext.dss.lib.shopify..")
       val libMonolith = Layer("lib/monolith", "dropnext.dss.lib.monolith..")
-      val libJson = Layer("lib/json", "dropnext.dss.lib.json..")
       val libKtor = Layer("lib/ktor", "dropnext.dss.lib.ktor..")
+      val libJson = Layer("lib/json", "dropnext.dss.lib.json..")
+      val libCrypto = Layer("lib/crypto", "dropnext.dss.lib.crypto..")
+      val libLogging = Layer("lib/logging", "dropnext.dss.lib.logging..")
+      val libLogflare = Layer("lib/logflare", "dropnext.dss.lib.logflare..")
 
-      // Define architecture assertions.
-      // Note: generated OpenAPI DTOs live under `dropnext.dss.lib.monolith.dto.generated..`, which
-      // means any layer rule that forbids depending on `libMonolith` also forbids depending on the
-      // generated DTOs — which is impractical, because virtually every layer needs them. As a
-      // result, `libKtor` and `shopify` are allowed to depend on `libMonolith` (in practice they
-      // only touch the generated DTOs: `ErrorResponse`, `ProductStatus`, `ProductVariantItem`,
-      // `SelectedOption`). Stricter layers (`libJson`, `config`) still ban the dependency.
-      // config + libMonolith may depend on lib/shopify for the `ShopDomain` value class (a
-      // shared primitive). The rule above is intentionally less strict than for libJson/libKtor:
-      // those are generic infra and have no business knowing about shops.
-      config.doesNotDependOn(handler, routing, workflow, presentation, libMonolith)
-      libMonolith.doesNotDependOn(handler, routing, workflow, presentation)
-      libShopify.doesNotDependOn(handler, routing, workflow, presentation)
-      // Generic infrastructure libs must not depend on any application layer.
-      libJson.doesNotDependOn(handler, routing, workflow, presentation, libShopify, libMonolith, shopify, config)
-      libKtor.doesNotDependOn(handler, routing, workflow, presentation, libShopify, shopify, config)
-      shopify.doesNotDependOn(handler, routing, workflow, presentation, libShopify)
-      workflow.doesNotDependOn(handler, routing, presentation) // workflows must not depend on HTTP/view layers
-      routing.doesNotDependOn(workflow, presentation)          // routing wires handlers, not views directly
-      // presentation is a pure view layer: data in, HTML string out. No HTTP, no orchestration.
-      // (lib/shopify is allowed because WebhookSubscriptionStatus / WebhookRegistrationReport
-      //  are plain data classes consumed by the install page renderer.)
-      presentation.doesNotDependOn(handler, routing, workflow, libMonolith)
+      val applicationLayers = setOf(config, handler, mapper, path, presentation, routing, workflow)
+
+      domain.doesNotDependOn(applicationLayers + lib)
+      lib.doesNotDependOn(applicationLayers)
+      libShopify.doesNotDependOn(libMonolith, libKtor)
+      libMonolith.doesNotDependOn(libShopify, libKtor)
+      libKtor.doesNotDependOn(libShopify, libMonolith)
+      libJson.doesNotDependOn(domain, libShopify, libMonolith, libKtor, libCrypto, libLogging)
+      libCrypto.doesNotDependOn(domain, libShopify, libMonolith, libKtor, libJson, libLogging)
+      libLogging.doesNotDependOn(domain, libShopify, libMonolith, libKtor, libJson, libCrypto)
+      // The log shipper may name the secret it authenticates with, and nothing else of ours: it runs
+      // on its own thread, with its own HTTP client, so that logging a failure cannot re-enter the
+      // code that failed. `app.kt` is what knows both it and `Config`.
+      libLogflare.doesNotDependOn(libShopify, libMonolith, libKtor, libJson, libCrypto, libLogging)
+      config.doesNotDependOn(handler, mapper, presentation, routing, workflow, libMonolith, libKtor, libShopify)
+      mapper.doesNotDependOn(config, handler, path, presentation, routing, workflow, libMonolith, libKtor)
+      path.doesNotDependOn(config, handler, mapper, presentation, routing, workflow, lib)
+      workflow.doesNotDependOn(config, handler, path, presentation, routing) // never the HTTP or view layers
+      routing.doesNotDependOn(mapper, presentation, workflow)              // routing wires handlers, not views
+      presentation.doesNotDependOn(config, handler, mapper, path, routing, workflow, lib) // data in, HTML out
     }
+  }
+
+  /**
+   * What `domain` may import: the standard library, the generated Shopify data types (the
+   * fulfillment matcher walks an `Order`), the contract DTOs it validates, and the rest of
+   * `domain`. It is the one layer with no framework underneath it.
+   */
+  private val forbiddenImportsInDomain = listOf(
+    "io.ktor.",
+    "com.expediagroup.",
+    "io.github.oshai.",   // a domain function returns its answer, it does not narrate it
+    "dropnext.dss.lib.",
+    "dropnext.dss.config.",
+    "dropnext.dss.handler.",
+    "dropnext.dss.mapper.",
+    "dropnext.dss.path.",
+    "dropnext.dss.presentation.",
+    "dropnext.dss.routing.",
+    "dropnext.dss.workflow.",
+  )
+
+  @Test
+  fun `domain package must not depend on a framework or an application layer`() {
+    srcScope
+      .files
+      .filter { "/dropnext/dss/domain/" in normalizedPath(it.path) }
+      .assertFalse { file ->
+        val forbidden = file.imports.map { it.name }.filter { name -> forbiddenImportsInDomain.any { name.startsWith(it) } }
+        if (forbidden.isNotEmpty()) {
+          println(
+            "ERROR: Domain file ${file.path} imports $forbidden. Move the framework-facing part to the " +
+              "layer that owns it and leave `domain` holding only the model."
+          )
+        }
+        forbidden.isNotEmpty()
+      }
   }
 
   /** Reflection-related imports that are always forbidden in production code. */
@@ -101,7 +160,7 @@ class ArchitectureTest {
 
   @Test
   fun `forbid use of JVM reflection`() {
-    Konsist.scopeFromDirectory("src")
+    srcScope
       .files
       .filterNot { file -> pathContainsAllowListEntry(file.path, reflectionAllowList) }
       .assertFalse { file ->
@@ -118,7 +177,7 @@ class ArchitectureTest {
           allowedKotlinReflectImports.any { allowed -> importName == allowed }
         }
         val hasReflectionUsage = hasAllowedKotlinReflectImport &&
-          reflectionUsagePatterns.any { it.containsMatchIn(file.text) }
+          reflectionUsagePatterns.any { it.containsMatchIn(file.text.withoutComments()) }
 
         val allOffending = forbiddenImports + forbiddenKotlinReflectImports
         if (allOffending.isNotEmpty()) {
@@ -149,7 +208,7 @@ class ArchitectureTest {
 
   @Test
   fun `workflow package must not depend on Ktor server or HTTP request types`() {
-    Konsist.scopeFromDirectory("src")
+    srcScope
       .files
       .filter { "/dropnext/dss/workflow/" in normalizedPath(it.path) }
       .assertFalse { file ->
@@ -170,11 +229,10 @@ class ArchitectureTest {
   fun `presentation layer does not know about Ktor server or HTTP client`() {
     // The view should take data in and return a String. It must not see ApplicationCall,
     // HttpClient, or any other transport-layer type, so it can be tested in isolation.
-    val forbiddenPrefixes = listOf("io.ktor.server.", "io.ktor.client.", "io.ktor.http.")
-    val violations = java.io.File("src/dropnext/dss/presentation").walkTopDown()
-      .filter { it.isFile && it.extension == "kt" }
+    val forbiddenPrefixes = listOf("io.ktor.server.", "io.ktor.client.", "io.ktor.http.", "dropnext.graphql.generated.")
+    val violations = kotlinSourceFileTexts("src/dropnext/dss/presentation")
       .flatMap { file ->
-        file.readLines()
+        file.text.lines()
           .withIndex()
           .filter { (_, line) ->
             val trimmed = line.trim()
@@ -182,9 +240,8 @@ class ArchitectureTest {
           }
           .map { (idx, line) -> "${file.path}:${idx + 1}  ${line.trim()}" }
       }
-      .toList()
     assert(violations.isEmpty()) {
-      "presentation/* must not depend on Ktor server/client/http — keep it a pure view layer:\n" +
+      "presentation/* must not depend on Ktor or the Shopify schema — keep it a pure view layer:\n" +
         violations.joinToString("\n")
     }
   }
@@ -199,35 +256,28 @@ class ArchitectureTest {
   )
 
   /**
-   * Files allowed to import from `dropnext.graphql.generated.*`. The intent is that every Graphql
-   * operation invocation lives inside `lib/shopify` (the `ShopifyService` named methods); other
-   * files either call those methods (response types flow back through type inference) or are
-   * explicit mappers/views that translate generated types into DTOs / HTML. Add to this list
-   * only when introducing another translation boundary.
+   * Files allowed to import from `dropnext.graphql.generated.*`. Every Graphql operation runs
+   * inside `lib/shopify` (the `ShopifyGraphqlService` methods), which answers typed results; the
+   * files outside it that still see generated types are the translation boundaries that walk an
+   * `Order` or a `Product`. Add to this list only when introducing another one.
    */
   private val graphqlGeneratedAllowList = listOf(
     // The single place that constructs and runs Graphql operations.
     "/dropnext/dss/lib/shopify/",
-    // Maps the GetOrderForDss result into the monolith CreateShopifyOrderRequest DTO.
-    "/dropnext/dss/workflow/MonolithOrderMapper.kt",
-    // Multi-step Shopify orchestrations that compose ShopifyGraphqlService primitives —
-    // they map between generated payloads and the FulfillmentResult / WebhookRegistrationReport
-    // types handlers consume. Touching generated types is part of the contract here.
-    "/dropnext/dss/workflow/syncShopifyShipmentsToFulfillments.kt",
+    // Walks the `Order`'s fulfillment orders to match shipments; pure domain logic over the snapshot.
+    "/dropnext/dss/domain/fulfillment/",
+    // Map the `Order` and `Product` snapshots into the monolith contract DTOs.
+    "/dropnext/dss/mapper/",
+    // Plan the mutations from an `Order` snapshot.
     "/dropnext/dss/workflow/calculateShopifyMutations.kt",
     "/dropnext/dss/workflow/determineShopifyMutations.kt",
-    "/dropnext/dss/workflow/effectShopifyMutations.kt",
-    "/dropnext/dss/workflow/syncShopifyTrackingEvent.kt",
+    // Names the subscription-topic enum the service takes.
     "/dropnext/dss/workflow/registerShopifyWebhooks.kt",
-    // Maps GetProductById result (Product / variants / media) into monolith UpsertVariants DTOs.
-    "/dropnext/dss/shopify/ProductMapper.kt",
-    // Renders WebhookSubscriptionTopic.name into HTML on the install confirmation page.
-    "/dropnext/dss/presentation/renderOAuthInstallPage.kt",
   )
 
   @Test
-  fun `forbid dropnext-graphql-generated imports outside lib_shopify and mappers`() {
-    Konsist.scopeFromDirectory("src")
+  fun `forbid dropnext-graphql-generated imports outside lib_shopify and the translation boundaries`() {
+    srcScope
       .files
       .filterNot { file -> pathContainsAllowListEntry(file.path, graphqlGeneratedAllowList) }
       .assertFalse { file ->
@@ -237,8 +287,8 @@ class ArchitectureTest {
         if (offending.isNotEmpty()) {
           println(
             "ERROR: File ${file.path} imports Graphql-generated types: $offending. " +
-              "Route Graphql calls through ShopifyService methods so handlers/workflows stay decoupled " +
-              "from the Shopify Admin schema. If the file is a translation boundary (mapper/view), " +
+              "Route Graphql calls through ShopifyGraphqlService methods so handlers/workflows stay decoupled " +
+              "from the Shopify Admin schema. If the file is a translation boundary (mapper/matcher), " +
               "add it to graphqlGeneratedAllowList with a one-line comment justifying it."
           )
         }
@@ -249,12 +299,12 @@ class ArchitectureTest {
   @Test
   fun `forbid ad-hoc Json instance construction outside lib_json`() {
     val jsonConstructor = Regex("""\bJson\s*\{""")
-    Konsist.scopeFromDirectory("src")
+    srcScope
       .files
       .filterNot { file -> pathContainsAllowListEntry(file.path, jsonConstructionAllowList) }
       .assertFalse { file ->
         val hasJsonImport = file.imports.any { it.name == "kotlinx.serialization.json.Json" }
-        val constructs = hasJsonImport && jsonConstructor.containsMatchIn(file.text)
+        val constructs = hasJsonImport && jsonConstructor.containsMatchIn(file.text.withoutComments())
         if (constructs) {
           println(
             "ERROR: File ${file.path} constructs its own `Json { ... }` instance. " +
@@ -279,11 +329,11 @@ class ArchitectureTest {
     // Match `HttpClient(` as a constructor call. `HttpClient` as a type reference (e.g. parameter
     // type) lacks the trailing `(`, so the pattern is precise without needing imports.
     val httpClientConstructor = Regex("""\bHttpClient\s*\(""")
-    Konsist.scopeFromDirectory("src")
+    srcScope
       .files
       .filterNot { file -> pathContainsAllowListEntry(file.path, httpClientConstructionAllowList) }
       .assertFalse { file ->
-        val constructs = httpClientConstructor.containsMatchIn(file.text)
+        val constructs = httpClientConstructor.containsMatchIn(file.text.withoutComments())
         if (constructs) {
           println(
             "ERROR: File ${file.path} constructs its own `HttpClient(...)`. " +
@@ -293,6 +343,103 @@ class ArchitectureTest {
         constructs
       }
   }
+
+  /**
+   * The process environment is read in exactly one place, `Config.fromEnv`, so the README's
+   * variable table and the code cannot disagree about which variables exist.
+   */
+  @Test
+  fun `only Config reads the process environment`() {
+    val environmentRead = "System." + "getenv"
+    val offenders = srcScope
+      .files
+      .filter { environmentRead in it.text.withoutComments() }
+      .filterNot { it.name == "Config" }
+      .map { it.path }
+    if (offenders.isNotEmpty()) {
+      println(
+        "ERROR: These files read the process environment directly:\n" + offenders.joinToString("\n") { "  - $it" } +
+          "\nDeclare the variable in `Config` and read it from there."
+      )
+    }
+    assert(offenders.isEmpty())
+  }
+
+  /**
+   * A secret renders as `"***"` and nothing else, and it must not be able to leave the process
+   * through serialization. A secret that quietly serialized itself into a payload or interpolated
+   * itself into a log line would not be visible to a reviewer; this rule is.
+   */
+  @Test
+  fun `every secret type redacts its toString and is not Serializable`() {
+    val secretsFile = srcScope.files.single { it.name == "Secrets" }.text
+    val declaration = Regex("""((?:@\w+\s+)*)value class (\w+)\(val value: String\)([^{]*)\{([^}]*)\}""")
+    val declarations = declaration.findAll(secretsFile).toList()
+    assert(declarations.size >= 4) // Guards against the sweep silently walking an empty list.
+
+    val offenders = declarations.mapNotNull { match ->
+      val (annotations, name, supertypes, body) = match.destructured
+      when {
+        "@Serializable" in annotations -> "  - $name is @Serializable"
+        supertypes.trim().isNotEmpty() -> "  - $name implements${supertypes.trimEnd()}"
+        """override fun toString() = "***"""" !in body -> "  - $name does not redact its toString"
+        else -> null
+      }
+    }
+    if (offenders.isNotEmpty()) {
+      println(
+        "ERROR: these types in domain/Secrets.kt break the secret contract:\n" + offenders.joinToString("\n") +
+          "\nA secret implements no interface, is not @Serializable (so it cannot end up in a payload), and renders as \"***\"."
+      )
+    }
+    assert(offenders.isEmpty())
+  }
+
+  /**
+   * The other half of the rule above: `@Serializable` is not inherited, so a wire DTO carrying a
+   * secret-typed property would serialize the secret itself. The contract DTOs deliberately keep
+   * a `String` for the token and the handler wraps at the boundary.
+   */
+  @Test
+  fun `no serializable class in src carries a secret as a property`() {
+    val secretNames = Regex("""value class (\w+)\(val value: String\)""")
+      .findAll(srcScope.files.single { it.name == "Secrets" }.text)
+      .map { it.groupValues[1] }
+      .toList()
+    val secretMention = Regex(""":\s*(${secretNames.joinToString("|")})\??\s*(?:[,)=]|$)""")
+
+    val offenders = srcScope.files.flatMap { file ->
+      serializableClassConstructorsIn(file.text)
+        .filter { (_, constructor) -> secretMention.containsMatchIn(constructor) }
+        .map { (name, _) -> "  - $name in ${file.path}" }
+    }
+    if (offenders.isNotEmpty()) {
+      println(
+        "ERROR: these @Serializable classes carry a secret as a property:\n" + offenders.joinToString("\n") +
+          "\nKeep the property a String and wrap it after the boundary."
+      )
+    }
+    assert(offenders.isEmpty())
+  }
+
+  /** The `@Serializable data class Xxx(...)` declarations with their constructor text. */
+  private fun serializableClassConstructorsIn(text: String): List<Pair<String, String>> =
+    Regex("""data class (\w+)\(""").findAll(text).filter { match ->
+      text.substring(0, match.range.first).split('\n').dropLast(1).reversed()
+        .takeWhile { it.trim().startsWith("@") }
+        .any { "@Serializable" in it }
+    }.map { match ->
+      var depth = 1
+      var index = match.range.last + 1
+      while (index < text.length && depth > 0) {
+        when (text[index]) {
+          '(' -> depth++
+          ')' -> depth--
+        }
+        index++
+      }
+      match.groupValues[1] to text.substring(match.range.last + 1, index - 1)
+    }.toList()
 
   /**
    * Packages allowed to be star-imported. Mirrors `ij_kotlin_packages_to_use_import_on_demand`
@@ -308,10 +455,9 @@ class ArchitectureTest {
     // Konsist's KoImport.name strips the trailing `.*`, so a Konsist-based check silently passes.
     // We grep the source files directly — no extra dependency, no false negatives.
     val wildcardImportLine = Regex("""^\s*import\s+([\w.]+)\.\*\s*$""")
-    val violations = java.io.File("src").walkTopDown()
-      .filter { it.isFile && it.extension == "kt" }
+    val violations = kotlinSourceFileTexts("src")
       .flatMap { file ->
-        file.readLines()
+        file.text.lines()
           .withIndex()
           .mapNotNull { (idx, line) ->
             val match = wildcardImportLine.matchEntire(line) ?: return@mapNotNull null
@@ -320,7 +466,6 @@ class ArchitectureTest {
             else "${file.path}:${idx + 1}  ${line.trim()}"
           }
       }
-      .toList()
     assert(violations.isEmpty()) {
       "Wildcard imports are forbidden in production sources — use explicit imports:\n" +
         violations.joinToString("\n")
@@ -328,21 +473,20 @@ class ArchitectureTest {
   }
 
   @Test
-  fun `no hand-written Kotlin under lib_dto`() {
-    // DTOs in dropnext.dss.lib.dto are generated by openApiGenerate from openapi.json.
-    // Hand-written copies would drift from the spec — find them by looking for any .kt file
-    // under src/dropnext/dss/lib/dto/ (sources tree only; generated DTOs live under build/).
-    val handWritten = Konsist.scopeFromDirectory("src")
+  fun `no hand-written Kotlin under the contract package`() {
+    // The contract DTOs are generated by openApiGenerate from monolith-dss-openapi.json into
+    // `build/`; a hand-written copy under `src/` would drift from the spec.
+    val handWritten = srcScope
       .files
-      .filter { "/dropnext/dss/lib/dto/" in normalizedPath(it.path) }
+      .filter { "/dropnext/dss/contract/" in normalizedPath(it.path) }
     assert(handWritten.isEmpty()) {
-      "Hand-written DTOs belong in openapi.json codegen only: ${handWritten.map { it.path }}"
+      "Contract DTOs belong in the OpenAPI codegen only: ${handWritten.map { it.path }}"
     }
   }
 
   @Test
   fun `OutBoundMonolithPaths is generated not hand-written`() {
-    val handWritten = Konsist.scopeFromDirectory("src")
+    val handWritten = srcScope
       .files
       .filter { it.name == "OutBoundMonolithPaths.kt" }
     assert(handWritten.isEmpty()) {
@@ -351,67 +495,29 @@ class ArchitectureTest {
   }
 
   /**
-   * Test files exempt from the mirror-source rule. These tests legitimately don't map 1:1 to a
-   * single source file (cross-cutting integration tests, meta-tests). Add entries sparingly and
-   * always with a comment explaining why the exemption is necessary.
+   * A file whose main declaration is a type is `PascalCase.kt`; a file of top-level functions is
+   * `lowerCamel.kt` after its main function. The mirror rule below relies on it, and so does a
+   * reader looking for `installShop` under `workflow/`. A PascalCase file may also group a family
+   * of types (`Secrets.kt`, `ShopifyIds.kt`) or declare one top-level value (`AppJson.kt`).
    */
-  private val mirrorSourceAllowList = listOf(
-    // Meta-test: enforces project-wide architecture rules, no single src counterpart.
-    "/test/dropnext/dss/ArchitectureTest.kt",
-    // Integration-style test exercising the webhook → monolith path end-to-end. Unit-level
-    // coverage of MonolithOrderSync.kt would live in a separate MonolithOrderSyncTest.kt.
-    "/test/dropnext/dss/workflow/WebhookMonolithSyncTest.kt",
-    // Webhook-flavored variant of ShopDomainTest — covers shop-domain handling on the inbound
-    // webhook path specifically, with no single matching lib/shopify/ source file.
-    "/test/dropnext/dss/lib/shopify/ShopDomainWebhookTest.kt",
-    // Tests the trace-id MDC interceptor that lives inside `lib/ktor/plugins.kt` alongside the
-    // other Ktor plugin installers — no dedicated `Tracing.kt` source file.
-    "/test/dropnext/dss/lib/ktor/TracingTest.kt",
-    // Tests the install confirmation view rendered by `presentation/renderOAuthInstallPage.kt`;
-    // the test predates a rename of the source file (was `OAuthInstallView.kt`).
-    "/test/dropnext/dss/presentation/OAuthInstallViewTest.kt",
-    // Port/redirect tests remain in ShopifyConfigTest.kt for clarity even after config flattening.
-    "/test/dropnext/dss/config/ShopifyConfigTest.kt",
-  )
-
-  /**
-   * Test-file basenames (no `.kt`) that are test infrastructure rather than tests of a src file.
-   * Anything not ending in `Test` is already excluded; this list catches the rare cases that do.
-   */
-  private val testInfrastructureSuffixes = listOf("Fixtures", "Fake", "Server", "Configs", "Rewriter")
-
   @Test
-  fun `every test file has a matching source file in the mirrored package`() {
-    // Inverted from "every src needs a test": instead, every `<Name>Test.kt` must correspond to
-    // a `<Name>.kt` (or lowerCamel `<name>.kt` for files of top-level functions) in the mirrored
-    // src package. Catches stale test files after a rename and enforces a strict 1:1 naming
-    // convention; deliberately does NOT enforce coverage (code review handles that).
-    val srcFilesByPath: Set<String> = Konsist.scopeFromDirectory("src")
-      .files
-      .map { normalizedPath(it.path) }
-      .toSet()
-
-    val orphaned = Konsist.scopeFromDirectory("test")
-      .files
-      .filter { it.name.endsWith("Test") }
-      .filterNot { file -> testInfrastructureSuffixes.any { file.name.endsWith(it) } }
-      .filterNot { file -> pathContainsAllowListEntry(file.path, mirrorSourceAllowList) }
-      .mapNotNull { file ->
-        val stem = file.name.removeSuffix("Test")
-        val normalized = normalizedPath(file.path)
-        val mirroredDir = normalized.substringBeforeLast("/").replace("/test/", "/src/")
-        val pascalCandidate = "$mirroredDir/$stem.kt"
-        val lowerCamelCandidate =
-          "$mirroredDir/${stem.replaceFirstChar { it.lowercaseChar() }}.kt"
-        if (pascalCandidate in srcFilesByPath || lowerCamelCandidate in srcFilesByPath) null
-        else "${file.path}  (expected $pascalCandidate)"
+  fun `a file of top-level functions is named lowerCamel and a file of types PascalCase`() {
+    val typeDeclaration = Regex("""^(?:@\w+\s+)*(?:public |internal |private )?(?:sealed |data |value |enum |abstract |open )*(?:class|interface|object) (\w+)""", RegexOption.MULTILINE)
+    val offenders = srcScope.files.mapNotNull { file ->
+      val declaredTypes = typeDeclaration.findAll(file.text).map { it.groupValues[1] }.toList()
+      val declaresValueNamedAfterFile = Regex("""^(?:internal |private )?val ${file.name}\b""", RegexOption.MULTILINE).containsMatchIn(file.text)
+      val startsUpper = file.name.first().isUpperCase()
+      when {
+        startsUpper && declaredTypes.isEmpty() && !declaresValueNamedAfterFile ->
+          "  - ${file.path}: PascalCase but declares no type; name it lowerCamel after its main function"
+        !startsUpper && declaredTypes.any { it == file.name.replaceFirstChar(Char::uppercaseChar) } ->
+          "  - ${file.path}: lowerCamel but its main declaration is a type; name it PascalCase"
+        else -> null
       }
-
-    assert(orphaned.isEmpty()) {
-      "The following test files have no matching source file in the mirrored package. " +
-        "Either rename the test to match, rename the source file, or add the test to " +
-        "mirrorSourceAllowList with a comment explaining why:\n" +
-        orphaned.joinToString("\n") { "  - $it" }
     }
+    if (offenders.isNotEmpty()) {
+      println("ERROR: these files break the file naming rule:\n" + offenders.joinToString("\n"))
+    }
+    assert(offenders.isEmpty())
   }
 }

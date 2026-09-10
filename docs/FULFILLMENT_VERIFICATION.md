@@ -1,11 +1,11 @@
 # Fulfillment verification (DSS)
 
-Checklist for verifying **supplier shipment → Shopify fulfillment** via the monolith → DSS path. DSS does not call the Supplier API directly; the monolith bridges supplier events to DSS webhooks defined in [`docs/openapi/dss-api.yaml`](openapi/dss-api.yaml).
+Checklist for verifying **supplier shipment → Shopify fulfillment** via the monolith → DSS path. DSS does not call the Supplier API directly; the monolith bridges supplier events to DSS webhooks defined in the contract spec, [`src/resources/monolith-dss-openapi.json`](../src/resources/monolith-dss-openapi.json).
 
 ## Prerequisites
 
 - Shopify app scopes include `write_merchant_managed_fulfillment_orders` (and read fulfillment orders).
-- Monolith and DSS share `DSS_API_KEY`: the monolith sends it as `Authorization: Bearer <DSS_API_KEY>` on `POST /sync-shipments-with-fulfillments`, `POST /tracking-update`, and `PUT /stores/api-key`; the matching auth guard is `installMonolithWebhookAuth`.
+- Monolith and DSS share `DSS_API_KEY`: the monolith sends it as `Authorization: Bearer <DSS_API_KEY>` on `POST /sync-shipments-with-fulfillments`, `POST /tracking-update`, and `PUT /stores/api-key`; the matching auth guard is the `authenticate(MONOLITH_WEBHOOK_AUTH)` route block.
 - Shopify Admin token resolvable for the shop — seed `DSS_SHOP_ACCESS_TOKENS`, complete OAuth, or have the monolith persist one via `PUT /stores/api-key` (a miss falls back to `MonolithService.getStore`).
 - `MONOLITH_BASE_URL` set on DSS for order/product webhooks (Shopify → monolith).
 
@@ -15,8 +15,6 @@ Checklist for verifying **supplier shipment → Shopify fulfillment** via the mo
 |-----------------|---------|--------------|
 | Supplier created/reorganized shipment | `POST /sync-shipments-with-fulfillments` | `SyncShipmentsWithFulfillmentsRequest` |
 | Carrier tracking status (e.g. AfterShip) | `POST /tracking-update` | `TrackingUpdateRequest` |
-
-See also [`docs/openapi/dss-api.yaml`](openapi/dss-api.yaml) and [`specs/fulfillment-shipment-fo-mapping.md`](../specs/fulfillment-shipment-fo-mapping.md).
 
 ## Step A — Order ingest (Shopify → monolith)
 
@@ -120,7 +118,7 @@ When a shipment line's `product_variant_id` does not appear on any open fulfillm
 
 - Each successful sync **cancels all existing fulfillments** on the order, then recreates from the payload (destructive resync by design). Validation runs first so hard errors do not leave the order with zero fulfillments.
 - Re-sending the same payload is idempotent: cancel whatever exists → recreate identical fulfillments. Tracking events on canceled fulfillments are lost (known trade-off).
-- DSS logs a summary at `info` after each sync, e.g. `sync-shipments orderId=1001 shop=acme canceled=2 created=1 skippedLines=1 skippedShipments=0 fulfillmentIds=[5001]`.
+- DSS logs a summary at `info` after each sync, e.g. `sync-shipments orderId=1001 shop=acme canceled=2 created=1 skippedShipments=0 fulfillmentIds=[5001]`.
 - Per skipped line at `warn`: `sync-shipments skipped line … tracking=… variant=… reason=no_open_fo qty=…`.
 - Shopify **webhooks always return 200** even when monolith sync fails; monitor DSS logs (`error` level) and `dss.webhook.outcome=failed` MDC on monolith 5xx.
 - Orders with more than 100 line items may truncate in `GetOrderForDss` (`lineItems(first: 100)`).
@@ -135,8 +133,12 @@ When a shipment line's `product_variant_id` does not appear on any open fulfillm
 
 ## Automated tests in this repo
 
-```powershell
-.\gradlew.bat test
+```sh
+./gradlew test
 ```
 
-Covers request validation, fulfillment order matching, HTTP status mapping, and order mapper FO id behavior.
+Covers the fulfillment path end to end: request validation, fulfillment-order matching and the quantity ledger,
+the `calculate` → `determine` → `effect` mutation planning, the Shopify Graphql wire format for every operation the
+sync uses, and `POST /sync-shipments-with-fulfillments` and `POST /tracking-update` through the production
+application module. The checklist below is for what only a real shop can show: that Shopify accepts the mutations
+and that the merchant sees the result.

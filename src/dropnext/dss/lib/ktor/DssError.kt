@@ -1,6 +1,6 @@
 package dropnext.dss.lib.ktor
 
-import dropnext.dss.lib.monolith.dto.generated.ErrorResponse
+import dropnext.dss.contract.ErrorResponse
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.respond
@@ -12,8 +12,9 @@ import io.ktor.server.response.respondText
  * failure shape and the central [respondError] / [respondTextError] helpers decide the HTTP
  * status and body — no scattered `respond(BadRequest, …)` calls.
  *
- * JSON endpoints (the OpenAPI DSS contract — DssHttpHandlers) use [respondError], which emits an
- * [ErrorResponse]. The HTML OAuth flow uses [respondTextError] so error pages stay plain text.
+ * JSON endpoints (the OpenAPI DSS contract, served by `MonolithWebhookHandlers`) use [respondError],
+ * which emits an [ErrorResponse]. The HTML OAuth flow uses [respondTextError] so error pages stay
+ * plain text. The request's trace id travels in the `X-Trace-Id` response header on both.
  */
 sealed interface DssError {
   val message: String
@@ -31,9 +32,6 @@ sealed interface DssError {
     override val message: String = if (detail == null) "Invalid $name" else "Invalid $name: $detail"
   }
 
-  /** 401 — the internal-secret guard rejected the request. */
-  data class Unauthorized(override val message: String = "unauthorized") : DssError
-
   /** 401 — no Shopify Admin token resolvable for the shop in question. */
   data object MissingShopifyAdminToken : DssError {
     override val message: String =
@@ -41,14 +39,30 @@ sealed interface DssError {
         "or persist a token via PUT /stores/api-key"
   }
 
+  /**
+   * 401 — Shopify refused the Admin token we hold for the shop. The same status as
+   * [MissingShopifyAdminToken] because the remedy is the same: the monolith cannot retry its way
+   * out of it, a human has to reinstall the app.
+   */
+  data class ShopifyAdminTokenRejected(val httpStatus: Int) : DssError {
+    override val message: String =
+      "Shopify rejected the shop's Admin token (HTTP $httpStatus): the app was uninstalled or the token revoked, reinstall it"
+  }
+
   /** 403 — HMAC or signed-state verification failed. */
   data class InvalidSignature(override val message: String) : DssError
+
 
   /** 404 — a referenced resource (order, fulfillment, …) does not exist. */
   data class NotFound(override val message: String) : DssError
 
-  /** 502 — upstream call (Shopify Admin, monolith) failed and the request cannot continue. */
+  /** 502 — upstream call (Shopify Admin, monolith) failed, and the request cannot continue. */
   data class UpstreamFailure(override val message: String) : DssError
+
+  /** 500 — a bug. The message is deliberately generic; the details are in the log under the trace id. */
+  data object Internal : DssError {
+    override val message: String = "internal error"
+  }
 }
 
 fun DssError.toHttpStatus(): HttpStatusCode = when (this) {
@@ -57,15 +71,18 @@ fun DssError.toHttpStatus(): HttpStatusCode = when (this) {
   is DssError.InvalidParameter,
     -> HttpStatusCode.BadRequest
 
-  is DssError.Unauthorized,
   is DssError.MissingShopifyAdminToken,
+  is DssError.ShopifyAdminTokenRejected,
     -> HttpStatusCode.Unauthorized
+
 
   is DssError.InvalidSignature -> HttpStatusCode.Forbidden
 
   is DssError.NotFound -> HttpStatusCode.NotFound
 
   is DssError.UpstreamFailure -> HttpStatusCode.BadGateway
+
+  is DssError.Internal -> HttpStatusCode.InternalServerError
 }
 
 /** JSON-error responder for the OpenAPI DSS contract. Body is [ErrorResponse] with `error: <message>`. */

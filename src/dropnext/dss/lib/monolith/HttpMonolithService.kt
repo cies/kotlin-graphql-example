@@ -1,15 +1,20 @@
 package dropnext.dss.lib.monolith
 
+import dev.forkhandles.result4k.Failure
+import dev.forkhandles.result4k.Success
+import dropnext.dss.contract.CreateShopifyOrderRequest
+import dropnext.dss.contract.DeleteProductVariantsRequest
+import dropnext.dss.contract.DeleteProductVariantsResponse
+import dropnext.dss.contract.StoreResponse
+import dropnext.dss.contract.UpdateStoreApiKeyRequest
+import dropnext.dss.contract.UpdateStoreApiKeyResponse
+import dropnext.dss.contract.UpsertProductVariantsRequest
+import dropnext.dss.contract.UpsertProductVariantsResponse
+import dropnext.dss.domain.MonolithApiKey
+import dropnext.dss.domain.ShopifyAdminToken
+import dropnext.dss.domain.ShopifyShopId
+import dropnext.dss.domain.StoreId
 import dropnext.dss.lib.json.MonolithJson
-import dropnext.dss.lib.monolith.dto.generated.CreateShopifyOrderRequest
-import dropnext.dss.lib.monolith.dto.generated.DeleteProductVariantsRequest
-import dropnext.dss.lib.monolith.dto.generated.DeleteProductVariantsResponse
-import dropnext.dss.lib.monolith.dto.generated.StoreResponse
-import dropnext.dss.lib.monolith.dto.generated.UpdateStoreApiKeyRequest
-import dropnext.dss.lib.monolith.dto.generated.UpdateStoreApiKeyResponse
-import dropnext.dss.lib.monolith.dto.generated.UpsertProductVariantsRequest
-import dropnext.dss.lib.monolith.dto.generated.UpsertProductVariantsResponse
-import dropnext.dss.lib.monolith.dto.generated.VariantIdsResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.delete
@@ -27,22 +32,22 @@ import io.ktor.http.contentType
 import java.io.IOException
 import kotlinx.serialization.KSerializer
 
+
 /**
  * Production [MonolithService]: real HTTP calls to the DropNext monolith over Ktor + OkHttp.
  *
  * URLs are built from `{baseUrl}/{apiPathPrefix}{path}`; both edges are trimmed of slashes
- * (see [prefixedBase]). Each method translates the HTTP outcome into a typed sealed result
- * (e.g. `Ok` / `NotFound` / `Error`) instead of throwing — handlers can then map errors to
- * the right log level and HTTP response without try/catch noise.
+ * (see [prefixedBase]). Every method answers a [MonolithResult]: a network failure is
+ * [MonolithError.Transport], a non-success status [MonolithError.Rejected] with the parsed body.
  *
- * Tests substitute the recording `FakeMonolithService`; see [docs/TESTING_WITH_FAKE_SERVICES.md].
+ * The HTTP client it is given forwards the request's trace id as `X-Trace-Id`, so the monolith's log
+ * lines for the call can be found from ours (and ours from theirs, through the trace id in its error body).
  */
 class HttpMonolithService(
   private val httpClient: HttpClient,
   private val baseUrl: String,
   private val apiPathPrefix: String?,
-  private val apiKey: String?,
-  private val createOrderPath: String = OutBoundMonolithPaths.orders,
+  private val apiKey: MonolithApiKey?,
 ) : MonolithService {
 
   private val prefixedBase: String = run {
@@ -51,143 +56,99 @@ class HttpMonolithService(
     if (p == null) b else "$b/$p"
   }
 
-  private fun url(path: String): String {
-    val rel = path.trimStart('/')
-    return "$prefixedBase/$rel"
+  private fun url(path: String): String = "$prefixedBase/${path.trimStart('/')}"
+
+  private fun HttpRequestBuilder.applyDefaults() {
+    apiKey?.takeIf { it.value.isNotBlank() }?.let { header("Authorization", "Bearer ${it.value}") }
   }
 
-  private fun HttpRequestBuilder.applyAuth() {
-    if (!apiKey.isNullOrBlank()) {
-      header("Authorization", "Bearer $apiKey")
-    }
-  }
-
-  override suspend fun postCreateOrder(request: CreateShopifyOrderRequest): CreateOrderResult =
-    guardNetwork(onNetworkError = { CreateOrderResult.Error(0, it, null) }) {
-      val response = httpClient.post(url(createOrderPath)) {
+  override suspend fun postCreateOrder(request: CreateShopifyOrderRequest): MonolithResult<CreateOrderOutcome> =
+    monolithCall({
+      httpClient.post(url(OutBoundMonolithPaths.orders)) {
         contentType(ContentType.Application.Json)
-        applyAuth()
+        applyDefaults()
         setBody(MonolithJson.encodeToString(CreateShopifyOrderRequest.serializer(), request))
       }
-      val body = response.bodyAsText()
+    }) { response, body ->
       when (response.status) {
-        HttpStatusCode.OK, HttpStatusCode.Conflict ->
-          CreateOrderResult.HttpResponseSummary(response.status.value, body)
-        else -> {
-          val (msg, parsed) = monolithError(response.status.value, body)
-          CreateOrderResult.Error(response.status.value, msg, parsed)
-        }
+        HttpStatusCode.OK -> Success(CreateOrderOutcome.Created)
+        HttpStatusCode.Conflict -> Success(CreateOrderOutcome.AlreadyExisted)
+        else -> Failure(rejected(response.status, body))
       }
     }
 
-  override suspend fun putStoreApiKey(request: UpdateStoreApiKeyRequest): StoreApiKeyResult =
-    guardNetwork(onNetworkError = { StoreApiKeyResult.Error(0, it, null) }) {
+  override suspend fun putStoreApiKey(request: UpdateStoreApiKeyRequest): MonolithResult<StoreId> =
+    monolithCall({
       httpClient.put(url(OutBoundMonolithPaths.storesApiKey)) {
         contentType(ContentType.Application.Json)
-        applyAuth()
+        applyDefaults()
         setBody(MonolithJson.encodeToString(UpdateStoreApiKeyRequest.serializer(), request))
-      }.foldOkOrError(
-        UpdateStoreApiKeyResponse.serializer(),
-        onOk = { StoreApiKeyResult.Ok(storeId = it.storeId) },
-        onError = { status, msg, parsed -> StoreApiKeyResult.Error(status, msg, parsed) },
-      )
+      }
+    }) { response, body ->
+      response.decodeOk(body, UpdateStoreApiKeyResponse.serializer()) { StoreId(it.storeId) }
     }
 
-  override suspend fun getStore(shopifySubdomain: String): GetStoreResult =
-    guardNetwork(onNetworkError = { GetStoreResult.Error(0, it, null) }) {
-      val response = httpClient.get(url(OutBoundMonolithPaths.stores)) {
-        applyAuth()
+  override suspend fun getStore(shopifySubdomain: String): MonolithResult<MonolithStore?> =
+    monolithCall({
+      httpClient.get(url(OutBoundMonolithPaths.stores)) {
+        applyDefaults()
         parameter("shopify_subdomain", shopifySubdomain)
       }
-      val body = response.bodyAsText()
-      when (response.status) {
-        HttpStatusCode.OK -> {
-          val parsed = MonolithJson.decodeFromString(StoreResponse.serializer(), body)
-          GetStoreResult.Ok(
-            storeId = parsed.storeId,
-            shopifyShopId = parsed.shopifyShopId,
-            apiKey = parsed.apiKey,
-          )
-        }
-        HttpStatusCode.NotFound -> GetStoreResult.NotFound(shopifySubdomain)
-        else -> {
-          val (msg, parsed) = monolithError(response.status.value, body)
-          GetStoreResult.Error(response.status.value, msg, parsed)
-        }
+    }) { response, body ->
+      if (response.status == HttpStatusCode.NotFound) Success(null)
+      else response.decodeOk(body, StoreResponse.serializer()) { parsed ->
+        MonolithStore(
+          storeId = StoreId(parsed.storeId),
+          shopifyShopId = ShopifyShopId(parsed.shopifyShopId),
+          apiKey = parsed.apiKey?.let(::ShopifyAdminToken),
+        )
       }
     }
 
-  override suspend fun upsertProductVariants(request: UpsertProductVariantsRequest): UpsertVariantsResult =
-    guardNetwork(onNetworkError = { UpsertVariantsResult.Error(0, it, null) }) {
+  override suspend fun upsertProductVariants(request: UpsertProductVariantsRequest): MonolithResult<Int> =
+    monolithCall({
       httpClient.post(url(OutBoundMonolithPaths.productVariants)) {
         contentType(ContentType.Application.Json)
-        applyAuth()
+        applyDefaults()
         setBody(MonolithJson.encodeToString(UpsertProductVariantsRequest.serializer(), request))
-      }.foldOkOrError(
-        UpsertProductVariantsResponse.serializer(),
-        onOk = { UpsertVariantsResult.Ok(upserted = it.upserted) },
-        onError = { status, msg, parsed -> UpsertVariantsResult.Error(status, msg, parsed) },
-      )
+      }
+    }) { response, body ->
+      response.decodeOk(body, UpsertProductVariantsResponse.serializer()) { it.upserted }
     }
 
-  override suspend fun getProductVariantIds(shopifySubdomain: String): GetVariantIdsResult =
-    guardNetwork(onNetworkError = { GetVariantIdsResult.Error(0, it, null) }) {
-      val response = httpClient.get(url(OutBoundMonolithPaths.productVariants)) {
-        applyAuth()
-        parameter("shopify_subdomain", shopifySubdomain)
-      }
-      val body = response.bodyAsText()
-      when (response.status) {
-        HttpStatusCode.OK -> {
-          val parsed = MonolithJson.decodeFromString(VariantIdsResponse.serializer(), body)
-          GetVariantIdsResult.Ok(parsed.productVariantIds)
-        }
-        HttpStatusCode.NotFound -> GetVariantIdsResult.NotFound(shopifySubdomain)
-        else -> {
-          val (msg, parsed) = monolithError(response.status.value, body)
-          GetVariantIdsResult.Error(response.status.value, msg, parsed)
-        }
-      }
-    }
-
-  override suspend fun deleteProductVariants(request: DeleteProductVariantsRequest): DeleteVariantsResult =
-    guardNetwork(onNetworkError = { DeleteVariantsResult.Error(0, it, null) }) {
+  override suspend fun deleteProductVariants(request: DeleteProductVariantsRequest): MonolithResult<Int> =
+    monolithCall({
       httpClient.delete(url(OutBoundMonolithPaths.productVariants)) {
         contentType(ContentType.Application.Json)
-        applyAuth()
+        applyDefaults()
         setBody(MonolithJson.encodeToString(DeleteProductVariantsRequest.serializer(), request))
-      }.foldOkOrError(
-        DeleteProductVariantsResponse.serializer(),
-        onOk = { DeleteVariantsResult.Ok(deleted = it.deleted) },
-        onError = { status, msg, parsed -> DeleteVariantsResult.Error(status, msg, parsed) },
-      )
+      }
+    }) { response, body ->
+      response.decodeOk(body, DeleteProductVariantsResponse.serializer()) { it.deleted }
     }
 }
 
-/**
- * Maps an HTTP response to a typed sealed outcome: deserialize the JSON body as [T] on `200 OK`,
- * or surface [MonolithCallError]-shaped fields on any other status (the [monolithError] helper
- * extracts the monolith's error body for richer log lines).
- */
-private suspend inline fun <T : Any, R> HttpResponse.foldOkOrError(
-  serializer: KSerializer<T>,
-  onOk: (T) -> R,
-  onError: (status: Int, message: String, parsed: MonolithErrorBody?) -> R,
-): R {
-  val body = bodyAsText()
-  if (status == HttpStatusCode.OK) {
-    return onOk(MonolithJson.decodeFromString(serializer, body))
-  }
-  val (msg, parsed) = monolithError(status.value, body)
-  return onError(status.value, msg, parsed)
+/** Runs [request] and hands the response plus its body to [onResponse]; an [IOException] becomes [MonolithError.Transport]. */
+private suspend inline fun <T> monolithCall(
+  request: () -> HttpResponse,
+  onResponse: (HttpResponse, String) -> MonolithResult<T>,
+): MonolithResult<T> = try {
+  val response = request()
+  onResponse(response, response.bodyAsText())
+} catch (e: IOException) {
+  Failure(MonolithError.Transport(e.message ?: "network error"))
 }
 
-/** Wraps a suspending block so a single [IOException] (network failure) becomes a typed [R] outcome via [onNetworkError]. */
-private inline fun <R> guardNetwork(
-  onNetworkError: (message: String) -> R,
-  block: () -> R,
-): R = try {
-  block()
-} catch (e: IOException) {
-  onNetworkError(e.message ?: "network error")
+/** Deserializes [body] as [T] on `200 OK` and maps it with [onOk]; any other status is [MonolithError.Rejected]. */
+private inline fun <T : Any, R> HttpResponse.decodeOk(
+  body: String,
+  serializer: KSerializer<T>,
+  onOk: (T) -> R,
+): MonolithResult<R> =
+  if (status == HttpStatusCode.OK) Success(onOk(MonolithJson.decodeFromString(serializer, body)))
+  else Failure(rejected(status, body))
+
+private fun rejected(status: HttpStatusCode, body: String): MonolithError.Rejected {
+  val (message, parsed) = monolithError(status.value, body)
+  return MonolithError.Rejected(status.value, message, parsed)
 }

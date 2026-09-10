@@ -1,53 +1,71 @@
 package dropnext.dss
 
+import ch.qos.logback.classic.Logger as LogbackLogger
+import ch.qos.logback.classic.LoggerContext
 import dropnext.dss.config.Config
-import dropnext.dss.lib.ktor.plugin.installMonolithWebhookAuth
-import dropnext.dss.lib.ktor.installStatusPages
-import dropnext.dss.lib.ktor.installTraceId
-import dropnext.dss.lib.ktor.installJsonContentNegotiation
-import dropnext.dss.routing.installDiagnosticsRoutes
-import dropnext.dss.routing.installMonolithWebhookRoutes
-import dropnext.dss.routing.installOAuthRoutes
-import dropnext.dss.routing.installShopifyWebhookRoutes
+import dropnext.dss.config.DssMode
+import dropnext.dss.config.readDotEnvFile
+import dropnext.dss.lib.logflare.LogflareAppender
 import io.github.oshai.kotlinlogging.KotlinLogging
+import io.ktor.server.application.ApplicationStopped
 import io.ktor.server.cio.CIO
+import io.ktor.server.engine.connector
 import io.ktor.server.engine.embeddedServer
-import io.ktor.server.routing.routing
+import java.io.File
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 
 
 private val log = KotlinLogging.logger {}
 
 fun main() {
-  val config = Config.fromEnv()
+  // The `.env` file overrides the process environment; it only exists in local development.
+  val config = Config.fromEnv(readDotEnvFile(File(".env")))
+  val logflareAppender = attachLogflareAppender(config)
   logConfigSummary(config)
 
-  val deps = dssDependencies(config)
-  val server = embeddedServer(CIO, port = config.serverPort, host = "0.0.0.0") {
-    installTraceId()
-    installStatusPages()
-    installJsonContentNegotiation()
-    installMonolithWebhookAuth(deps.config.monolithWebhookAuthSecret)
-
-    routing {
-      installDiagnosticsRoutes(handlers = deps.diagnosticsHandlers)
-      installOAuthRoutes(
-        handlers = deps.oauthHandlers,
-        oauthCallbackPath = deps.config.oauthRedirectPath,
-      )
-      installShopifyWebhookRoutes(handlers = deps.shopifyWebhookHandlers)
-      installMonolithWebhookRoutes(handlers = deps.monolithWebhookHandlers)
+  // Ktor registers the JVM shutdown hook itself.
+  // On SIGTERM the engine drains in-flight requests for the grace period,
+  // then raises `ApplicationStopped`, which is where the dependency graph and the appender close.
+  embeddedServer(CIO, configure = {
+    connector {
+      host = "0.0.0.0"
+      port = config.serverPort
     }
+    shutdownGracePeriod = 3_000
+    shutdownTimeout = 10_000
+  }) {
+    dssModule(dssDependencies(config))
+    // Subscribed after the module's own close, so the shutdown lines still ship: handlers run in subscription order.
+    monitor.subscribe(ApplicationStopped) {
+      log.info { "[shutdown] complete" }
+      logflareAppender?.stop()
+    }
+  }.start(wait = true)
+}
+
+/**
+ * Attaches the Logflare appender now that the environment has been read — `logback.xml` is parsed
+ * long before that, so it cannot carry these values. Returns null when the source name or the key
+ * is missing, which is how a local run stays on stdout only.
+ *
+ * Returns quickly: the source-token handshake runs on the appender's own flush thread, not here.
+ */
+private fun attachLogflareAppender(config: Config): LogflareAppender? {
+  if (!config.logflareEnabled) return null
+  val sourceName = config.logflareSourceName ?: return null
+  val apiKey = config.logflareApiKey ?: return null
+
+  val appender = LogflareAppender().apply {
+    this.sourceName = sourceName
+    this.apiKey = apiKey
+    config.logflareEndpoint?.let { this.endpoint = it }
+    context = LoggerFactory.getILoggerFactory() as LoggerContext
   }
-
-  Runtime.getRuntime().addShutdownHook(Thread {
-    log.info { "[shutdown] SIGTERM received - stopping HTTP server with 3s grace, 10s timeout" }
-    runCatching { server.stop(gracePeriodMillis = 3_000, timeoutMillis = 10_000) }
-      .onFailure { log.warn(it) { "[shutdown] server.stop threw" } }
-    deps.close()
-    log.info { "[shutdown] complete" }
-  })
-
-  server.start(wait = true)
+  appender.start()
+  (LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME) as LogbackLogger).addAppender(appender)
+  log.info { "[logflare] Appender attached (source: $sourceName)." }
+  return appender
 }
 
 /**
@@ -60,9 +78,13 @@ private fun logConfigSummary(config: Config) {
       "reverse-proxy target port must equal ${config.serverPort} (unset PORT locally -> 8080; empty PORT in Docker -> 9999)."
   }
   val prefixNote = config.monolithApiPrefix?.let { " MONOLITH_API_PREFIX=$it" }.orEmpty()
-  val bearerConfigured = !config.monolithApiKey.isNullOrBlank()
   log.info {
     "[monolith] Outbound enabled: MONOLITH_BASE_URL=${config.monolithBaseUrl}$prefixNote " +
-      "(MONOLITH_API_KEY Bearer configured: $bearerConfigured)."
+      "(MONOLITH_API_KEY Bearer configured: ${config.monolithApiKey != null}, " +
+      "shops with a seeded token: ${config.shopAccessTokens.size})."
+  }
+  log.info {
+    "[logging] Mode: ${config.mode}, Logflare shipping: ${if (config.logflareEnabled) "on" else "off (stdout only)"}, " +
+      "per-request call logging: ${if (config.mode == DssMode.DEV) "on" else "off"}."
   }
 }

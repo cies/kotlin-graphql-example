@@ -1,117 +1,59 @@
 package dropnext.dss.lib.monolith
 
-import dropnext.dss.lib.monolith.dto.generated.CreateShopifyOrderRequest
-import dropnext.dss.lib.monolith.dto.generated.DeleteProductVariantsRequest
-import dropnext.dss.lib.monolith.dto.generated.UpdateStoreApiKeyRequest
-import dropnext.dss.lib.monolith.dto.generated.UpsertProductVariantsRequest
+import dev.forkhandles.result4k.Result
+import dropnext.dss.contract.CreateShopifyOrderRequest
+import dropnext.dss.contract.DeleteProductVariantsRequest
+import dropnext.dss.contract.UpdateStoreApiKeyRequest
+import dropnext.dss.contract.UpsertProductVariantsRequest
+import dropnext.dss.domain.ShopifyAdminToken
+import dropnext.dss.domain.ShopifyShopId
+import dropnext.dss.domain.StoreId
 
 
 /** Outbound calls to the main backend (monolith). Path constants in [OutBoundMonolithPaths]. */
 interface MonolithService {
   /**
    * `POST` to [OutBoundMonolithPaths.orders] — only from Shopify order webhooks. Body is exactly
-   * [CreateShopifyOrderRequest] (those top-level JSON keys — no extras). Expects idempotent
-   * handling (e.g.: 409 duplicate order).
+   * [CreateShopifyOrderRequest] (those top-level JSON keys — no extras). A `409` means the monolith
+   * already has the order and is a success ([CreateOrderOutcome.AlreadyExisted]).
    */
-  suspend fun postCreateOrder(request: CreateShopifyOrderRequest): CreateOrderResult
+  suspend fun postCreateOrder(request: CreateShopifyOrderRequest): MonolithResult<CreateOrderOutcome>
 
   /** `PUT` to [OutBoundMonolithPaths.storesApiKey] — persist the Shopify access token after OAuth installation. */
-  suspend fun putStoreApiKey(request: UpdateStoreApiKeyRequest): StoreApiKeyResult
+  suspend fun putStoreApiKey(request: UpdateStoreApiKeyRequest): MonolithResult<StoreId>
 
-  /** `GET` to [OutBoundMonolithPaths.stores] with `?shopify_subdomain=…` — look up a store by subdomain. */
-  suspend fun getStore(shopifySubdomain: String): GetStoreResult
+  /** `GET` to [OutBoundMonolithPaths.stores] with `?shopify_subdomain=…`; a successful `null` means the monolith knows no such store. */
+  suspend fun getStore(shopifySubdomain: String): MonolithResult<MonolithStore?>
 
-  /** `POST` to [OutBoundMonolithPaths.productVariants] — upsert product variants from a Shopify products/create or products/update webhook. */
-  suspend fun upsertProductVariants(request: UpsertProductVariantsRequest): UpsertVariantsResult
+  /** `POST` to [OutBoundMonolithPaths.productVariants] — upsert product variants from a Shopify products/create or products/update webhook. Answers the upserted count. */
+  suspend fun upsertProductVariants(request: UpsertProductVariantsRequest): MonolithResult<Int>
 
-  /** `GET` to [OutBoundMonolithPaths.productVariants] with `?shopify_subdomain=…` — list all variant IDs the monolith knows about. */
-  suspend fun getProductVariantIds(shopifySubdomain: String): GetVariantIdsResult
-
-  /** `DELETE` to [OutBoundMonolithPaths.productVariants] — soft-delete variants that no longer exist in Shopify. */
-  suspend fun deleteProductVariants(request: DeleteProductVariantsRequest): DeleteVariantsResult
+  /** `DELETE` to [OutBoundMonolithPaths.productVariants] — soft-delete variants that no longer exist in Shopify. Answers the deleted count. */
+  suspend fun deleteProductVariants(request: DeleteProductVariantsRequest): MonolithResult<Int>
 }
 
-sealed interface MonolithCallError {
-  val status: Int
-  val errorMessage: String
-  val parsed: MonolithErrorBody?
+/** What every [MonolithService] call returns. */
+typealias MonolithResult<T> = Result<T, MonolithError>
+
+/**
+ * Why a monolith call produced no answer, in the one distinction a caller can act on: did the
+ * monolith answer at all? A [Transport] failure is worth retrying; a [Rejected] request gets the
+ * same answer next time.
+ */
+sealed interface MonolithError {
+  val message: String
+
+  /** No answer: connection refused, timeout, … (after the client's own retries). */
+  data class Transport(override val message: String) : MonolithError
+
+  /** The monolith answered with a non-success status; [body] carries its parsed error envelope, including its own trace id. */
+  data class Rejected(val status: Int, override val message: String, val body: MonolithErrorBody) : MonolithError
 }
 
-// --- POST /orders ---
+enum class CreateOrderOutcome { Created, AlreadyExisted }
 
-sealed interface CreateOrderResult {
-  data class HttpResponseSummary(
-    val status: Int,
-    val body: String,
-  ) : CreateOrderResult
-
-  data class Error(
-    override val status: Int,
-    override val errorMessage: String,
-    override val parsed: MonolithErrorBody? = null,
-  ) : CreateOrderResult,
-    MonolithCallError
-}
-
-// --- PUT /stores/api-key ---
-
-sealed interface StoreApiKeyResult {
-  data class Ok(val storeId: Long) : StoreApiKeyResult
-
-  data class Error(
-    override val status: Int,
-    override val errorMessage: String,
-    override val parsed: MonolithErrorBody? = null,
-  ) : StoreApiKeyResult,
-    MonolithCallError
-}
-
-// --- GET /stores ---
-
-sealed interface GetStoreResult {
-  data class Ok(val storeId: Long, val shopifyShopId: Long, val apiKey: String?) : GetStoreResult
-  data class NotFound(val shopifySubdomain: String) : GetStoreResult
-  data class Error(
-    override val status: Int,
-    override val errorMessage: String,
-    override val parsed: MonolithErrorBody? = null,
-  ) : GetStoreResult,
-    MonolithCallError
-}
-
-// --- POST /product-variants ---
-
-sealed interface UpsertVariantsResult {
-  data class Ok(val upserted: Int) : UpsertVariantsResult
-  data class Error(
-    override val status: Int,
-    override val errorMessage: String,
-    override val parsed: MonolithErrorBody? = null,
-  ) : UpsertVariantsResult,
-    MonolithCallError
-}
-
-// --- GET /product-variants ---
-
-sealed interface GetVariantIdsResult {
-  data class Ok(val productVariantIds: List<Long>) : GetVariantIdsResult
-  data class NotFound(val shopifySubdomain: String) : GetVariantIdsResult
-  data class Error(
-    override val status: Int,
-    override val errorMessage: String,
-    override val parsed: MonolithErrorBody? = null,
-  ) : GetVariantIdsResult,
-    MonolithCallError
-}
-
-// --- DELETE /product-variants ---
-
-sealed interface DeleteVariantsResult {
-  data class Ok(val deleted: Int) : DeleteVariantsResult
-  data class Error(
-    override val status: Int,
-    override val errorMessage: String,
-    override val parsed: MonolithErrorBody? = null,
-  ) : DeleteVariantsResult,
-    MonolithCallError
-}
+data class MonolithStore(
+  val storeId: StoreId,
+  val shopifyShopId: ShopifyShopId,
+  val apiKey: ShopifyAdminToken?,
+)

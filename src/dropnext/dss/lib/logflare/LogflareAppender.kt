@@ -1,0 +1,104 @@
+package dropnext.dss.lib.logflare
+
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.classic.spi.ThrowableProxyUtil
+import ch.qos.logback.core.UnsynchronizedAppenderBase
+import dropnext.dss.domain.LogflareApiKey
+import java.time.Instant
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+
+
+/**
+ * A Logback appender that ships structured logging events to Logflare, so DSS lines land beside the
+ * monolith's instead of only in the container's stdout. The request's `trace_id` travels in the MDC
+ * map, which is what makes a webhook readable across the two services.
+ *
+ * This half is the field-for-field mapping of a logging event to JSON; [LogflareBatchSender] holds
+ * the queue, the schedule and the shipping. Configuration properties:
+ * - `sourceName`: the Logflare source, created through the API when it does not exist yet.
+ * - `apiKey`: the account key both the handshake and every batch authenticate with.
+ * - `maxBatchSize`: how many events one flush may post.
+ * - `maxQueuedEvents`: how many may wait before further ones are dropped.
+ * - `flushInterval`: how often the batch is flushed.
+ *
+ * Attached from `main` rather than `logback.xml`, because the configuration it needs is read from
+ * the environment after Logback has already initialised. Written in a Java shape — mutable
+ * properties, `start()`/`stop()` — because that is the shape Logback constructs and drives.
+ */
+class LogflareAppender : UnsynchronizedAppenderBase<ILoggingEvent>() {
+
+  var sourceName: String = ""
+  var apiKey: LogflareApiKey = LogflareApiKey("")
+  var endpoint: String = "https://api.logflare.app"
+  var maxBatchSize: Int = 50
+  var maxQueuedEvents: Int = 10_000
+  var flushInterval: Duration = 1.seconds
+
+  private val running = AtomicBoolean(false)
+  private var sender: LogflareBatchSender? = null
+
+  override fun start() {
+    if (sourceName.isBlank() || apiKey.value.isBlank()) {
+      addError("sourceName and apiKey must be set")
+      return
+    }
+    val sender = LogflareBatchSender(
+      endpoint = endpoint,
+      apiKey = apiKey,
+      maxBatchSize = maxBatchSize,
+      maxQueuedEvents = maxQueuedEvents,
+      flushInterval = flushInterval,
+      reportError = ::addError,
+    )
+    this.sender = sender
+    // The source-token handshake happens on the flush thread: attaching the appender must not put
+    // two blocking calls to Logflare in front of the rest of the boot. Events logged in the
+    // meantime queue up and ship with the first flush.
+    sender.start(sourceName)
+    running.set(true)
+    super.start()
+  }
+
+  override fun append(event: ILoggingEvent) {
+    if (!running.get()) return
+    val sender = sender ?: return
+    sender.enqueue(entryOf(event))
+    if (sender.queuedEventCount >= maxBatchSize) sender.requestFlush()
+  }
+
+  override fun stop() {
+    running.set(false)
+    sender?.close()
+    sender = null
+    super.stop()
+  }
+}
+
+/** One logging event as the Logflare batch API wants it: a message, a timestamp and a metadata bag. */
+private fun entryOf(event: ILoggingEvent): JsonObject {
+  val metadata = buildJsonObject {
+    put("level", event.level.toString())
+    put("logger", event.loggerName)
+    put("thread", event.threadName)
+    event.mdcPropertyMap?.forEach { (key, value) -> put(key, value) }
+    event.throwableProxy?.let { put("error", ThrowableProxyUtil.asString(it)) }
+    event.keyValuePairs?.forEach { pair ->
+      when (val value = pair.value) {
+        is Number -> put(pair.key, value)
+        is Boolean -> put(pair.key, value)
+        else -> put(pair.key, value.toString())
+      }
+    }
+  }
+
+  return buildJsonObject {
+    put("message", event.formattedMessage)
+    put("timestamp", Instant.ofEpochMilli(event.timeStamp).toString())
+    put("metadata", metadata)
+  }
+}

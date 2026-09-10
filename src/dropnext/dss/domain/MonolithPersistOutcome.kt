@@ -6,6 +6,8 @@ package dropnext.dss.domain
  * during OAuth installation. The view renders one of these as a success / error notice.
  */
 sealed interface MonolithPersistOutcome {
-  data class Persisted(val storeId: Long) : MonolithPersistOutcome
-  data class Failed(val httpStatus: Int, val detail: String?) : MonolithPersistOutcome
+  data class Persisted(val storeId: StoreId) : MonolithPersistOutcome
+
+  /** [httpStatus] is `null` when the monolith never answered (a transport failure). */
+  data class Failed(val httpStatus: Int?, val detail: String?) : MonolithPersistOutcome
 }

@@ -43,6 +43,10 @@ junitVersion = "6.0.3"
 # Latest, see: https://mvnrepository.com/artifact/com.lemonappdev/konsist
 konsistVersion = "0.17.3"
 
+# Aligned with the `dropnext-monolith` repo so both report on the same tool version.
+# Latest, see: https://github.com/jacoco/jacoco/releases
+jacocoVersion = "0.8.14"
+
 # Latest, see: https://mvnrepository.com/artifact/org.jetbrains.kotlinx/kotlinx-html-jvm
 # Compile-time-generated DSL only — no JVM reflection.
 kotlinxHtmlVersion = "0.11.0"
@@ -67,6 +71,9 @@ ktorServerStatusPages = { group = "io.ktor", name = "ktor-server-status-pages", 
 ktorServerContentNegotiation = { group = "io.ktor", name = "ktor-server-content-negotiation", version.ref = "ktorVersion" }
 ktorServerCallLogging = { group = "io.ktor", name = "ktor-server-call-logging", version.ref = "ktorVersion" }
 ktorServerAuth = { group = "io.ktor", name = "ktor-server-auth", version.ref = "ktorVersion" }
+ktorServerCallId = { group = "io.ktor", name = "ktor-server-call-id", version.ref = "ktorVersion" }
+ktorServerRequestValidation = { group = "io.ktor", name = "ktor-server-request-validation", version.ref = "ktorVersion" }
+ktorClientCallId = { group = "io.ktor", name = "ktor-client-call-id", version.ref = "ktorVersion" }
 
 # HTML rendering (compile-time-generated builder DSL; no reflection).
 kotlinxHtml = { group = "org.jetbrains.kotlinx", name = "kotlinx-html-jvm", version.ref = "kotlinxHtmlVersion" }

@@ -1,7 +1,14 @@
 package dropnext.dss.lib.shopify.oauth
 
-import dropnext.dss.config.Config
-import dropnext.dss.lib.shopify.ShopDomain
+import dev.forkhandles.result4k.Failure
+import dev.forkhandles.result4k.Result
+import dev.forkhandles.result4k.Success
+import dropnext.dss.domain.ShopDomain
+import dropnext.dss.domain.ShopifyAdminToken
+import dropnext.dss.domain.ShopifyAppSecret
+import dropnext.dss.lib.crypto.constantTimeEquals
+import dropnext.dss.lib.crypto.hmacSha256
+import dropnext.dss.lib.shopify.graphql.ShopifyError
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.post
@@ -10,12 +17,10 @@ import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
 import java.security.SecureRandom
 import java.time.Instant
 import java.util.Base64
-import javax.crypto.Mac
-import javax.crypto.spec.SecretKeySpec
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -24,21 +29,23 @@ import kotlinx.serialization.Serializable
 private const val OAUTH_STATE_TTL_SECONDS = 300L
 
 /**
- * Per-app Shopify OAuth client. Encapsulates the three pre-token OAuth operations the install
- * flow needs:
+ * Per-app Shopify OAuth client. Encapsulates the three pre-token OAuth operations the installation flow needs:
  *
  *  - [authorizeUrl] — the URL we redirect a merchant to so they grant the app access;
  *  - [signedState] / [isSignedStateValid] — short-lived HMAC-signed `state` parameter to defend
- *    the install endpoint against CSRF and replay;
+ *    the installation endpoint against CSRF and replay;
  *  - [exchangeCode] — trades the authorization `code` Shopify returns at the redirect for a
  *    permanent Admin API access token.
  *
- * Stateless aside from the injected [HttpClient] and [Config], so a single instance is
- * safe to share across requests.
+ * Stateless aside from the injected [HttpClient] and the app's credentials, so a single instance
+ * is safe to share across requests.
  */
 class ShopifyOAuthService(
   private val httpClient: HttpClient,
-  private val config: Config,
+  private val clientId: String,
+  private val clientSecret: ShopifyAppSecret,
+  private val scopes: String,
+  private val redirectUrl: String,
 ) {
   /** Builds the OAuth authorize redirect URL for [shop] with a signed [state]. */
   fun authorizeUrl(shop: ShopDomain, state: String): String {
@@ -47,9 +54,9 @@ class ShopifyOAuthService(
       append("https://")
       append(shop.normalizedShopifyHost)
       append(OutBoundShopifyOAuthPaths.adminOAuthAuthorize)
-      append("?client_id=").append(enc(config.appClientId))
-      append("&scope=").append(enc(config.scopes))
-      append("&redirect_uri=").append(enc(config.redirectUrl))
+      append("?client_id=").append(enc(clientId))
+      append("&scope=").append(enc(scopes))
+      append("&redirect_uri=").append(enc(redirectUrl))
       append("&state=").append(enc(state))
     }
   }
@@ -63,8 +70,7 @@ class ShopifyOAuthService(
     val noncePart = Base64.getUrlEncoder().withoutPadding().encodeToString(nonce)
     val expiresAt = now.epochSecond + OAUTH_STATE_TTL_SECONDS
     val payload = "${shop.normalizedShopifyHost}|$expiresAt|$noncePart"
-    val signature = hmacSha256Base64Url(config.appClientSecret, payload)
-    return "$payload|$signature"
+    return "$payload|${sign(payload)}"
   }
 
   /** Verifies that [state] was produced by [signedState] for [expectedShop] and has not expired. */
@@ -81,41 +87,31 @@ class ShopifyOAuthService(
     val signature = parts[3]
     if (shop != expectedShop.normalizedShopifyHost) return false
     if (expiresAt < now.epochSecond) return false
-    val payload = "$shop|$expiresAt|$nonce"
-    val expected = hmacSha256Base64Url(config.appClientSecret, payload)
-    return MessageDigest.isEqual(
-      expected.toByteArray(StandardCharsets.UTF_8),
-      signature.toByteArray(StandardCharsets.UTF_8),
-    )
+    return constantTimeEquals(sign("$shop|$expiresAt|$nonce"), signature)
   }
 
   /**
-   * Trades the authorization [code] Shopify returned at the OAuth redirect for a long-lived
-   * Admin API access token. Wraps the HTTP call in [runCatching] so callers can fail closed
-   * without try/catch.
+   * Trades the authorization [code] Shopify returned at the OAuth redirect for a long-lived Admin API access token.
+   * Any failure of the exchange (transport, a non-2xx, an unreadable body) is a [ShopifyError.Network]:
+   * the installation cannot continue either way.
    */
-  suspend fun exchangeCode(shop: ShopDomain, code: String): Result<OAuthAccessTokenResponse> =
-    runCatching {
-      val url = "https://${shop.normalizedShopifyHost}${OutBoundShopifyOAuthPaths.adminOAuthAccessToken}"
+  suspend fun exchangeCode(shop: ShopDomain, code: String): Result<ShopifyAdminToken, ShopifyError> {
+    val url = "https://${shop.normalizedShopifyHost}${OutBoundShopifyOAuthPaths.adminOAuthAccessToken}"
+    val response = try {
       httpClient.post(url) {
         contentType(ContentType.Application.Json)
-        setBody(
-          OAuthAccessTokenRequest(
-            clientId = config.appClientId,
-            clientSecret = config.appClientSecret,
-            code = code,
-          ),
-        )
+        setBody(OAuthAccessTokenRequest(clientId = clientId, clientSecret = clientSecret.value, code = code))
       }.body<OAuthAccessTokenResponse>()
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      return Failure(ShopifyError.Network(e.message ?: "OAuth code exchange failed"))
     }
-
-  private fun hmacSha256Base64Url(secret: String, message: String): String {
-    val mac = Mac.getInstance("HmacSHA256")
-    mac.init(SecretKeySpec(secret.toByteArray(StandardCharsets.UTF_8), "HmacSHA256"))
-    return Base64.getUrlEncoder()
-      .withoutPadding()
-      .encodeToString(mac.doFinal(message.toByteArray(StandardCharsets.UTF_8)))
+    return Success(ShopifyAdminToken(response.accessToken))
   }
+
+  private fun sign(payload: String): String =
+    Base64.getUrlEncoder().withoutPadding().encodeToString(hmacSha256(clientSecret.value, payload))
 }
 
 @Serializable
@@ -130,8 +126,9 @@ private data class OAuthAccessTokenRequest(
   val code: String,
 )
 
+/** The wire shape of Shopify's token response; the token is wrapped in a [ShopifyAdminToken] as soon as it is decoded. */
 @Serializable
-data class OAuthAccessTokenResponse(
+private data class OAuthAccessTokenResponse(
   @SerialName("access_token")
   val accessToken: String,
 

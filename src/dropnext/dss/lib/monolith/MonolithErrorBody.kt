@@ -6,6 +6,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonPrimitive
 
+
 /**
  * Parsed monolith error payload. [monolithTraceId] is the backend's `trace_id` (not DSS request trace).
  */
@@ -23,7 +24,7 @@ data class MonolithErrorBody(
   }
 }
 
-/** Message for [MonolithCallError.errorMessage] plus parsed fields for logging. */
+/** The message for [MonolithError.Rejected] plus the parsed fields for logging. */
 fun monolithError(httpStatus: Int, rawBody: String): Pair<String, MonolithErrorBody> {
   val parsed = parseMonolithErrorBody(rawBody)
   val msg = parsed.message ?: rawBody.trim().take(512).ifEmpty { "HTTP $httpStatus" }

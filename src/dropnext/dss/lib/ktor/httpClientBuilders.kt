@@ -3,6 +3,7 @@ package dropnext.dss.lib.ktor
 import dropnext.dss.lib.json.AppJson
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.plugins.callid.CallId
 import io.ktor.client.plugins.HttpRequestRetry
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
@@ -34,11 +35,17 @@ fun createSharedHttpClient(): HttpClient = HttpClient(OkHttp) {
  * Derives a monolith-specific [HttpClient] that retries on connection/IO errors with exponential
  * backoff. Shopify Graphql and OAuth traffic continue to use the base [createSharedHttpClient] so
  * non-idempotent mutations are never duplicated. The OkHttp engine and connection pool are shared.
+ *
+ * It also forwards the request's trace id, read from the coroutine context the server's `CallId` plugin
+ * fills, so the monolith's log lines for a call can be found from ours. Shopify does not get the header.
  */
 fun createMonolithHttpClient(baseHttpClient: HttpClient): HttpClient = baseHttpClient.config {
   install(HttpRequestRetry) {
     maxRetries = 3
     retryOnExceptionIf { _, cause -> cause is IOException }
     exponentialDelay(base = 2.0, maxDelayMs = 4_000)
+  }
+  install(CallId) {
+    addToHeader(TRACE_ID_HEADER)
   }
 }
