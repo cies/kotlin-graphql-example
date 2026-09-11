@@ -142,8 +142,11 @@ credentials, so the human developer starts it — see "Operational boundary".
    - Anything else: logged and acknowledged.
 5. Every workflow answers a `WebhookMirrorOutcome`, and the handler chooses the status from it: `200` when a
    redelivery could not go better (mirrored, nothing to mirror, no token, a token or a request that is refused),
-   `502` when Shopify or the monolith did not answer, throttled, or answered a `5xx`. Shopify redelivers a non-2xx
-   with backoff for up to two days, so that is the retry; the monolith's idempotent handling makes it safe.
+   `502` when Shopify or the monolith did not answer, throttled, or answered a `5xx`. Shopify redelivers a non-2xx, or
+   no answer within five seconds, up to eight times in four hours with a growing interval, so that is the retry;
+   the monolith's idempotent handling makes it safe. After repeated failures within 24 hours Shopify removes the
+   subscription, which `/api/check` then reports as `missing` ([Shopify: troubleshoot
+   webhooks](https://shopify.dev/docs/apps/build/webhooks/troubleshooting-webhooks)).
 6. Every verified delivery ends in one `WebhookDeliveryReport`: the `Webhook done …` summary line (info for mirrored
    and skipped, warn for a transient failure, error for a permanent one) with the webhook id, the delivery lag and
    a countable `reason=` or `error=` label, and the `200` body that says the same, which Shopify stores with the

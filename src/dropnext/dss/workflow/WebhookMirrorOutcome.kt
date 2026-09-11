@@ -7,7 +7,7 @@ import dropnext.dss.lib.shopify.graphql.ShopifyError
 /**
  * What mirroring one Shopify webhook into the monolith came to. The handler answers Shopify from
  * this: a `200` when redelivering the same webhook could not go better, a `5xx` when it could, so
- * Shopify's own redelivery (with backoff, for up to two days) is the retry.
+ * Shopify's own redelivery (up to eight times in four hours, with a growing interval) is the retry.
  */
 sealed interface WebhookMirrorOutcome {
   /** The monolith has what the webhook announced, whether it was new to it or not. */

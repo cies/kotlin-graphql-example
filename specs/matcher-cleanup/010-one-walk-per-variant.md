@@ -3,9 +3,9 @@
 Status: draft
 Author: cies (with Claude)
 Date: 2026-09-11
-Depends on: nothing for the first three changes. The fourth (the plan carries the skips) is the same change
-`specs/shipment-sync-by-tracking-number/010-skip-shipments-already-fulfilled.md` asks for under "What changes";
-whichever of the two lands first makes it, the other builds on it.
+Depends on: nothing. This spec owns the change that makes the plan carry the skips (change 4 below):
+`specs/shipment-sync-by-tracking-number/010-skip-shipments-already-fulfilled.md` builds on it and `030` in that folder
+widens the plan per shipment, so this spec lands first.
 Repos: DSS only.
 
 
@@ -16,12 +16,15 @@ The matcher answers the right thing and does so several times over:
 - `determineShopifyMutations` runs `dryRunAllShipments` twice on the same order: once inside
   `calculateShopifyMutations` to plan, once in `logSkippedShipmentLines` only to log the skips, because the plan
   does not carry them.
-- For every shipment line, three private helpers in `domain/fulfillment/matchShipmentToFulfillmentOrders.kt`
-  each walk every fulfillment order and every line of the order: `findOpenFulfillmentOrderLinesForVariant`,
-  `findBestFulfillmentOrderLineCandidate` and `determineSkipReason`. An order of `f` fulfillment orders with
-  `l` lines each costs `3 × f × l` per shipment line, twice.
-- `determineSkipReason` runs only when no open line carries the variant, so its `seenOnOpenFulfillmentOrder`
-  is always `false` and it can only ever answer `NO_OPEN_FO`. `SkipReason.VARIANT_NOT_FOUND` is produced
+- For every shipment line, `findOpenFulfillmentOrderLinesForVariant` in
+  `domain/fulfillment/matchShipmentToFulfillmentOrders.kt` walks every fulfillment order and every line of the
+  order, and then a second helper walks it again: `findBestFulfillmentOrderLineCandidate` when an open line carries
+  the variant, `determineSkipReason` when none does. An order of `f` fulfillment orders with `l` lines each costs
+  `2 × f × l` per shipment line, on top of the `FulfillmentQuantityLedger`'s own walk per dry run, and all of it
+  twice (see above).
+- `determineSkipReason` runs only when no open line carries the variant, so its `seenOnOpenFulfillmentOrder` is
+  always `false` and it can only ever answer `NO_OPEN_FO`: its `ZERO_REMAINING` branch is unreachable (the
+  reachable `ZERO_REMAINING` is decided in `matchShipmentLineItem`). `SkipReason.VARIANT_NOT_FOUND` is produced
   nowhere; its `variant_not_found` log label is dead.
 - `ShipmentMatchResult.Ok.groups` is keyed by the whole generated `FulfillmentOrder` node, a data class whose
   `hashCode` and `equals` walk the nested line-item edges. The only thing read from the key is `id`.
@@ -46,8 +49,9 @@ The matcher answers the right thing and does so several times over:
    keyed by the fulfillment order's gid and in first-seen order (a `LinkedHashMap`, as today). `calculateShopifyMutations`
    reads the key instead of `fulfillmentOrder.id`. Nothing else reads the groups.
 4. **The plan carries the skips.** `calculateShopifyMutations` answers a `ShipmentPlan(mutations, skippedLines,
-   unmatchedShipments)` (names to taste; `030` of the tracking-number folder later widens it per shipment), and
-   `determineShopifyMutations` logs from the plan. `logSkippedShipmentLines` and the second dry run go.
+   unmatchedShipments)`, and `determineShopifyMutations` logs from the plan. `logSkippedShipmentLines` and the second
+   dry run go. The tracking-number folder adds its shipment-level skip to this plan (`010`) and later widens it to
+   one result per shipment (`030`).
 
 
 ## Behavioral contract
@@ -61,7 +65,8 @@ The matcher answers the right thing and does so several times over:
   is not `ZERO_REMAINING` but the `exceeds remaining 0` user error, because two shipments claiming one unit is a
   payload problem, not a fulfilled line. This spec keeps that distinction; it is the one place the two sources
   of truth legitimately differ.
-- **Cost**: one walk of the order per dry run, then one map lookup per shipment line.
+- **Cost**: one walk of the order per dry run (two when the index sits beside the ledger, see open question 1),
+  then one map lookup per shipment line.
 - **Log lines**: identical, minus the never-emitted `reason=variant_not_found`.
 
 

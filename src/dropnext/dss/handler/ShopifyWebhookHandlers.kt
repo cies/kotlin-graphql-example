@@ -35,7 +35,7 @@ private val log = KotlinLogging.logger {}
  * service, and dispatches on the topic to the workflow that mirrors the change into the monolith.
  * The answer is chosen from the outcome: `200` for whatever a redelivery could not improve (done,
  * nothing to do, a token or a request that is refused), a `502` when Shopify or the monolith did not
- * answer or answered a `5xx`, so Shopify's own redelivery, with backoff for up to two days, is the retry.
+ * answer or answered a `5xx`, so Shopify's own redelivery, up to eight times in four hours, is the retry.
  * Every verified delivery ends in one [WebhookDeliveryReport]: the summary log line and the response body.
  */
 class ShopifyWebhookHandlers(

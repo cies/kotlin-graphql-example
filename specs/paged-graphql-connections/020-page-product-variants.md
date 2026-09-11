@@ -10,8 +10,8 @@ Repos: DSS only.
 ## Problem
 
 After `010` a product with more than 100 variants fails its webhook loudly instead of silently. It still does
-not reach the monolith. Shopify allows 2048 variants per product; a fashion or furniture catalogue reaches
-several hundred. This is the one limit of `010`'s table that a real shop hits, so it gets paging.
+not reach the monolith. Shopify allows 2048 variants per product for every merchant; a fashion or furniture
+catalogue reaches several hundred. This is the one limit of `010`'s table that a real shop hits, so it gets paging.
 
 
 ## What changes
@@ -48,9 +48,9 @@ several hundred. This is the one limit of `010`'s table that a real shop hits, s
 - `mapper/toProductVariantItems.kt` takes the variant list and the shop currency instead of the `Product`;
   the product-level fields it reads today (title, vendor, product image) come in as parameters or as the
   `ShopProduct` header beside the list. The mapper's tests move with it.
-- `ArchitectureTest.graphqlGeneratedAllowList`: the new workflow file must not need an entry; it programs
-  against `ProductVariantsPage` and never imports the generated package. If the mapper's new signature needs
-  the generated `ProductVariant`, the mapper is already listed.
+- `ArchitectureTest.graphqlGeneratedAllowList` needs no change. `ProductVariantsPage` lives in
+  `lib/shopify/graphql/` beside `ShopProduct` and wraps the generated variant node, so its readers see a generated
+  type: the new workflow in `workflow/` and the mapper in `mapper/`, and both packages are already on the list.
 
 
 ## Behavioral contract
@@ -71,10 +71,13 @@ several hundred. This is the one limit of `010`'s table that a real shop hits, s
   monolith, so a redelivery starts clean.
 - **The product is deleted between pages**: `productVariantsPage` answers `null` on the next page, the
   workflow answers `PRODUCT_GONE`.
-- **Throttling**: 26 calls in a burst for a 2048-variant product cost about 26 × (10 + 100 × variant cost)
-  query points; Shopify's bucket is 2000 points restoring at 100 per second for a standard shop. The
-  `HttpError(429)` path already exists; no backoff is added here. If real shops hit this, a delay between
-  pages is a one-line follow-up.
+- **Throttling**: Shopify sizes the query cost of a connection by its `first` argument, refuses a single query
+  that costs more than 1,000 points, and restores 100 points per second on a standard plan (200 on Advanced,
+  1,000 on Plus, 2,000 on Enterprise). A 2048-variant product is 22 calls in a burst. The `extensions.cost` of a
+  response reports what a page really costs; measure one on a real shop before settling the page size (open
+  question 2). A throttled page is a transient `ShopifyError.HttpError(429)` or `GraphqlError`, so the webhook
+  answers `502` and Shopify redelivers; no backoff is added here. If real shops hit this, a delay between pages is a
+  one-line follow-up.
 
 
 ## Reuse inventory
@@ -103,5 +106,13 @@ several hundred. This is the one limit of `010`'s table that a real shop hits, s
 
 1. Two operations always (this spec) or keep the first 100 variants in `GetProductById` and page only the
    rest? The second saves a round trip for most products and costs a second variant type in the mapper.
-2. Is 100 per page right, or should the page be 250 (Shopify's maximum) to make the 2048 case 9 calls?
-   The query cost per page grows with it; 100 keeps every call well inside the bucket.
+2. Is 100 per page right, or should the page be 250, which makes the 2048 case 9 pages? The cost of a page grows
+   with `first`, including the nested `media(first: 1)` of every variant, and must stay under the 1,000-point cap
+   of a single query; measure before raising it.
+
+
+## Sources
+
+- [Shopify changelog: the product variant limit is now 2048 for all merchants](https://shopify.dev/changelog/the-product-variant-limit-is-now-2048-for-all-merchants).
+- [Shopify API limits](https://shopify.dev/docs/api/usage/limits): the restore rate per plan, the 1,000-point cap
+  of a single query, and connection costs sized by `first`.
