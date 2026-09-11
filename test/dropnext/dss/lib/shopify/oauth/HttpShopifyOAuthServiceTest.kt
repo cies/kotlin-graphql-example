@@ -6,7 +6,6 @@ import dropnext.dss.domain.ShopDomain
 import dropnext.dss.domain.ShopifyAdminToken
 import dropnext.dss.domain.ShopifyAppSecret
 import dropnext.dss.lib.json.AppJson
-import dropnext.dss.lib.shopify.graphql.ShopifyError
 import dropnext.dss.testutil.fake.FakeShopifyGraphqlServer
 import dropnext.dss.testutil.helper.shopifyRewritingHttpClient
 import dropnext.dss.testutil.helper.testHttpClient
@@ -22,13 +21,13 @@ import kotlinx.serialization.json.jsonPrimitive
 private val shop = ShopDomain.parse("acme.myshopify.com")!!
 private val now = Instant.parse("2026-05-22T12:00:00Z")
 
-class ShopifyOAuthServiceTest {
+class HttpShopifyOAuthServiceTest {
 
   // Never used: every case here signs or builds a URL, none of them reaches the network.
   private val httpClient = testHttpClient()
   private val client = oauthService(secret = "client-secret-xyz")
 
-  private fun oauthService(secret: String) = ShopifyOAuthService(
+  private fun oauthService(secret: String) = HttpShopifyOAuthService(
     httpClient = httpClient,
     clientId = "client-id-123",
     clientSecret = ShopifyAppSecret(secret),
@@ -139,23 +138,33 @@ class ShopifyOAuthServiceTest {
   }
 
   @Test
-  fun `exchangeCode answers a Network failure when Shopify refuses the code`() = withFakeShopify { server, service ->
+  fun `exchangeCode answers CodeRejected with the status when Shopify refuses the code`() = withFakeShopify { server, service ->
     server.oauthStatus = HttpStatusCode.BadRequest
     server.oauthAccessTokenResponse = """{"error":"invalid_request","error_description":"code was already used"}"""
 
     val result = service.exchangeCode(shop, "used-code")
 
-    assert(result is Failure)
-    assert((result as Failure).reason is ShopifyError.Network)
+    // Decoding the error body as a token used to make this a network failure, which reads as a blip worth retrying.
+    assert(result == Failure(OAuthError.CodeRejected(400)))
   }
 
   @Test
-  fun `exchangeCode answers a Network failure when the token response is not JSON`() = withFakeShopify { server, service ->
+  fun `exchangeCode answers Transport when Shopify answers a server error`() = withFakeShopify { server, service ->
+    server.oauthStatus = HttpStatusCode.ServiceUnavailable
     server.oauthAccessTokenResponse = "<html>maintenance</html>"
 
     val result = service.exchangeCode(shop, "abc-code")
 
-    assert((result as Failure).reason is ShopifyError.Network)
+    assert(result == Failure(OAuthError.Transport("Shopify answered HTTP 503")))
+  }
+
+  @Test
+  fun `exchangeCode answers Transport when the token response is not JSON`() = withFakeShopify { server, service ->
+    server.oauthAccessTokenResponse = "<html>maintenance</html>"
+
+    val result = service.exchangeCode(shop, "abc-code")
+
+    assert((result as Failure).reason is OAuthError.Transport)
     assert("client-secret-xyz" !in result.reason.message)
   }
 
@@ -164,7 +173,7 @@ class ShopifyOAuthServiceTest {
     val server = FakeShopifyGraphqlServer()
     val rewritingClient = shopifyRewritingHttpClient(server.start())
     try {
-      val service = ShopifyOAuthService(
+      val service = HttpShopifyOAuthService(
         httpClient = rewritingClient,
         clientId = "client-id-123",
         clientSecret = ShopifyAppSecret("client-secret-xyz"),

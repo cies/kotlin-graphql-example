@@ -6,6 +6,7 @@ import dropnext.dss.domain.MonolithPersistOutcome
 import dropnext.dss.domain.ShopDomain
 import dropnext.dss.domain.ShopifyAdminToken
 import dropnext.dss.domain.ShopifyShopId
+import dropnext.dss.domain.WebhookTopicStatus
 import dropnext.dss.lib.shopify.graphql.ShopIdentityInfo
 import dropnext.dss.lib.shopify.graphql.ShopifyError
 import dropnext.dss.lib.shopify.token.InMemoryShopTokenStore
@@ -62,14 +63,14 @@ class InstallShopTest {
 
   /** A shop with no id still reaches the monolith, which is told `0` rather than nothing. */
   @Test
-  fun `a failing identity lookup forwards shop id zero to the monolith`() = runBlocking {
+  fun `a failing identity lookup forwards a null shop id to the monolith`() = runBlocking {
     val monolith = FakeMonolithService()
     val shopify = FakeShopifyGraphqlService(acmeShop).apply {
       shopIdentityResult = Failure(ShopifyError.Network("shop identity unreachable"))
     }
     installShop(shopify, monolith, InMemoryShopTokenStore(), installedToken, CALLBACK_URL)
 
-    assert(monolith.putStoreApiKeyCalls.single().shopifyShopId == 0L)
+    assert(monolith.putStoreApiKeyCalls.single().shopifyShopId == null)
   }
 
   @Test
@@ -103,9 +104,9 @@ class InstallShopTest {
     }
     val report = installShop(shopify, FakeMonolithService(), InMemoryShopTokenStore(), installedToken, CALLBACK_URL)
 
-    assert(report.webhooks.addedSubscriptions.isEmpty())
-    assert(report.webhooks.failures.isNotEmpty())
-    assert(report.webhooks.failures.all { "address is not allowed" in it.error })
+    assert(report.webhooks.addedCount == 0)
+    assert(report.webhooks.failures.size == report.webhooks.topics.size)
+    assert(report.webhooks.failures.all { "address is not allowed" in (it.status as WebhookTopicStatus.Failed).error })
   }
 
   /**

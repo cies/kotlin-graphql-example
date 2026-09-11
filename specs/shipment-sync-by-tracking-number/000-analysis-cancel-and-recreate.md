@@ -1,9 +1,39 @@
 # Why the fulfillment cancel went missing, and what to do about it
 
-Status: analysis, no decision taken yet.
-Date: 2026-09-10.
+Status: decided, see "Decision" below. The numbered specs in this folder carry it out.
+Date: 2026-09-10, decision added 2026-09-11.
 Scope: `POST /sync-shipments-with-fulfillments` in the DSS, the `SyncShipmentsWithFulfillments` job and the
 shipment split in the monolith.
+
+
+## Decision
+
+The sync reconciles by tracking number: a shipment is a fulfillment with that tracking number, and both sides
+name fulfillments by it. Option B below is the target, reached through option A, in four steps that each
+leave the system consistent:
+
+| Spec | What it lands | Contract change |
+|------|---------------|-----------------|
+| `010-skip-shipments-already-fulfilled.md` | A shipment whose tracking number is already on a live fulfillment is skipped, never created twice. | None (DSS only). |
+| `020-cancel-replaced-fulfillments.md` | The monolith names the tracking numbers it replaced; the DSS cancels exactly those fulfillments, then creates. | `replaced_tracking_numbers` on the request. |
+| `030-report-per-shipment-outcomes.md` | The response says, per tracking number, what happened. | Response shape. |
+| `040-rewrite-the-fulfillment-docs.md` | The spec and the verification doc describe this design; the cancel-all spec is deleted. | None. |
+
+The cancel plumbing (`ShopifyMutation.FulfillmentCancel`, `cancelFulfillment`, `FulfillmentCancelMutation.graphql`)
+stays: 020 is its producer. The separate spec that proposed removing it (`specs/remove-fulfillment-cancel/`)
+was withdrawn on 2026-09-11 for that reason.
+
+### An observation the options table below got wrong
+
+The retry rows say an already-created shipment "is skipped" on a re-send. That is only true when the
+fulfillment-order line has no remaining quantity left, which happens to be the case in the split flow and in
+the one test that pins it. With an order of two units of a variant and a shipment of one unit already synced,
+a re-send of that shipment matches the remaining unit and creates a *second* fulfillment with the same
+tracking number. The monolith does re-send: its job comment says a run whose POST succeeded but whose commit
+did not sends those shipments again, and any partial failure in the DSS (the second of two creates failing)
+makes it retry the whole payload. Nothing in the current matcher looks at the tracking numbers the order
+already carries, although `GetOrderForDss` loads them. Spec 010 closes this before anything else is built on
+the sync.
 
 
 ## Summary

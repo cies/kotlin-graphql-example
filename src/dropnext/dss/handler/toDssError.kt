@@ -1,7 +1,9 @@
 package dropnext.dss.handler
 
+import dropnext.dss.domain.MonolithPersistOutcome
 import dropnext.dss.lib.ktor.DssError
 import dropnext.dss.lib.shopify.graphql.ShopifyError
+import dropnext.dss.lib.shopify.oauth.OAuthError
 
 
 /**
@@ -15,5 +17,26 @@ fun ShopifyError.toDssError(): DssError = when (this) {
   is ShopifyError.GraphqlError -> DssError.UpstreamFailure(message)
   is ShopifyError.HttpError -> DssError.UpstreamFailure(message)
   is ShopifyError.Network -> DssError.UpstreamFailure(message)
+}
+
+/**
+ * A merchant's browser reads these. A code Shopify refused is theirs to redo, so the answer says to start the
+ * install again; Shopify not answering is upstream, and the page stays as terse as before.
+ */
+fun OAuthError.toDssError(): DssError = when (this) {
+  is OAuthError.CodeRejected ->
+    DssError.InvalidRequest("OAuth failed: Shopify refused the authorization code (HTTP $httpStatus); start the install again")
+  is OAuthError.Transport -> DssError.UpstreamFailure("OAuth failed: could not exchange authorization code")
+}
+
+/**
+ * A token the monolith did not persist is cached here regardless, so the answer has to say that the
+ * monolith does not have it. A store the monolith does not know is the caller's to fix; anything else
+ * is the monolith's, and a retry of the same request is safe. The monolith's own message stays in the log.
+ */
+fun MonolithPersistOutcome.Failed.toDssError(): DssError = when (httpStatus) {
+  404 -> DssError.NotFound("the monolith knows no store for this shop; the token is cached in memory only")
+  null -> DssError.UpstreamFailure("the monolith did not answer; the token is cached in memory only")
+  else -> DssError.UpstreamFailure("the monolith answered HTTP $httpStatus; the token is cached in memory only")
 }
 

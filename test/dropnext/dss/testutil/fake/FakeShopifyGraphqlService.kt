@@ -124,7 +124,7 @@ class FakeShopifyGraphqlService(
 
   override suspend fun webhookSubscriptions(
     topics: List<WebhookSubscriptionTopic>,
-    callbackUrl: String,
+    callbackUrl: String?,
   ): ShopifyResult<List<WebhookSubscriptionStatus>> {
     webhookSubscriptionsCalls.add(topics)
     return webhookSubscriptionsResult

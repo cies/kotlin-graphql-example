@@ -17,6 +17,7 @@ import dropnext.dss.domain.StoreId
 import dropnext.dss.lib.json.MonolithJson
 import io.ktor.client.HttpClient
 import io.ktor.client.request.HttpRequestBuilder
+import io.ktor.client.request.accept
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -31,6 +32,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import java.io.IOException
 import kotlinx.serialization.KSerializer
+import kotlinx.serialization.SerializationException
 
 
 /**
@@ -59,6 +61,7 @@ class HttpMonolithService(
   private fun url(path: String): String = "$prefixedBase/${path.trimStart('/')}"
 
   private fun HttpRequestBuilder.applyDefaults() {
+    accept(ContentType.Application.Json)
     apiKey?.takeIf { it.value.isNotBlank() }?.let { header("Authorization", "Bearer ${it.value}") }
   }
 
@@ -139,14 +142,26 @@ private suspend inline fun <T> monolithCall(
   Failure(MonolithError.Transport(e.message ?: "network error"))
 }
 
-/** Deserializes [body] as [T] on `200 OK` and maps it with [onOk]; any other status is [MonolithError.Rejected]. */
+/**
+ * Deserializes [body] as [T] on `200 OK` and maps it with [onOk]; any other status is
+ * [MonolithError.Rejected]. A `200` that does not decode is [MonolithError.Undecodable] rather than an
+ * exception: it is an expected failure (a proxy's HTML page, a contract that drifted), not a bug here.
+ */
 private inline fun <T : Any, R> HttpResponse.decodeOk(
   body: String,
   serializer: KSerializer<T>,
   onOk: (T) -> R,
-): MonolithResult<R> =
-  if (status == HttpStatusCode.OK) Success(onOk(MonolithJson.decodeFromString(serializer, body)))
-  else Failure(rejected(status, body))
+): MonolithResult<R> {
+  if (status != HttpStatusCode.OK) return Failure(rejected(status, body))
+  val decoded = try {
+    MonolithJson.decodeFromString(serializer, body)
+  } catch (e: SerializationException) {
+    // Only the first line: kotlinx appends the offending input after a newline, and the body must not reach the log.
+    val complaint = e.message?.lineSequence()?.first()?.take(200) ?: "not the expected JSON"
+    return Failure(MonolithError.Undecodable(status.value, complaint))
+  }
+  return Success(onOk(decoded))
+}
 
 private fun rejected(status: HttpStatusCode, body: String): MonolithError.Rejected {
   val (message, parsed) = monolithError(status.value, body)

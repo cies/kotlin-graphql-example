@@ -1,5 +1,6 @@
 package dropnext.dss.lib.shopify.graphql
 
+import dev.forkhandles.result4k.Failure
 import dropnext.dss.domain.ShopDomain
 import dropnext.dss.domain.ShopifyAdminToken
 import dropnext.dss.lib.shopify.token.InMemoryShopTokenStore
@@ -8,6 +9,7 @@ import dropnext.dss.testutil.fake.FakeShopifyGraphqlServer
 import dropnext.dss.testutil.helper.shopifyRewritingHttpClient
 import dropnext.dss.workflow.resolveShopTokenFromMonolith
 import io.ktor.client.HttpClient
+import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
@@ -119,6 +121,24 @@ class HttpShopifyGraphqlServiceFactoryTest {
     val call = shopify.calls.single()
     assert(call.authorization == "shpat_cached")
     assert(call.path == "/admin/api/$API_VERSION/graphql.json")
+    shopify.clear()
+  }
+
+  /**
+   * A reinstall through another instance leaves this one holding a token Shopify now refuses. The
+   * `401` must evict it, so the next request re-resolves from the monolith instead of failing until a restart.
+   */
+  @Test
+  fun `a 401 from Shopify evicts the token and the next call asks the monolith again`() = runBlocking {
+    val monolith = FakeMonolithService().apply { getStoreToken = ShopifyAdminToken("shpat_after_reinstall") }
+    val factory = factoryFor(monolith, cached = mapOf(acmeShop to ShopifyAdminToken("shpat_revoked")))
+    shopify.stubRaw("ShopIdentity", """{"errors":"[API] Invalid API key or access token"}""", HttpStatusCode.Unauthorized)
+
+    val rejected = factory.forShop(acmeShop)!!.shopIdentity()
+    assert((rejected as Failure).reason == ShopifyError.TokenRejected(401))
+
+    factory.forShop(acmeShop)
+    assert(monolith.getStoreCalls.single() == "acme")
     shopify.clear()
   }
 

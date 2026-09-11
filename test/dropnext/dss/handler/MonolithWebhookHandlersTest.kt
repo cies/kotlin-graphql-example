@@ -4,7 +4,7 @@ import dev.forkhandles.result4k.Failure
 import dev.forkhandles.result4k.Success
 import dropnext.dss.DssDependencies
 
-import dropnext.dss.contract.ErrorResponse
+import dropnext.dss.contract.ApiError
 import dropnext.dss.contract.Shipment
 import dropnext.dss.contract.ShipmentLineItem
 import dropnext.dss.contract.SyncShipmentsWithFulfillmentsRequest
@@ -347,27 +347,84 @@ class MonolithWebhookHandlersTest {
     }
   }
 
+  /** The answer used to be a `200` with `store_id: 0`, which the caller could not tell from a persisted token. */
   @Test
-  fun `PUT stores api-key still caches token when monolith returns an error`() {
+  fun `PUT stores api-key answers 502 and keeps the token cached when the monolith answers a server error`() {
     val tokens = InMemoryShopTokenStore()
     val fake = FakeMonolithService().apply { putStoreApiKeyStatus = 500 }
     withDssApp(deps(shopTokens = tokens, monolith = fake), authenticateAsMonolith = true) { client ->
       val r = client.put(Paths.storesApiKey) {
         contentType(ContentType.Application.Json)
-        setBody(UpdateStoreApiKeyRequest(shopifySubdomain = "acme", apiKey = "shpat_x", shopifyShopId = 0L))
+        setBody(UpdateStoreApiKeyRequest(shopifySubdomain = "acme", apiKey = "shpat_x", shopifyShopId = 99L))
       }
-      assert(r.status == HttpStatusCode.OK)
-      assert(r.body<UpdateStoreApiKeyResponse>().storeId == 0L)
+      assert(r.status == HttpStatusCode.BadGateway)
+      assert(r.errorMessage() == "the monolith answered HTTP 500; the token is cached in memory only")
       assert(tokens.cached(acmeShop) == ShopifyAdminToken("shpat_x"))
       assert(fake.putStoreApiKeyCalls.size == 1)
     }
   }
 
   @Test
+  fun `PUT stores api-key answers 404 when the monolith knows no store for the shop`() {
+    val tokens = InMemoryShopTokenStore()
+    val fake = FakeMonolithService().apply { putStoreApiKeyStatus = 404 }
+    withDssApp(deps(shopTokens = tokens, monolith = fake), authenticateAsMonolith = true) { client ->
+      val r = client.put(Paths.storesApiKey) {
+        contentType(ContentType.Application.Json)
+        setBody(UpdateStoreApiKeyRequest(shopifySubdomain = "acme", apiKey = "shpat_x", shopifyShopId = 99L))
+      }
+      assert(r.status == HttpStatusCode.NotFound)
+      assert("knows no store" in r.errorMessage())
+      assert(tokens.cached(acmeShop) == ShopifyAdminToken("shpat_x"))
+    }
+  }
+
+  /** Null is the contract's way of saying "not known"; it used to travel as `0`, which the monolith stored. */
+  @Test
+  fun `PUT stores api-key forwards a null shopify_shop_id as null`() {
+    val fake = FakeMonolithService()
+    withDssApp(deps(monolith = fake), authenticateAsMonolith = true) { client ->
+      val r = client.put(Paths.storesApiKey) {
+        contentType(ContentType.Application.Json)
+        setBody(UpdateStoreApiKeyRequest(shopifySubdomain = "acme", apiKey = "shpat_x", shopifyShopId = null))
+      }
+      assert(r.status == HttpStatusCode.OK)
+      assert(fake.putStoreApiKeyCalls.single().shopifyShopId == null)
+    }
+  }
+
+  /** The handler caches before it persists, so the validator is what keeps a blank token from evicting a good one. */
+  @Test
+  fun `PUT stores api-key rejects a blank api_key as 400 without touching the cache`() {
+    val tokens = InMemoryShopTokenStore(mapOf(acmeShop to ShopifyAdminToken("shpat_old")))
+    val fake = FakeMonolithService()
+    withDssApp(deps(shopTokens = tokens, monolith = fake), authenticateAsMonolith = true) { client ->
+      val r = client.put(Paths.storesApiKey) {
+        contentType(ContentType.Application.Json)
+        setBody(UpdateStoreApiKeyRequest(shopifySubdomain = "acme", apiKey = "   ", shopifyShopId = 99L))
+      }
+      assert(r.status == HttpStatusCode.BadRequest)
+      assert("api_key is required" in r.errorMessage())
+      assert(tokens.cached(acmeShop) == ShopifyAdminToken("shpat_old"))
+      assert(fake.putStoreApiKeyCalls.isEmpty())
+    }
+  }
+
+  @Test
+  fun `PUT stores api-key rejects a zero shopify_shop_id as 400`() = withDssApp(deps(), authenticateAsMonolith = true) { client ->
+    val r = client.put(Paths.storesApiKey) {
+      contentType(ContentType.Application.Json)
+      setBody(UpdateStoreApiKeyRequest(shopifySubdomain = "acme", apiKey = "shpat_x", shopifyShopId = 0L))
+    }
+    assert(r.status == HttpStatusCode.BadRequest)
+    assert("shopify_shop_id" in r.errorMessage())
+  }
+
+  @Test
   fun `PUT stores api-key rejects invalid shopify_subdomain as 400`() = withDssApp(deps(), authenticateAsMonolith = true) { client ->
     val r = client.put(Paths.storesApiKey) {
       contentType(ContentType.Application.Json)
-      setBody(UpdateStoreApiKeyRequest(shopifySubdomain = "!!invalid!!", apiKey = "shpat", shopifyShopId = 0L))
+      setBody(UpdateStoreApiKeyRequest(shopifySubdomain = "!!invalid!!", apiKey = "shpat", shopifyShopId = 99L))
     }
     assert(r.status == HttpStatusCode.BadRequest)
     assert("shopify_subdomain" in r.errorMessage())
@@ -378,7 +435,7 @@ class MonolithWebhookHandlersTest {
     withDssApp(deps(secret = "z".repeat(32))) { client ->
       val r = client.put(Paths.storesApiKey) {
         contentType(ContentType.Application.Json)
-        setBody(UpdateStoreApiKeyRequest(shopifySubdomain = "acme", apiKey = "shpat_x", shopifyShopId = 0L))
+        setBody(UpdateStoreApiKeyRequest(shopifySubdomain = "acme", apiKey = "shpat_x", shopifyShopId = 99L))
       }
       assert(r.status == HttpStatusCode.Unauthorized)
     }
@@ -600,10 +657,10 @@ class MonolithWebhookHandlersTest {
   )
 
   /**
-   * The `error` field of the contract's own [ErrorResponse]. Substring-matching the raw body would
+   * The `error` field of the contract's own [ApiError]. Substring-matching the raw body would
    * keep passing if the envelope changed shape, which is exactly the break the monolith would feel.
    */
-  private suspend fun HttpResponse.errorMessage(): String = body<ErrorResponse>().error
+  private suspend fun HttpResponse.errorMessage(): String = body<ApiError>().error
 
   private fun validSyncRequest(): SyncShipmentsWithFulfillmentsRequest =
     SyncShipmentsWithFulfillmentsRequest(

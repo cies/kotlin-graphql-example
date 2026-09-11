@@ -2,8 +2,9 @@ package dropnext.dss.presentation
 
 import dropnext.dss.domain.MonolithPersistOutcome
 import dropnext.dss.domain.ShopInstallReport
-import dropnext.dss.domain.WebhookRegistrationFailure
-import dropnext.dss.domain.WebhookSubscriptionStatus
+import dropnext.dss.domain.WebhookRegistrationReport
+import dropnext.dss.domain.WebhookTopicRegistration
+import dropnext.dss.domain.WebhookTopicStatus
 import kotlinx.html.*
 import kotlinx.html.stream.appendHTML
 
@@ -22,16 +23,8 @@ fun renderOAuthInstallPage(report: ShopInstallReport): String = StringBuilder("<
       +"Webhook callback URL: "
       code { +report.webhookCallbackUrl }
     }
-    p {
-      +"Active "
-      code { +"products/*" }
-      +" and "
-      code { +"orders/*" }
-      +" webhook subscriptions:"
-    }
-    renderSubscriptionList(report.webhooks.activeSubscriptions)
-    p { +"Webhook subscriptions added in this install:" }
-    renderSubscriptionList(report.webhooks.addedSubscriptions)
+    renderWebhookSummary(report.webhooks)
+    renderWebhookTable(report.webhooks.topics)
     if (report.webhooks.failures.isNotEmpty()) {
       renderFailedTopics(report.webhooks.failures)
     }
@@ -58,37 +51,84 @@ private fun FlowContent.renderMonolithPersistBlock(outcome: MonolithPersistOutco
   }
 }
 
-private fun FlowContent.renderSubscriptionList(subs: List<WebhookSubscriptionStatus>) {
-  ul {
-    if (subs.isEmpty()) {
-      li { +"None" }
-    } else {
-      subs.forEach { sub ->
-        li {
-          code { +sub.topic }
-          +" -> "
-          code { +sub.uri }
-          +" (id "
-          code { +sub.id }
-          +")"
+private fun FlowContent.renderWebhookSummary(report: WebhookRegistrationReport) {
+  val summary = "Webhook subscriptions: ${report.activeCount} already active, ${report.addedCount} added in this install, " +
+    "${report.failures.size} failed, ${report.staleCount} pointing elsewhere."
+  p { +summary }
+}
+
+/** One row per handled topic: what the shop is subscribed to, what this run changed, and what points at an old URL. */
+private fun FlowContent.renderWebhookTable(rows: List<WebhookTopicRegistration>) {
+  table {
+    thead {
+      tr {
+        th { +"Topic" }
+        th { +"Status" }
+        th { +"Subscription" }
+        th { +"Elsewhere" }
+      }
+    }
+    tbody {
+      rows.forEach { row ->
+        tr {
+          td { code { +row.topic } }
+          td { renderStatus(row.status) }
+          td { renderSubscription(row.status) }
+          td {
+            if (row.stale.isEmpty()) +"-"
+            row.stale.forEach { stale ->
+              div {
+                style = "color:#b45309"
+                code { +stale.uri }
+                +" (id "
+                code { +stale.id }
+                +")"
+              }
+            }
+          }
         }
       }
     }
   }
 }
 
-private fun FlowContent.renderFailedTopics(failures: List<WebhookRegistrationFailure>) {
+private fun FlowContent.renderStatus(status: WebhookTopicStatus) {
+  when (status) {
+    is WebhookTopicStatus.Active -> span { style = "color:green"; +"active" }
+    is WebhookTopicStatus.Added -> span { style = "color:green"; strong { +"added" } }
+    is WebhookTopicStatus.Missing -> span { style = "color:#b45309"; +"missing" }
+    is WebhookTopicStatus.Failed -> span { style = "color:red"; strong { +"failed" } }
+  }
+}
+
+private fun FlowContent.renderSubscription(status: WebhookTopicStatus) {
+  val subscription = when (status) {
+    is WebhookTopicStatus.Active -> status.subscription
+    is WebhookTopicStatus.Added -> status.subscription
+    is WebhookTopicStatus.Missing, is WebhookTopicStatus.Failed -> null
+  }
+  if (subscription == null) {
+    +"-"
+    return
+  }
+  code { +subscription.uri }
+  +" (id "
+  code { +subscription.id }
+  +")"
+}
+
+private fun FlowContent.renderFailedTopics(failures: List<WebhookTopicRegistration>) {
   p {
     style = "color:red"
     strong { +"Webhook registrations that failed (check app scopes in Partner Dashboard):" }
   }
   ul {
-    failures.forEach { failure ->
+    failures.forEach { row ->
       li {
         style = "color:red"
-        code { +failure.topic }
+        code { +row.topic }
         +" — "
-        +failure.error
+        +(row.status as WebhookTopicStatus.Failed).error
       }
     }
   }

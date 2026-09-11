@@ -124,7 +124,7 @@ The schema is committed at `src/graphql-schema/schema.graphql` (so the IDE plugi
 #### OpenAPI (monolith DTOs)
 
 Monolith request/response bodies are **generated** from [`src/resources/monolith-dss-openapi.json`](src/resources/monolith-dss-openapi.json)
-(OpenAPI 3.0, spec validation enabled in Gradle). The same spec describes both directions: the monolith
+(OpenAPI 3.1, spec validation enabled in Gradle). The same spec describes both directions: the monolith
 endpoints DSS calls and the DSS endpoints the monolith calls.
 
 ```sh
@@ -136,7 +136,16 @@ endpoints DSS calls and the DSS endpoints the monolith calls.
 * Policy: **Models only** (`apis=false`) — HTTP stays in handwritten `HttpMonolithService`
 
 Do not add handwritten copies of `CreateShopifyOrderRequest` or other spec DTOs.
-If codegen fails, fix the schema in `src/resources/monolith-dss-openapi.json` (and in the monolith that serves it), then re-run `openApiGenerate` (or any compile task).
+If codegen fails, fix the schema in the monolith that serves it, refresh the copy, then re-run `openApiGenerate` (or any compile task).
+
+The checked-in copy is byte-for-byte what a running monolith serves; refresh it from a local instance with
+
+```sh
+curl -sS "http://127.0.0.1:8080/api/shopify-service/v1/openapi.json?api_key=$DSS_API_KEY" > src/resources/monolith-dss-openapi.json
+```
+
+and never hand-edit it. The generator reads the served document as is (`generateOutBoundMonolithPaths` only strips
+the mount prefix the path keys repeat), so what the monolith serves and what this repo checks in cannot drift apart.
 
 
 ### The JetBrains [Graphql IDE plugin](https://plugins.jetbrains.com/plugin/8097-graphql)
@@ -188,7 +197,7 @@ On `products/create` and `products/update`, the app parses the webhook body for 
 
 * `POST /sync-shipments-with-fulfillments` — accepts `SyncShipmentsWithFulfillmentsRequest` (sync DropNext shipments ↔ Shopify fulfillments).
 * `POST /tracking-update` — accepts `TrackingUpdateRequest` (tracking status → Shopify FulfillmentEvent).
-* `PUT /stores/api-key` — accepts `UpdateStoreApiKeyRequest`; caches the Shopify Admin token in memory and forwards it to the monolith.
+* `PUT /stores/api-key` — accepts `UpdateStoreApiKeyRequest`; caches the Shopify Admin token in memory and forwards it to the monolith. A `502` (or a `404` for a store the monolith does not know) means the monolith did not persist it; the token stays cached either way. A blank `api_key` is a `400` before the cache is touched; `shopify_shop_id` may be `null` when unknown.
 
 The per-shop Admin token is resolved server-side via the in-memory cache (filled by OAuth, `DSS_SHOP_ACCESS_TOKENS`, or `PUT /stores/api-key`) with a fallback to monolith `GET /stores`. These routes require `Authorization: Bearer <DSS_API_KEY>`.
 
@@ -196,7 +205,7 @@ The per-shop Admin token is resolved server-side via the in-memory cache (filled
 ### Security notes (production)
 
 * Use **HTTPS** everywhere between clients, monolith, and this service;
-set `DSS_ALLOW_INSECURE_MONOLITH=true` only on developer machines.
+set `DSS_ALLOW_INSECURE_MONOLITH=true` (with `DSS_MODE=DEV`; `PROD` refuses the flag at startup) only on developer machines.
 * Set `DSS_API_KEY` so internal REST is not open on the network;
 the header is compared in **constant time** to reduce timing leaks.
 * **Secrets in env**: `DSS_SHOP_ACCESS_TOKENS` is as sensitive as a password —
@@ -221,7 +230,7 @@ Unhandled server errors return a generic message; details stay in server logs on
 | `MONOLITH_API_PREFIX` | no | Inserted **after** base: `{BASE}/{PREFIX}/stores/api-key`. Example env `MONOLITH_API_PREFIX=api/v1`. Omit slashes at edges; empty (default) uses paths directly under base. |
 | `MONOLITH_API_KEY` | no | Optional Bearer token for monolith requests (`Authorization`). |
 | `DSS_API_KEY` | yes | Secret used for DSS internal REST auth (`Authorization: Bearer ...`). |
-| `DSS_ALLOW_INSECURE_MONOLITH` | no | Set `true` only for local dev so `MONOLITH_BASE_URL` may use `http://`. Production should use `https://` (default: insecure URLs are rejected at startup). |
+| `DSS_ALLOW_INSECURE_MONOLITH` | no | Set `true` only for local dev, together with `DSS_MODE=DEV`, so `MONOLITH_BASE_URL` may use `http://`. In `PROD` mode (the default) the flag itself is refused at startup, and an insecure URL without it always is. |
 | `LOGFLARE_SOURCE_NAME` | no | Logflare source to ship logs to, e.g. `dropnext.dss` (the monolith ships to `dropnext.app`). Created through the API when it does not exist yet. Shipping needs this **and** `LOGFLARE_API_KEY`; with either missing the service logs to stdout only. |
 | `LOGFLARE_API_KEY` | no | Logflare account key. Lives in AWS Secrets Manager (`dropnext/<env>/dss`), never in a repo. |
 | `LOGFLARE_ENDPOINT` | no | Default `https://api.logflare.app`. Point it at a local stub to try shipping without an account. |
@@ -239,6 +248,6 @@ Legacy compatibility: `SHOPIFY_API_KEY` and `SHOPIFY_API_SECRET` are still accep
 * **`[monolith] MONOLITH_BASE_URL is unset` despite being configured**: duplicate `MONOLITH_BASE_URL` / `MONOLITH_API_KEY` lines (often empty trailing blocks pasted from templates) cause **last value wins**. Remove the trailing empties so only one assignment remains; redeploy/restart.
 * **`Monolith store api-key … status=404` with HTML `<h1>Not Found`**: DSS hit `{MONOLITH_BASE_URL}/stores/api-key` (before optional prefix). Use the REST API domain (often `api.…`), or set `MONOLITH_API_PREFIX` if routes live under a path (`api/v1`). Confirm with `curl -i -X PUT https://your-api…/stores/api-key` (+ Bearer header) outside DSS.
 * **502 Bad Gateway on `DSS_BASE_URL`**: the reverse proxy forwards to the wrong container port. The JVM binds `PORT` (see `[http] Listening …` startup line). Dockerfile sets `ENV PORT=9999`, but dashboards that add an empty `PORT=` override that with blank. Set `PORT=9999` explicitly or remove the `PORT` key so the image default wins; Traefik/nginx must target the **same** port.
-* **Insecure monolith URL rejected**: set `DSS_ALLOW_INSECURE_MONOLITH=true` only for local development; production should remain HTTPS.
+* **Insecure monolith URL rejected**: set `DSS_ALLOW_INSECURE_MONOLITH=true` and `DSS_MODE=DEV` only for local development; production stays HTTPS and refuses the flag.
 
 IDE-specific troubleshooting lives in [docs/setup-intellij-idea.md](./docs/setup-intellij-idea.md).

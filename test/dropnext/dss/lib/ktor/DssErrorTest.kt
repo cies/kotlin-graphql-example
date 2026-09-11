@@ -57,6 +57,11 @@ class DssErrorTest {
   }
 
   @Test
+  fun `payload too large maps to 413`() {
+    assert(DssError.PayloadTooLarge.toHttpStatus() == HttpStatusCode.PayloadTooLarge)
+  }
+
+  @Test
   fun `upstream failure maps to 502`() {
     assert(DssError.UpstreamFailure("network down").toHttpStatus() == HttpStatusCode.BadGateway)
   }

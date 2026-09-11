@@ -43,6 +43,9 @@ class FakeMonolithService : MonolithService, RecordingFake {
   var upsertProductVariantsStatus: Int = 200
   var deleteProductVariantsStatus: Int = 200
 
+  /** What a `200` on [deleteProductVariants] reports as `deleted`: the request no longer says how many variants there are. */
+  var deleteProductVariantsDeleted: Int = 1
+
 
   override suspend fun postCreateOrder(request: CreateShopifyOrderRequest): MonolithResult<CreateOrderOutcome> {
     createOrderCalls.add(request)
@@ -52,7 +55,7 @@ class FakeMonolithService : MonolithService, RecordingFake {
       else -> Failure(
         rejected(
           createOrderStatus,
-          createOrderErrorBody ?: """{"error":{"code":"InternalError","message":"fail","trace_id":"fake123"}}""",
+          createOrderErrorBody ?: """{"error":"fail","code":"InternalError","trace_id":"fake123"}""",
         ),
       )
     }
@@ -63,7 +66,7 @@ class FakeMonolithService : MonolithService, RecordingFake {
     return when (putStoreApiKeyStatus) {
       200 -> Success(StoreId(putStoreApiKeyStoreId))
       else -> Failure(
-        rejected(putStoreApiKeyStatus, """{"error":{"code":"StoreError","message":"forced fail","trace_id":"fake-trace"}}"""),
+        rejected(putStoreApiKeyStatus, """{"error":"forced fail","code":"StoreError","trace_id":"fake-trace"}"""),
       )
     }
   }
@@ -81,15 +84,15 @@ class FakeMonolithService : MonolithService, RecordingFake {
     upsertProductVariantsCalls.add(request)
     return when (upsertProductVariantsStatus) {
       200 -> Success(request.productVariants.size)
-      else -> Failure(rejected(upsertProductVariantsStatus, """{"error":{"code":"VariantError","message":"forced fail","trace_id":"fake-upsert"}}"""))
+      else -> Failure(rejected(upsertProductVariantsStatus, """{"error":"forced fail","code":"VariantError","trace_id":"fake-upsert"}"""))
     }
   }
 
   override suspend fun deleteProductVariants(request: DeleteProductVariantsRequest): MonolithResult<Int> {
     deleteProductVariantsCalls.add(request)
     return when (deleteProductVariantsStatus) {
-      200 -> Success(request.productVariantIds.size)
-      else -> Failure(rejected(deleteProductVariantsStatus, """{"error":{"code":"VariantError","message":"forced fail","trace_id":"fake-delete"}}"""))
+      200 -> Success(deleteProductVariantsDeleted)
+      else -> Failure(rejected(deleteProductVariantsStatus, """{"error":"forced fail","code":"VariantError","trace_id":"fake-delete"}"""))
     }
   }
 
@@ -114,6 +117,7 @@ class FakeMonolithService : MonolithService, RecordingFake {
     getStoreToken = ShopifyAdminToken("shpat_fake")
     upsertProductVariantsStatus = 200
     deleteProductVariantsStatus = 200
+    deleteProductVariantsDeleted = 1
   }
 
 }

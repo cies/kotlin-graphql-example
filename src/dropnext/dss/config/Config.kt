@@ -79,9 +79,15 @@ data class Config(
         error("DSS_API_KEY must be at least 32 characters.")
       }
 
+      val mode = DssMode.parse(env["DSS_MODE"])
       val allowInsecureMonolithUrl = parseBool(env["DSS_ALLOW_INSECURE_MONOLITH"])
+      // The flag is a local-development escape hatch; `PROD` is the default mode, so a deployment that
+      // sets the flag by mistake fails to boot instead of talking to the monolith in the clear.
+      if (allowInsecureMonolithUrl && mode.isProd) {
+        error("DSS_ALLOW_INSECURE_MONOLITH=true is for local development only: set DSS_MODE=DEV or drop the flag.")
+      }
       if (monolithBaseUrl.startsWith("http:", ignoreCase = true) && !allowInsecureMonolithUrl) {
-        error("MONOLITH_BASE_URL must use https:// (or set DSS_ALLOW_INSECURE_MONOLITH=true for local dev).")
+        error("MONOLITH_BASE_URL must use https:// (or set DSS_ALLOW_INSECURE_MONOLITH=true with DSS_MODE=DEV for local dev).")
       }
 
       return Config(
@@ -101,7 +107,7 @@ data class Config(
         logflareSourceName = value("LOGFLARE_SOURCE_NAME"),
         logflareApiKey = value("LOGFLARE_API_KEY")?.let(::LogflareApiKey),
         logflareEndpoint = value("LOGFLARE_ENDPOINT"),
-        mode = DssMode.parse(env["DSS_MODE"]),
+        mode = mode,
       )
     }
 

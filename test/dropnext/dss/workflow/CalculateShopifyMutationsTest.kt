@@ -2,12 +2,12 @@ package dropnext.dss.workflow
 
 import dev.forkhandles.result4k.Failure
 import dev.forkhandles.result4k.Success
-import dropnext.dss.contract.Shipment
-import dropnext.dss.contract.ShipmentLineItem
 import dropnext.dss.lib.shopify.graphql.ShopifyError
 import dropnext.dss.testutil.fixture.minimalOrder
 import dropnext.dss.testutil.fixture.orderWithFoQuantities
+import dropnext.dss.testutil.fixture.orderWithFulfillment
 import dropnext.dss.testutil.fixture.orderWithTwoVariantFulfillmentOrders
+import dropnext.dss.testutil.fixture.shipment
 import dropnext.graphql.generated.getorderfordss.Fulfillment
 import kotlin.test.Test
 
@@ -165,25 +165,4 @@ class CalculateShopifyMutationsTest {
     assert(create.trackingNumber == "TRK-O")
   }
 
-  private fun shipment(
-    variantId: Long = 101L,
-    quantity: Int = 1,
-    tracking: String = "1Z999",
-  ): Shipment =
-    Shipment(
-      trackingNumber = tracking,
-      carrier = "UPS",
-      trackingUrl = null,
-      lineItems = listOf(ShipmentLineItem(productVariantId = variantId, quantity = quantity)),
-    )
-
-  private fun orderWithFulfillment(id: Long) = minimalOrder().copy(
-    fulfillments = listOf(
-      Fulfillment(
-        id = "gid://shopify/Fulfillment/$id",
-        legacyResourceId = id.toString(),
-        trackingInfo = emptyList(),
-      ),
-    ),
-  )
 }

@@ -4,7 +4,7 @@ import dev.forkhandles.result4k.Failure
 import dev.forkhandles.result4k.Success
 import dropnext.dss.contract.DeleteProductVariantsRequest
 import dropnext.dss.domain.ShopDomain
-import dropnext.dss.domain.ShopifyVariantId
+import dropnext.dss.domain.ShopifyProductId
 import dropnext.dss.lib.monolith.MonolithService
 import dropnext.dss.lib.monolith.logMonolithFailure
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -13,23 +13,27 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 private val log = KotlinLogging.logger {}
 
 /**
- * The variants of a product Shopify deleted get deleted (soft-deleted) in the monolith too;
- * the ids come straight from the webhook body.
+ * The variants of a product Shopify deleted get soft-deleted in the monolith too. Only the product
+ * id is known: the webhook carries nothing else and the product can no longer be looked up, so the
+ * monolith resolves the variants from its own copy. Needs no Shopify Admin token.
  */
 suspend fun deleteShopifyProductFromMonolith(
   monolith: MonolithService,
   shop: ShopDomain,
-  variantIds: List<ShopifyVariantId>,
-) {
-  if (variantIds.isEmpty()) return
+  productId: ShopifyProductId,
+): WebhookMirrorOutcome {
   val request = DeleteProductVariantsRequest(
     shopifySubdomain = shop.subdomainOnly,
-    productVariantIds = variantIds.map { it.value },
+    productId = productId.value,
   )
-  when (val result = monolith.deleteProductVariants(request)) {
-    is Success ->
-      log.info { "Monolith delete variants ok: ${result.value} deleted shop=${shop.normalizedShopifyHost}" }
-    is Failure ->
-      logMonolithFailure("deleteProductVariants", result.reason, "shop=${shop.normalizedShopifyHost}")
+  return when (val result = monolith.deleteProductVariants(request)) {
+    is Success -> {
+      log.info { "Monolith delete variants ok: ${result.value} deleted productId=$productId shop=${shop.normalizedShopifyHost}" }
+      WebhookMirrorOutcome.Mirrored
+    }
+    is Failure -> {
+      logMonolithFailure("deleteProductVariants", result.reason, "productId=$productId shop=${shop.normalizedShopifyHost}")
+      WebhookMirrorOutcome.MonolithFailed(result.reason)
+    }
   }
 }

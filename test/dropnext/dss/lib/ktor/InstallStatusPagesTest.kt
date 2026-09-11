@@ -1,6 +1,6 @@
 package dropnext.dss.lib.ktor
 
-import dropnext.dss.contract.ErrorResponse
+import dropnext.dss.contract.ApiError
 import dropnext.dss.lib.json.AppJson
 import dropnext.dss.testutil.helper.GLOBAL_LOG_REGISTRY
 import dropnext.dss.testutil.helper.capturingLogs
@@ -14,6 +14,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.plugins.MissingRequestParameterException
+import io.ktor.server.plugins.PayloadTooLargeException
 import io.ktor.server.plugins.requestvalidation.RequestValidationException
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
@@ -44,10 +45,10 @@ class InstallStatusPagesTest {
     block()
   }
 
-  private suspend fun ApplicationTestBuilder.errorResponse(path: String): Pair<HttpStatusCode, ErrorResponse> {
+  private suspend fun ApplicationTestBuilder.errorResponse(path: String): Pair<HttpStatusCode, ApiError> {
     val client = createClient { install(ClientContentNegotiation) { json(AppJson) } }
     val response = client.get(path)
-    return response.status to response.body<ErrorResponse>()
+    return response.status to response.body<ApiError>()
   }
 
   @Test
@@ -83,11 +84,37 @@ class InstallStatusPagesTest {
     }
 
   @Test
+  fun `a body over the limit is a 413, not a 500`() = throwingApp(PayloadTooLargeException(MAX_REQUEST_BODY_BYTES)) {
+    val (status, error) = errorResponse("/boom")
+    assert(status == HttpStatusCode.PayloadTooLarge)
+    assert(error.error == "request body too large")
+  }
+
+  @Test
   fun `anything else is the generic 500`() = throwingApp(IllegalStateException("the database is on fire")) {
     val (status, error) = errorResponse("/boom")
     assert(status == HttpStatusCode.InternalServerError)
     assert(error.error == "internal error")
   }
+
+  /** A bug on the OAuth callback used to answer a JSON envelope to a merchant's browser while a missing parameter answered text. */
+  @Test
+  fun `the generic 500 on a plain-text path is answered in plain text`() =
+    throwingApp(IllegalStateException("the database is on fire"), plainTextErrorPaths = setOf("/boom")) {
+      val response = client.get("/boom")
+      assert(response.status == HttpStatusCode.InternalServerError)
+      assert(response.contentType()?.withoutParameters() == ContentType.Text.Plain)
+      assert(response.bodyAsText() == "internal error")
+    }
+
+  @Test
+  fun `a body over the limit on a plain-text path is answered in plain text`() =
+    throwingApp(PayloadTooLargeException(MAX_REQUEST_BODY_BYTES), plainTextErrorPaths = setOf("/boom")) {
+      val response = client.get("/boom")
+      assert(response.status == HttpStatusCode.PayloadTooLarge)
+      assert(response.contentType()?.withoutParameters() == ContentType.Text.Plain)
+      assert(response.bodyAsText() == "request body too large")
+    }
 
   @Test
   @ResourceLock(GLOBAL_LOG_REGISTRY)

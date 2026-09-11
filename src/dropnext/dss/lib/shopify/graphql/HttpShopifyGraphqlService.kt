@@ -40,14 +40,16 @@ import kotlinx.coroutines.CancellationException
  * Production [ShopifyGraphqlService] — speaks real Graphql to a shop's Admin API endpoint over
  * the shared [GraphQLKtorClient], injecting the per-shop [accessToken] on every request.
  *
- * Instances are created by [HttpShopifyGraphqlServiceFactory].
- * Stateless aside from its three injected fields,
+ * Instances are created by [HttpShopifyGraphqlServiceFactory], which passes [onTokenRejected] so a
+ * `401` evicts the token from the store before the caller even sees the [ShopifyError.TokenRejected].
+ * Stateless aside from its injected fields,
  * so a single instance is safe for concurrent use across requests targeting the same shop.
  */
 class HttpShopifyGraphqlService(
   override val shop: ShopDomain,
   private val gqlClient: GraphQLKtorClient,
   private val accessToken: ShopifyAdminToken,
+  private val onTokenRejected: () -> Unit = {},
 ) : ShopifyGraphqlService {
 
   override suspend fun shopIdentity(): ShopifyResult<ShopIdentityInfo> =
@@ -125,14 +127,12 @@ class HttpShopifyGraphqlService(
       val payload = data.fulfillmentEventCreate
       val userErrors = payload?.userErrors.orEmpty().map { it.message }
       if (userErrors.isNotEmpty()) return@flatMap Failure(ShopifyError.UserError(userErrors))
-      // Shopify accepted the mutation, reported no user error, and still returned no event: that is
-      // Shopify's answer being broken, not a resource we failed to find. The caller located the
-      // fulfillment on the order moments ago. A `GraphqlError` becomes a 502 for the monolith, which
-      // retries a 5xx and drops a 4xx for good; a `NotFound` would have told it the fulfillment does
-      // not exist, which is false, and would have lost the tracking event.
+
+      // Shopify accepted the mutation, reported no user error, and still returned no event:
+      // Shopify's answer is broken. We make it a `GraphqlError`, which becomes a 502 for the monolith,
+      // which triggers retries (5xx are retried, 4xx are dropped).
       val id = payload?.fulfillmentEvent?.id?.let(::legacyIdFromGid)
         ?: return@flatMap Failure(ShopifyError.GraphqlError("fulfillment event missing in response"))
-
 
       Success(ShopifyFulfillmentEventId(id))
     }
@@ -140,7 +140,7 @@ class HttpShopifyGraphqlService(
 
   override suspend fun webhookSubscriptions(
     topics: List<WebhookSubscriptionTopic>,
-    callbackUrl: String,
+    callbackUrl: String?,
   ): ShopifyResult<List<WebhookSubscriptionStatus>> =
     execute(GetWebhookSubscriptions(GetWebhookSubscriptions.Variables(topics, callbackUrl))).map { data ->
       data.webhookSubscriptions.nodes.map { WebhookSubscriptionStatus(id = it.id, topic = it.topic.name, uri = it.uri) }
@@ -179,10 +179,9 @@ class HttpShopifyGraphqlService(
       throw e
     } catch (e: ResponseException) {
       val status = e.response.status.value
-      return Failure(
-        if (e.response.status == HttpStatusCode.Unauthorized) ShopifyError.TokenRejected(status)
-        else ShopifyError.HttpError(status),
-      )
+      if (e.response.status != HttpStatusCode.Unauthorized) return Failure(ShopifyError.HttpError(status))
+      onTokenRejected()
+      return Failure(ShopifyError.TokenRejected(status))
     } catch (e: Exception) {
       return Failure(ShopifyError.Network(e.message ?: "network error"))
     }

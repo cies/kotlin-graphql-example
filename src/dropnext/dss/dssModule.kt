@@ -5,6 +5,7 @@ import dropnext.dss.lib.ktor.installCallId
 import dropnext.dss.lib.ktor.installCallLogging
 import dropnext.dss.lib.ktor.installJsonContentNegotiation
 import dropnext.dss.lib.ktor.installMonolithWebhookAuth
+import dropnext.dss.lib.ktor.installRequestBodyLimit
 import dropnext.dss.lib.ktor.installRequestValidation
 import dropnext.dss.lib.ktor.installStatusPages
 import dropnext.dss.path.Paths
@@ -31,6 +32,7 @@ fun Application.dssModule(deps: DssDependencies) {
 
   installCallId()
   installCallLogging(enabled = deps.config.mode == DssMode.DEV)
+  installRequestBodyLimit()
   installStatusPages(plainTextErrorPaths = setOf(Paths.install, deps.config.oauthRedirectPath))
   installJsonContentNegotiation()
   installRequestValidation()

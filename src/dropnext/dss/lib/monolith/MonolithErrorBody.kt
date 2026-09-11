@@ -1,7 +1,6 @@
 package dropnext.dss.lib.monolith
 
 import dropnext.dss.lib.json.MonolithJson
-import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonPrimitive
@@ -38,7 +37,7 @@ fun parseMonolithErrorBody(rawBody: String): MonolithErrorBody {
   }
   return try {
     when (val root = MonolithJson.parseToJsonElement(trimmed)) {
-      is JsonObject -> parseErrorField(root["error"])
+      is JsonObject -> parseApiError(root)
       else ->
         MonolithErrorBody(
           message = trimmed.take(200),
@@ -51,22 +50,18 @@ fun parseMonolithErrorBody(rawBody: String): MonolithErrorBody {
   }
 }
 
-private fun parseErrorField(errorElement: JsonElement?): MonolithErrorBody {
-  if (errorElement == null) {
-    return MonolithErrorBody(message = null, code = null, monolithTraceId = null)
-  }
-  return when (errorElement) {
-    is JsonObject -> {
-      val code = errorElement["code"]?.jsonPrimitive?.content
-      val message = errorElement["message"]?.jsonPrimitive?.content
-      val traceId =
-        errorElement["trace_id"]?.jsonPrimitive?.content
-          ?: errorElement["traceId"]?.jsonPrimitive?.content
-      MonolithErrorBody(message = message, code = code, monolithTraceId = traceId)
-    }
-    is JsonPrimitive ->
-      MonolithErrorBody(message = errorElement.content, code = null, monolithTraceId = null)
-    else ->
-      MonolithErrorBody(message = errorElement.toString().take(200), code = null, monolithTraceId = null)
-  }
+/**
+ * The monolith's `ApiError`: `{"error": "<message>", "code": "<name>", "trace_id": "<id>"}`, with
+ * `error` the one field that is always there. Anything else under `error` is kept as the message
+ * text, so an unexpected body still shows up in the log.
+ */
+private fun parseApiError(root: JsonObject): MonolithErrorBody {
+  val errorElement = root["error"]
+    ?: return MonolithErrorBody(message = null, code = null, monolithTraceId = null)
+  val message = (errorElement as? JsonPrimitive)?.content ?: errorElement.toString().take(200)
+  return MonolithErrorBody(
+    message = message,
+    code = root["code"]?.jsonPrimitive?.content,
+    monolithTraceId = root["trace_id"]?.jsonPrimitive?.content,
+  )
 }

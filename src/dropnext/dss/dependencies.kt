@@ -11,6 +11,7 @@ import dropnext.dss.lib.monolith.HttpMonolithService
 import dropnext.dss.lib.monolith.MonolithService
 import dropnext.dss.lib.shopify.graphql.HttpShopifyGraphqlServiceFactory
 import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlServiceFactory
+import dropnext.dss.lib.shopify.oauth.HttpShopifyOAuthService
 import dropnext.dss.lib.shopify.oauth.ShopifyOAuthService
 import dropnext.dss.lib.shopify.token.InMemoryShopTokenStore
 import dropnext.dss.lib.shopify.token.ShopTokenStore
@@ -83,7 +84,7 @@ fun dssDependencies(
     tokens = shopTokens,
     apiVersion = config.apiVersion,
   ),
-  oauthClient: ShopifyOAuthService = ShopifyOAuthService(
+  oauthClient: ShopifyOAuthService = HttpShopifyOAuthService(
     httpClient = httpClient,
     clientId = config.appClientId,
     clientSecret = config.appClientSecret,
@@ -95,7 +96,7 @@ fun dssDependencies(
   config = config,
   httpClient = httpClient,
   monolithHttpClient = monolithHttpClient,
-  diagnosticsHandlers = DiagnosticsHandlers(config, shopTokens),
+  diagnosticsHandlers = DiagnosticsHandlers(config, shopTokens, shopifyGraphqlServiceFactory),
   oauthHandlers = OAuthHandlers(
     config.dssBaseUrl,
     oauthClient,

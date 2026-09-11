@@ -256,10 +256,11 @@ class ArchitectureTest {
   )
 
   /**
-   * Files allowed to import from `dropnext.graphql.generated.*`. Every Graphql operation runs
-   * inside `lib/shopify` (the `ShopifyGraphqlService` methods), which answers typed results; the
-   * files outside it that still see generated types are the translation boundaries that walk an
-   * `Order` or a `Product`. Add to this list only when introducing another one.
+   * Layers allowed to import from `dropnext.graphql.generated.*`. Every Graphql operation runs
+   * inside `lib/shopify` (the `ShopifyGraphqlService` methods), which answers typed results, and the
+   * interface itself exposes the `Order` and `Product` snapshots plus two enums; the layers that walk
+   * those snapshots are the translation boundaries and the workflows. Handlers, routing, presentation
+   * and the rest program against the interface's own types. Add to this list only for a new layer.
    */
   private val graphqlGeneratedAllowList = listOf(
     // The single place that constructs and runs Graphql operations.
@@ -268,15 +269,13 @@ class ArchitectureTest {
     "/dropnext/dss/domain/fulfillment/",
     // Map the `Order` and `Product` snapshots into the monolith contract DTOs.
     "/dropnext/dss/mapper/",
-    // Plan the mutations from an `Order` snapshot.
-    "/dropnext/dss/workflow/calculateShopifyMutations.kt",
-    "/dropnext/dss/workflow/determineShopifyMutations.kt",
-    // Names the subscription-topic enum the service takes.
-    "/dropnext/dss/workflow/registerShopifyWebhooks.kt",
+    // Compose the service's primitives, so they see what the service answers: the snapshots they plan
+    // mutations from and the enums they hand back in. A schema bump reaches them through the interface.
+    "/dropnext/dss/workflow/",
   )
 
   @Test
-  fun `forbid dropnext-graphql-generated imports outside lib_shopify and the translation boundaries`() {
+  fun `forbid dropnext-graphql-generated imports outside lib_shopify, the translation boundaries and the workflows`() {
     srcScope
       .files
       .filterNot { file -> pathContainsAllowListEntry(file.path, graphqlGeneratedAllowList) }
@@ -287,9 +286,10 @@ class ArchitectureTest {
         if (offending.isNotEmpty()) {
           println(
             "ERROR: File ${file.path} imports Graphql-generated types: $offending. " +
-              "Route Graphql calls through ShopifyGraphqlService methods so handlers/workflows stay decoupled " +
-              "from the Shopify Admin schema. If the file is a translation boundary (mapper/matcher), " +
-              "add it to graphqlGeneratedAllowList with a one-line comment justifying it."
+              "Route Graphql calls through ShopifyGraphqlService methods so handlers and the view stay decoupled " +
+              "from the Shopify Admin schema. Only lib/shopify, the translation boundaries (mapper, matcher) " +
+              "and the workflows may see generated types; a new layer needs a graphqlGeneratedAllowList entry " +
+              "with a one-line comment justifying it."
           )
         }
         offending.isNotEmpty()

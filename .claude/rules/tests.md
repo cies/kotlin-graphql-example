@@ -41,7 +41,7 @@ Everything under `test/` is either a `*Test.kt` mirroring a source file or one o
 | `FakeShopifyGraphqlServiceFactory` | `ShopifyGraphqlServiceFactory` | hands the same service to every shop; `service = null` simulates "no Admin token resolvable". |
 | `FakeMonolithHttpServer` | the monolith over HTTP | testing `HttpMonolithService` itself: `enqueue()` a canned response, assert on `requests` (method, path, query, headers, body). |
 | `FakeShopifyGraphqlServer` | Shopify Admin Graphql and the OAuth token exchange over HTTP | wire format, OAuth, and workflows end to end. Records each POST by `operationName` and serves the response registered for it. Pair with `shopifyRewritingHttpClient(port)` so production code keeps its real `*.myshopify.com` URLs. |
-| `FakeLogflareServer` | the Logflare HTTP API | testing the log shipper: set `knownSourceName`, `sourcesStatusCode`, `logsStatusCode`; `awaitBatch()` waits for a flush and `receivedEvents` holds what was shipped. |
+| `FakeLogflareServer` | the Logflare HTTP API | testing the log shipper: set `knownSourceName`, `sourcesStatusCode`, `logsStatusCode`; `awaitBatch()` waits for a flush and `receivedEvents` holds what was shipped; `logsStallMillis` holds a batch on the wire and `awaitBatchStarted()` fires when it arrives. |
 | `testConfig()` (`fixture/ConfigFixtures.kt`) | `Config.fromEnv()` | every test that needs a `Config`; override only the parameter under test. |
 | `withDssApp(deps) { client -> }` (`helper/DssApp.kt`) | the running service | any request → response test: it mounts the production `dssModule` under `testApplication`. Pass `authenticateAsMonolith = true` for the monolith-facing routes. |
 | `testHttpClient()` (`helper/testHttpClient.kt`) | an outbound client | talking to a fake server; short timeouts so a hung fake fails fast. |
@@ -62,7 +62,7 @@ Handlers, services and workflows are `suspend`; wrap the test body: ``fun `…`(
   `testApplication { application { installX() } }` (`InstallCallIdTest`, `InstallStatusPagesTest`): the test engine
   dispatches on the IO pool, so even the MDC-across-suspension case needs no socket.
 - Send JSON through `AppJson`; decode the response into the generated DTO (`SyncShipmentsWithFulfillmentsResponse`,
-  `ErrorResponse`) rather than substring-matching the body.
+  `ApiError`) rather than substring-matching the body.
 - Assert the status **and** the effect: `assert(r.status == HttpStatusCode.OK)` plus
   `assert(monolith.createOrderCalls.single().shopifyOrderId == 1001L)`.
 - Every handler test covers, besides the happy path, the unauthenticated request (`401`) and the "no Admin token"

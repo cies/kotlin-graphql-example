@@ -10,7 +10,6 @@ import dropnext.dss.lib.monolith.logMonolithFailure
 import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlService
 import dropnext.dss.mapper.OrderLineItemOmission
 import dropnext.dss.mapper.mapOrderForMonolith
-
 import io.github.oshai.kotlinlogging.KotlinLogging
 
 
@@ -18,19 +17,19 @@ private val log = KotlinLogging.logger {}
 
 /**
  * Loads the Shopify order snapshot via [shopify] and POSTs [CreateShopifyOrderRequest] to the monolith.
- * Returns `null` when the order cannot be loaded or has no variant-backed lines:
- * a webhook is answered `200` either way, so the caller only needs the log.
+ * An order with no variant-backed lines is [WebhookMirrorOutcome.Skipped]; the caller decides from the
+ * outcome whether Shopify should redeliver.
  */
 suspend fun syncShopifyOrderToMonolith(
   shopify: ShopifyGraphqlService,
   monolith: MonolithService,
   orderGid: String,
   webhookTopic: String,
-): MonolithResult<CreateOrderOutcome>? {
+): WebhookMirrorOutcome {
   val order = when (val loaded = shopify.orderForDss(orderGid)) {
     is Failure -> {
       log.error { "Webhook $webhookTopic: could not load order orderGid=$orderGid error=${loaded.reason.message}" }
-      return null
+      return WebhookMirrorOutcome.ShopifyFailed(loaded.reason)
     }
     is Success -> loaded.value
   }
@@ -44,14 +43,16 @@ suspend fun syncShopifyOrderToMonolith(
     if (omitted.reason == OrderLineItemOmission.NO_VARIANT) log.info { line } else log.warn { line }
   }
   if (req.lineItems.isEmpty()) {
-
     log.warn {
       "Webhook $webhookTopic: skip monolith order sync — mapped line_items empty " +
         "(no variant-backed lines or no fulfillment_order_id — e.g. tips/custom-only order)"
     }
-    return null
+    return WebhookMirrorOutcome.Skipped(WebhookSkipReason.NO_MAPPABLE_LINES)
   }
-  return postMappedOrderToMonolith(monolith, req, webhookTopic)
+  return when (val posted = postMappedOrderToMonolith(monolith, req, webhookTopic)) {
+    is Success -> WebhookMirrorOutcome.Mirrored
+    is Failure -> WebhookMirrorOutcome.MonolithFailed(posted.reason)
+  }
 }
 
 /** POSTs a mapped order and logs success/failure (testable without Shopify Graphql). */

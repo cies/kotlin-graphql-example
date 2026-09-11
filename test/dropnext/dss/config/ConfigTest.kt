@@ -147,9 +147,20 @@ class ConfigTest {
   fun `a plain-http monolith url is rejected unless explicitly allowed`() {
     val insecure = requiredEnv() + ("MONOLITH_BASE_URL" to "http://localhost:8080")
     assert(runCatching { Config.from(insecure) }.exceptionOrNull() is IllegalStateException)
-    val allowed = Config.from(insecure + ("DSS_ALLOW_INSECURE_MONOLITH" to "true"))
+    val allowed = Config.from(insecure + ("DSS_ALLOW_INSECURE_MONOLITH" to "true") + ("DSS_MODE" to "DEV"))
     assert(allowed.monolithBaseUrl == "http://localhost:8080")
     assert(allowed.allowInsecureMonolithUrl)
+  }
+
+  /** The flag is a local-development escape hatch; `PROD` is the default, so a deployment that sets it by mistake does not boot. */
+  @Test
+  fun `the insecure-monolith flag is refused unless the mode is DEV`() {
+    val flagged = requiredEnv() + ("DSS_ALLOW_INSECURE_MONOLITH" to "true")
+    val failure = runCatching { Config.from(flagged) }.exceptionOrNull()
+    assert(failure is IllegalStateException)
+    assert("DSS_ALLOW_INSECURE_MONOLITH" in failure!!.message.orEmpty())
+    assert(runCatching { Config.from(flagged + ("DSS_MODE" to "PROD")) }.exceptionOrNull() is IllegalStateException)
+    assert(Config.from(flagged + ("DSS_MODE" to "DEV")).allowInsecureMonolithUrl)
   }
 
   // ---------- PORT ----------

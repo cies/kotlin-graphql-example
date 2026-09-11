@@ -117,21 +117,21 @@ fun mapOrderForMonolith(
 
 
 /**
- * Uses Shopify's order total when it parses to a positive amount; otherwise derives the total
- * from line-item unit prices × quantities (same fallback as the previous minor-units contract).
+ * Shopify's order total, as it sent it. A zero is a real total (a fully discounted or comped order)
+ * and is kept: the fallback that once replaced it with the undiscounted line sum reported money that
+ * was never paid. Only an absent, unparseable or negative amount, which Shopify does not send, falls
+ * back to the line-item unit prices × quantities so the required field is never empty.
  */
 internal fun resolveOrderTotalAsString(
   orderTotalAmount: String?,
   lineItems: List<OrderLineItem>,
   currencyCode: String,
 ): String {
-  val normalizedOrderTotal = shopifyMoneyAmountForWire(orderTotalAmount)
+  val orderTotal = orderTotalAmount?.trim()?.toBigDecimalOrNull()?.takeIf { it.signum() >= 0 }
+  if (orderTotal != null) return orderTotal.toPlainString()
   val fractionDigits = currencyFractionDigits(currencyCode)
   if (fractionDigits == null) {
-    return normalizedOrderTotal
-  }
-  if (shopifyAmountToMinorUnits(normalizedOrderTotal, currencyCode) > 0L) {
-    return normalizedOrderTotal
+    return shopifyMoneyAmountForWire(orderTotalAmount)
   }
   val lineSumMinor = lineItems.sumOf { item ->
     shopifyAmountToMinorUnits(item.snapshotOfPriceAsString, currencyCode) * item.quantity.toLong()

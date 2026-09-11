@@ -74,7 +74,9 @@ suspend fun persistTokenToMonolith(
 ): MonolithPersistOutcome {
   val request = UpdateStoreApiKeyRequest(
     shopifySubdomain = shop.subdomainOnly,
-    shopifyShopId = shopId?.value ?: 0L,
+    // Null when the identity lookup failed: the monolith keeps the id it has. Zero used to stand in for
+    // this and locked a fresh store to shop id zero, so every later, real install of it was a mismatch.
+    shopifyShopId = shopId?.value,
     apiKey = token.value,
   )
   return when (val result = monolith.putStoreApiKey(request)) {
@@ -87,6 +89,7 @@ suspend fun persistTokenToMonolith(
       logMonolithFailure("putStoreApiKey", result.reason, "shop=${shop.normalizedShopifyHost}")
       when (val error = result.reason) {
         is MonolithError.Rejected -> MonolithPersistOutcome.Failed(httpStatus = error.status, detail = error.body.message)
+        is MonolithError.Undecodable -> MonolithPersistOutcome.Failed(httpStatus = error.status, detail = error.message)
         is MonolithError.Transport -> MonolithPersistOutcome.Failed(httpStatus = null, detail = error.message)
       }
     }

@@ -8,6 +8,7 @@ import java.net.http.HttpResponse.BodyHandlers
 import java.time.Duration as JavaDuration
 import java.util.concurrent.Executors
 import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -73,6 +74,9 @@ class LogflareBatchSender(
   private val droppedSinceLastReport = AtomicLong()
 
   private var scheduledFlushExecutor: ScheduledExecutorService? = null
+
+  /** Set while a requested flush waits on the executor, so a burst of appends submits one task, not one per line. */
+  private val flushRequested = AtomicBoolean(false)
 
   var sourceToken: String = ""
     private set
@@ -155,9 +159,28 @@ class LogflareBatchSender(
     droppedSinceLastReport.incrementAndGet()
   }
 
-  /** Asks for an out-of-band flush; a no-op before [start]. */
-  fun requestFlush() {
-    scheduledFlushExecutor?.submit(::flush)
+  /**
+   * Asks for an out-of-band flush; answers whether this call submitted one. A no-op before [start],
+   * after [close], and while a requested flush is still waiting to run: the appender asks on every
+   * event above the batch size, and without the gate each ask was a task on the executor's unbounded
+   * queue while each flush could block on Logflare for five seconds, so a slow Logflare grew that
+   * queue by one task per log line.
+   */
+  fun requestFlush(): Boolean {
+    val executor = scheduledFlushExecutor ?: return false
+    if (!flushRequested.compareAndSet(false, true)) return false
+    try {
+      executor.submit {
+        // Cleared as the task starts, not as it ends: events that arrive while this flush is on the
+        // wire may queue exactly one more, which is what keeps a burst draining back to back.
+        flushRequested.set(false)
+        flush()
+      }
+    } catch (_: RejectedExecutionException) {
+      flushRequested.set(false) // `close` shut the executor down between the null check and the submit.
+      return false
+    }
+    return true
   }
 
   @Synchronized

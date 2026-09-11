@@ -1,6 +1,6 @@
 package dropnext.dss.lib.shopify.webhook
 
-import dropnext.dss.domain.ShopifyVariantId
+import dropnext.dss.domain.ShopifyProductId
 import kotlin.test.Test
 
 
@@ -28,16 +28,21 @@ class GraphqlResourceIdFromShopifyWebhookTest {
     assert(graphqlResourceIdFromShopifyWebhook("customers/create", """{"id":4004}""") == null)
   }
 
+  /** Shopify's `products/delete` body is the id and nothing else. */
   @Test
-  fun `variantIdsFromProductWebhook extracts variant ids`() {
-    val ids = variantIdsFromProductWebhook(
-      """{"id":1,"variants":[{"id":101},{"id":102},{"id":103}]}""",
-    )
-    assert(ids == listOf(101L, 102L, 103L).map(::ShopifyVariantId))
+  fun `productIdFromProductWebhook reads the product id from an id-only body`() {
+    assert(productIdFromProductWebhook("""{"id":788032119674292922}""") == ShopifyProductId(788032119674292922L))
   }
 
   @Test
-  fun `variantIdsFromProductWebhook returns empty list when variants missing`() {
-    assert(variantIdsFromProductWebhook("""{"id":1}""") == emptyList<ShopifyVariantId>())
+  fun `productIdFromProductWebhook reads a quoted id too`() {
+    assert(productIdFromProductWebhook("""{"id":"503"}""") == ShopifyProductId(503L))
+  }
+
+  @Test
+  fun `productIdFromProductWebhook returns null without a numeric id`() {
+    assert(productIdFromProductWebhook("""{"variants":[{"id":101}]}""") == null)
+    assert(productIdFromProductWebhook("""{"id":"gid://shopify/Product/503"}""") == null)
+    assert(productIdFromProductWebhook("not json") == null)
   }
 }

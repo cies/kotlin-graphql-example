@@ -53,7 +53,11 @@ class LogflareAppender : UnsynchronizedAppenderBase<ILoggingEvent>() {
       maxBatchSize = maxBatchSize,
       maxQueuedEvents = maxQueuedEvents,
       flushInterval = flushInterval,
-      reportError = ::addError,
+      // Not `addError`: Logback's status manager only reaches registered listeners and `logback.xml`
+      // registers none, so a dropped batch or a refused flush would be recorded nowhere. Standard
+      // error is what the console appender shares and what the container captures. Never SLF4J:
+      // the appender would be shipping its own complaints.
+      reportError = ::reportToStandardError,
     )
     this.sender = sender
     // The source-token handshake happens on the flush thread: attaching the appender must not put
@@ -77,6 +81,10 @@ class LogflareAppender : UnsynchronizedAppenderBase<ILoggingEvent>() {
     sender = null
     super.stop()
   }
+}
+
+private fun reportToStandardError(message: String) {
+  System.err.println("[logflare] $message")
 }
 
 /** One logging event as the Logflare batch API wants it: a message, a timestamp and a metadata bag. */

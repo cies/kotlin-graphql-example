@@ -1,6 +1,7 @@
 package dropnext.dss.lib.ktor
 
-import dropnext.dss.contract.ErrorResponse
+import dropnext.dss.contract.ApiError
+import dropnext.dss.lib.logging.currentTraceId
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.respond
@@ -13,7 +14,7 @@ import io.ktor.server.response.respondText
  * status and body — no scattered `respond(BadRequest, …)` calls.
  *
  * JSON endpoints (the OpenAPI DSS contract, served by `MonolithWebhookHandlers`) use [respondError],
- * which emits an [ErrorResponse]. The HTML OAuth flow uses [respondTextError] so error pages stay
+ * which emits an [ApiError]. The HTML OAuth flow uses [respondTextError] so error pages stay
  * plain text. The request's trace id travels in the `X-Trace-Id` response header on both.
  */
 sealed interface DssError {
@@ -56,6 +57,11 @@ sealed interface DssError {
   /** 404 — a referenced resource (order, fulfillment, …) does not exist. */
   data class NotFound(override val message: String) : DssError
 
+  /** 413 — the body exceeds `MAX_REQUEST_BODY_BYTES`; the read was aborted before it was buffered. */
+  data object PayloadTooLarge : DssError {
+    override val message: String = "request body too large"
+  }
+
   /** 502 — upstream call (Shopify Admin, monolith) failed, and the request cannot continue. */
   data class UpstreamFailure(override val message: String) : DssError
 
@@ -80,14 +86,20 @@ fun DssError.toHttpStatus(): HttpStatusCode = when (this) {
 
   is DssError.NotFound -> HttpStatusCode.NotFound
 
+  is DssError.PayloadTooLarge -> HttpStatusCode.PayloadTooLarge
+
   is DssError.UpstreamFailure -> HttpStatusCode.BadGateway
 
   is DssError.Internal -> HttpStatusCode.InternalServerError
 }
 
-/** JSON-error responder for the OpenAPI DSS contract. Body is [ErrorResponse] with `error: <message>`. */
+/**
+ * JSON-error responder for the OpenAPI DSS contract: the monolith's [ApiError] shape, so a client
+ * of either service reads one error body. The trace id is ours, from the MDC, so the monolith can
+ * quote it back when it logs a refused call; there is no error code vocabulary on this side yet.
+ */
 suspend fun ApplicationCall.respondError(e: DssError) {
-  respond(e.toHttpStatus(), ErrorResponse(error = e.message))
+  respond(e.toHttpStatus(), ApiError(error = e.message, traceId = currentTraceId()))
 }
 
 /** Plain-text error responder, used by OAuth/install routes that render HTML on success. */

@@ -12,6 +12,7 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import io.ktor.util.toMap
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.runBlocking
 
@@ -53,7 +54,7 @@ class FakeMonolithHttpServer : RecordingFake {
                 body = raw,
               )
             requests.add(recorded)
-            val response = nextResponse ?: defaultResponse
+            val response = cannedResponses.poll() ?: defaultResponse
             call.respondText(response.body, response.contentType, response.status)
           }
         }
@@ -63,8 +64,9 @@ class FakeMonolithHttpServer : RecordingFake {
   // Written by the server's own request thread, read by the test thread.
   val requests: MutableList<RecordedRequest> = CopyOnWriteArrayList()
 
-  @Volatile
-  var nextResponse: CannedResponse? = null
+  // Filled by the test thread, drained by the request thread: one canned answer per request, in
+  // order, so a retry test can script "a 503, then a 200"; after the queue runs dry, [defaultResponse].
+  private val cannedResponses = ConcurrentLinkedQueue<CannedResponse>()
 
   var defaultResponse: CannedResponse =
     CannedResponse(HttpStatusCode.OK, "{}")
@@ -80,11 +82,12 @@ class FakeMonolithHttpServer : RecordingFake {
 
   override fun clear() {
     requests.clear()
-    nextResponse = null
+    cannedResponses.clear()
     defaultResponse = CannedResponse(HttpStatusCode.OK, "{}")
   }
 
+  /** Scripts the answer to the next unanswered request; call it once per expected request. */
   fun enqueue(status: HttpStatusCode, body: String) {
-    nextResponse = CannedResponse(status, body)
+    cannedResponses.add(CannedResponse(status, body))
   }
 }

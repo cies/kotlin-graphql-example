@@ -1,8 +1,14 @@
 # Spec: Fulfillment order ↔ shipment mapping
 
-Status: approved
+Status: approved, superseded in part (see below)
 Author: Alex (with Claude)
 Date: 2026-07-03
+
+> **2026-09-11.** The cancel-and-recreate half of this spec was removed from the code on 2026-08-31 (commit
+> `d2f24d7`); the fulfillment-order matching half is what runs. `specs/shipment-sync-by-tracking-number/` decides
+> what comes back: `000-analysis-cancel-and-recreate.md` (why cancel-all broke incremental shipments),
+> `020-cancel-replaced-fulfillments.md` (a cancel for the replaced tracking numbers only, which is what reintroduces
+> a cancel-then-create path) and `040-rewrite-the-fulfillment-docs.md` (which retires this spec's design notes).
 
 
 ## Related specs and docs

@@ -4,13 +4,16 @@ import java.io.IOException
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 
 /**
  * An upstream whose first [failFirstConnections] TCP connections are accepted and then reset without
- * an answer, after which it serves [body] normally.
+ * an answer, after which it serves [body] normally. With [stallFirstConnections] instead, the first
+ * connections are accepted and then left open without a reply until the server closes, which is what
+ * a hung upstream looks like to a client with a request timeout.
  *
  * A raw socket rather than a Ktor server because the failure under test happens below HTTP: this is
  * what a dropped connection or a restarting upstream looks like to the client. It also replaces the
@@ -20,11 +23,13 @@ import java.util.concurrent.atomic.AtomicInteger
 class FakeFlakyServer(
   private val failFirstConnections: Int = Int.MAX_VALUE,
   private val body: String = "{}",
+  private val stallFirstConnections: Int = 0,
 ) : AutoCloseable {
 
   private val serverSocket = ServerSocket(0, 64, InetAddress.getLoopbackAddress())
   private val connections = AtomicInteger(0)
   private val accepting = AtomicBoolean(true)
+  private val stalled = CopyOnWriteArrayList<Socket>()
 
   private val acceptThread = Thread(::acceptLoop, "fake-flaky-server").apply {
     isDaemon = true
@@ -43,12 +48,15 @@ class FakeFlakyServer(
       } catch (_: IOException) {
         return // Closed while we were waiting, which is how this server stops.
       }
-      if (connections.incrementAndGet() <= failFirstConnections) {
-        // A zero linger makes close() send RST, so the client sees a reset rather than a clean EOF.
-        runCatching { socket.setSoLinger(true, 0) }
-        runCatching { socket.close() }
-      } else {
-        runCatching { socket.use(::serve) }
+      val connection = connections.incrementAndGet()
+      when {
+        connection <= stallFirstConnections -> stalled.add(socket) // Held open, never answered.
+        connection <= failFirstConnections -> {
+          // A zero linger makes close() send RST, so the client sees a reset rather than a clean EOF.
+          runCatching { socket.setSoLinger(true, 0) }
+          runCatching { socket.close() }
+        }
+        else -> runCatching { socket.use(::serve) }
       }
     }
   }
@@ -81,6 +89,7 @@ class FakeFlakyServer(
   override fun close() {
     accepting.set(false)
     runCatching { serverSocket.close() }
+    stalled.forEach { runCatching { it.close() } }
     acceptThread.interrupt()
   }
 }

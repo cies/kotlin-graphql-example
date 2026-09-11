@@ -21,7 +21,7 @@ class LogMonolithFailureTest {
 
   @Test
   fun `a 5xx is an error line carrying the monolith's trace id and the extra context`() {
-    val error = rejected(500, """{"error":{"code":"InternalError","message":"db down","trace_id":"mt-1"}}""")
+    val error = rejected(500, """{"error":"db down","code":"InternalError","trace_id":"mt-1"}""")
 
     val lines = capturingLogs { logMonolithFailure("postCreateOrder", error, "shopifyOrderId=1001") }
 
@@ -52,6 +52,19 @@ class LogMonolithFailureTest {
     assert(line.startsWith("ERROR"))
     assert("Monolith getStore failed: no response (connection refused)" in line)
     assert("subdomain=acme" in line)
+  }
+
+  @Test
+  fun `an unreadable success is an error naming the operation and the decoder's complaint`() {
+    val error = MonolithError.Undecodable(200, "Expected start of the object '{', but had '<' instead")
+
+    val lines = capturingLogs { logMonolithFailure("putStoreApiKey", error, "shop=acme.myshopify.com") }
+
+    val line = lines.single()
+    assert(line.startsWith("ERROR"))
+    assert("Monolith putStoreApiKey failed: status=200 undecodable body" in line)
+    assert("Expected start of the object" in line)
+    assert("shop=acme.myshopify.com" in line)
   }
 
   @Test

@@ -1,7 +1,7 @@
 package dropnext.dss.workflow
 
 import dropnext.dss.domain.ShopDomain
-import dropnext.dss.domain.ShopifyVariantId
+import dropnext.dss.domain.ShopifyProductId
 import dropnext.dss.testutil.fake.FakeMonolithService
 import dropnext.dss.testutil.helper.GLOBAL_LOG_REGISTRY
 import dropnext.dss.testutil.helper.capturingLogs
@@ -11,29 +11,20 @@ import org.junit.jupiter.api.parallel.ResourceLock
 
 
 private val acmeShop = ShopDomain.parse("acme.myshopify.com")!!
+private val deletedProduct = ShopifyProductId(503L)
 
 
 class DeleteShopifyProductFromMonolithTest {
 
   @Test
-  fun `soft-deletes the variant ids under the shop's subdomain`() = runBlocking {
+  fun `asks the monolith to soft-delete the product's variants under the shop's subdomain`() = runBlocking {
     val monolith = FakeMonolithService()
 
-    deleteShopifyProductFromMonolith(monolith, acmeShop, listOf(ShopifyVariantId(701L), ShopifyVariantId(702L)))
+    deleteShopifyProductFromMonolith(monolith, acmeShop, deletedProduct)
 
     val request = monolith.deleteProductVariantsCalls.single()
     assert(request.shopifySubdomain == "acme")
-    assert(request.productVariantIds == listOf(701L, 702L))
-  }
-
-  /** A `products/delete` body without variants is a product that had none; there is nothing to tell the monolith. */
-  @Test
-  fun `no variant ids means no monolith call`() = runBlocking {
-    val monolith = FakeMonolithService()
-
-    deleteShopifyProductFromMonolith(monolith, acmeShop, emptyList())
-
-    assert(monolith.deleteProductVariantsCalls.isEmpty())
+    assert(request.productId == 503L)
   }
 
   @Test
@@ -42,7 +33,7 @@ class DeleteShopifyProductFromMonolithTest {
     val monolith = FakeMonolithService().apply { deleteProductVariantsStatus = 404 }
 
     val lines = capturingLogs {
-      runBlocking { deleteShopifyProductFromMonolith(monolith, acmeShop, listOf(ShopifyVariantId(701L))) }
+      runBlocking { deleteShopifyProductFromMonolith(monolith, acmeShop, deletedProduct) }
     }
 
     assert(monolith.deleteProductVariantsCalls.size == 1)
@@ -50,6 +41,7 @@ class DeleteShopifyProductFromMonolithTest {
     // A 4xx is what we sent being refused: a warning, where a 5xx would be an error.
     assert(line.startsWith("WARN"))
     assert("status=404" in line)
+    assert("productId=503" in line)
     assert("monolith_trace_id=fake-delete" in line)
   }
 }

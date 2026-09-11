@@ -26,7 +26,7 @@ ktorVersion = "3.4.1"
 kotlinGraphqlVersion = "9.0.0"
 
 # Latest, see: https://github.com/OpenAPITools/openapi-generator/releases
-openapiGeneratorVersion = "7.6.0"
+openapiGeneratorVersion = "7.25.0"
 
 # Latest, see: https://mvnrepository.com/artifact/ch.qos.logback/logback-classic
 logbackVersion = "1.5.32"
@@ -73,6 +73,7 @@ ktorServerCallLogging = { group = "io.ktor", name = "ktor-server-call-logging", 
 ktorServerAuth = { group = "io.ktor", name = "ktor-server-auth", version.ref = "ktorVersion" }
 ktorServerCallId = { group = "io.ktor", name = "ktor-server-call-id", version.ref = "ktorVersion" }
 ktorServerRequestValidation = { group = "io.ktor", name = "ktor-server-request-validation", version.ref = "ktorVersion" }
+ktorServerBodyLimit = { group = "io.ktor", name = "ktor-server-body-limit", version.ref = "ktorVersion" }
 ktorClientCallId = { group = "io.ktor", name = "ktor-client-call-id", version.ref = "ktorVersion" }
 
 # HTML rendering (compile-time-generated builder DSL; no reflection).

@@ -66,7 +66,7 @@ class OAuthHandlers(
       is Success -> exchanged.value
       is Failure -> {
         log.warn { "OAuth code exchange failed for shop=${shop.normalizedShopifyHost}: ${exchanged.reason.message}" }
-        return call.respondTextError(DssError.UpstreamFailure("OAuth failed: could not exchange authorization code"))
+        return call.respondTextError(exchanged.reason.toDssError())
       }
     }
 

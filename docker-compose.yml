@@ -33,6 +33,7 @@ services:
       MONOLITH_API_PREFIX: ${MONOLITH_API_PREFIX:-}
       MONOLITH_API_KEY: ${MONOLITH_API_KEY:-}
       DSS_ALLOW_INSECURE_MONOLITH: "true"
+      DSS_MODE: ${DSS_MODE:-DEV} # The insecure flag above is refused in PROD.
     ports:
       - "${PORT:-8080}:${PORT:-8080}"
     restart: unless-stopped

@@ -10,6 +10,9 @@ import dropnext.dss.testutil.helper.base64HmacSha256
 import dropnext.dss.testutil.helper.shopifyRewritingHttpClient
 import dropnext.dss.testutil.helper.withDssApp
 import dropnext.graphql.generated.GetOrderForDss
+import dropnext.graphql.generated.GetWebhookSubscriptions
+import dropnext.graphql.generated.getwebhooksubscriptions.WebhookSubscriptionConnection
+import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -30,38 +33,62 @@ private const val APP_SECRET = "shpss_app_secret"
 class DependenciesTest {
 
   @Test
-  fun `a token seeded from the configuration answers the readiness check without asking the monolith`() {
-    val monolith = FakeMonolithService().apply { getStoreReturnsNotFound = true }
-    val deps = dssDependencies(
-      config = testConfig(shopAccessTokens = mapOf(acmeShop to ShopifyAdminToken("shpat_seeded"))),
-      monolithService = monolith,
-    )
-    withDssApp(deps) { client ->
-      val r = client.get("${Paths.apiCheck}?shop=acme.myshopify.com")
-      assert(r.status == HttpStatusCode.OK)
-      assert(monolith.getStoreCalls.isEmpty())
+  fun `a token seeded from the configuration answers the readiness check without asking the monolith`() =
+    withFakeShopify { rewritingClient ->
+      val monolith = FakeMonolithService().apply { getStoreReturnsNotFound = true }
+      val deps = dssDependencies(
+        config = testConfig(shopAccessTokens = mapOf(acmeShop to ShopifyAdminToken("shpat_seeded"))),
+        httpClient = rewritingClient,
+        monolithService = monolith,
+      )
+      withDssApp(deps, authenticateAsMonolith = true) { client ->
+        val r = client.get("${Paths.apiCheck}?shop=acme.myshopify.com")
+        assert(r.status == HttpStatusCode.OK)
+        assert(monolith.getStoreCalls.isEmpty())
+      }
     }
-  }
 
   @Test
-  fun `a shop the configuration does not know is looked up on the monolith once and then remembered`() {
-    val monolith = FakeMonolithService().apply { getStoreToken = ShopifyAdminToken("shpat_from_monolith") }
-    val deps = dssDependencies(config = testConfig(), monolithService = monolith)
-    withDssApp(deps) { client ->
-      assert(client.get("${Paths.apiCheck}?shop=acme.myshopify.com").status == HttpStatusCode.OK)
-      assert(client.get("${Paths.apiCheck}?shop=acme.myshopify.com").status == HttpStatusCode.OK)
-      assert(monolith.getStoreCalls == listOf("acme"))
+  fun `a shop the configuration does not know is looked up on the monolith once and then remembered`() =
+    withFakeShopify { rewritingClient ->
+      val monolith = FakeMonolithService().apply { getStoreToken = ShopifyAdminToken("shpat_from_monolith") }
+      val deps = dssDependencies(config = testConfig(), httpClient = rewritingClient, monolithService = monolith)
+      withDssApp(deps, authenticateAsMonolith = true) { client ->
+        assert(client.get("${Paths.apiCheck}?shop=acme.myshopify.com").status == HttpStatusCode.OK)
+        assert(client.get("${Paths.apiCheck}?shop=acme.myshopify.com").status == HttpStatusCode.OK)
+        assert(monolith.getStoreCalls == listOf("acme"))
+      }
     }
-  }
 
   @Test
-  fun `a shop neither the configuration nor the monolith knows has no token`() {
-    val monolith = FakeMonolithService().apply { getStoreReturnsNotFound = true }
-    val deps = dssDependencies(config = testConfig(), monolithService = monolith)
-    withDssApp(deps) { client ->
-      val r = client.get("${Paths.apiCheck}?shop=acme.myshopify.com")
-      assert(r.status == HttpStatusCode.Unauthorized)
-      assert(monolith.getStoreCalls == listOf("acme"))
+  fun `a shop neither the configuration nor the monolith knows has no token`() =
+    withFakeShopify { rewritingClient ->
+      val monolith = FakeMonolithService().apply { getStoreReturnsNotFound = true }
+      val deps = dssDependencies(config = testConfig(), httpClient = rewritingClient, monolithService = monolith)
+      withDssApp(deps, authenticateAsMonolith = true) { client ->
+        val r = client.get("${Paths.apiCheck}?shop=acme.myshopify.com")
+        assert(r.status == HttpStatusCode.Unauthorized)
+        assert(monolith.getStoreCalls == listOf("acme"))
+      }
+    }
+
+  /**
+   * The readiness check scans the shop's webhook subscriptions through the production factory, so
+   * the graph under test points at a fake Shopify that answers the scan with nothing subscribed.
+   */
+  private fun withFakeShopify(block: (HttpClient) -> Unit) {
+    val shopifyServer = FakeShopifyGraphqlServer()
+    val rewritingClient = shopifyRewritingHttpClient(shopifyServer.start())
+    try {
+      shopifyServer.stubData(
+        "GetWebhookSubscriptions",
+        GetWebhookSubscriptions.Result(webhookSubscriptions = WebhookSubscriptionConnection(nodes = emptyList())),
+        GetWebhookSubscriptions.Result.serializer(),
+      )
+      block(rewritingClient)
+    } finally {
+      // The application closes the client it was given when it stops; the server is ours to stop.
+      shopifyServer.stop()
     }
   }
 

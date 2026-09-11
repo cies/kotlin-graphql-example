@@ -5,11 +5,15 @@ import ch.qos.logback.classic.LoggerContext
 import dropnext.dss.domain.LogflareApiKey
 import dropnext.dss.lib.logging.TRACE_ID_MDC_KEY
 import dropnext.dss.testutil.fake.FakeLogflareServer
+import dropnext.dss.testutil.helper.GLOBAL_LOG_REGISTRY
+import java.io.ByteArrayOutputStream
+import java.io.PrintStream
 import kotlin.test.Test
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.junit.jupiter.api.parallel.ResourceLock
 import org.slf4j.LoggerFactory
 import org.slf4j.MDC
 
@@ -84,6 +88,38 @@ class LogflareAppenderTest {
       assert("IllegalStateException" in error)
       assert("boom" in error)
     }
+  }
+
+  /**
+   * The shipper's own complaints cannot go through the logger it ships for, and Logback's status
+   * manager has no listener, so they go to standard error, which the container captures.
+   */
+  @Test
+  @ResourceLock(GLOBAL_LOG_REGISTRY)
+  fun `a refused batch is reported on standard error`() {
+    FakeLogflareServer().use { server ->
+      server.knownSourceName = "dss-test"
+      server.logsStatusCode = 400
+      val captured = ByteArrayOutputStream()
+      val originalErr = System.err
+      System.setErr(PrintStream(captured, true))
+      try {
+        shippedBy(server) { logger -> logger.info("about to be refused") }
+        assert(awaitUntil { "[logflare] Logflare flush failed: 400" in captured.toString() })
+      } finally {
+        System.setErr(originalErr)
+      }
+    }
+  }
+
+  /** The report lands on the flush thread a moment after the fake answered, so the assertion polls briefly. */
+  private fun awaitUntil(timeoutMillis: Long = 2_000, condition: () -> Boolean): Boolean {
+    val deadline = System.currentTimeMillis() + timeoutMillis
+    while (System.currentTimeMillis() < deadline) {
+      if (condition()) return true
+      Thread.sleep(20)
+    }
+    return condition()
   }
 
   @Test

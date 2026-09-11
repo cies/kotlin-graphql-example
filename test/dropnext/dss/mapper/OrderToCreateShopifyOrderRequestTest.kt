@@ -220,8 +220,9 @@ class OrderToCreateShopifyOrderRequestTest {
     )
   }
 
+  /** A fully discounted order really costs nothing; the undiscounted line sum would report money never paid. */
   @Test
-  fun `resolveOrderTotalAsString falls back to line sum when order total is zero`() {
+  fun `resolveOrderTotalAsString keeps a zero order total`() {
     val lineItems = listOf(
       OrderLineItem(
         shopifyLineItemId = 1L,
@@ -233,11 +234,11 @@ class OrderToCreateShopifyOrderRequestTest {
         snapshotOfPriceAsString = "19.99",
       ),
     )
-    assert(resolveOrderTotalAsString(orderTotalAmount = "0.00", lineItems = lineItems, currencyCode = "USD") == "39.98")
+    assert(resolveOrderTotalAsString(orderTotalAmount = "0.00", lineItems = lineItems, currencyCode = "USD") == "0.00")
   }
 
   @Test
-  fun `falls back to lineItems sum when totalPriceSet is non-positive`() {
+  fun `keeps a zero totalPriceSet instead of summing the undiscounted lines`() {
     val order = minimalOrder().copy(
       totalPriceSet = dropnext.graphql.generated.getorderfordss.MoneyBag(
         shopMoney = dropnext.graphql.generated.getorderfordss.MoneyV2(
@@ -247,10 +248,24 @@ class OrderToCreateShopifyOrderRequestTest {
       ),
     )
     val req = orderToCreateShopifyOrderRequest("dropnext-staging", order)
-    val lineSumMinor = req.lineItems.sumOf {
-      shopifyAmountToMinorUnits(it.snapshotOfPriceAsString, "USD") * it.quantity.toLong()
-    }
-    assert(req.totalAsString == minorUnitsToShopifyAmount(lineSumMinor, "USD"))
+    assert(req.totalAsString == "0.00")
+    assert(req.lineItems.isNotEmpty())
+  }
+
+  @Test
+  fun `resolveOrderTotalAsString falls back to the line sum for a negative amount`() {
+    val lineItems = listOf(
+      OrderLineItem(
+        shopifyLineItemId = 1L,
+        productVariantId = 1L,
+        quantity = 2,
+        fulfillmentOrderId = 1L,
+        snapshotOfVariantTitle = "Item",
+        snapshotOfProductTitle = "Product",
+        snapshotOfPriceAsString = "19.99",
+      ),
+    )
+    assert(resolveOrderTotalAsString(orderTotalAmount = "-1.00", lineItems = lineItems, currencyCode = "USD") == "39.98")
   }
 
   @Test

@@ -44,7 +44,9 @@ For each spec file follow these steps:
 1. Clear the context *only* if more than 60%.
 2. **Red**: Write failing tests FIRST for any change touching handlers, Graphql operations, mappers, or workflows.
 Follow the existing test flavours, cheapest first (pure unit → fake-backed → wire-level; see `.claude/rules/tests.md`).
-Each new source file gets a corresponding test file mirroring the `src/` → `test/` structure (`ArchitectureTest` enforces the mirror).
+Each new source file gets a corresponding test file mirroring the `src/` → `test/` structure. Nothing enforces that
+direction: `TestSuiteArchitectureTest` only checks that every test file has a source counterpart, so a source file
+without a test is caught by review, not by the build.
 3. **Green**: Write the minimal implementation to make each test pass.
 4. **Refactor**: Improve clarity and remove duplication while tests stay green.
 5. Write a small summary of your changes, learnings, and points may require attention of the human developer as an "implementation appendix" to the spec file.

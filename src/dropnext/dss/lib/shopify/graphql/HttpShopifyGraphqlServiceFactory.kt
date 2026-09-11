@@ -25,7 +25,14 @@ class HttpShopifyGraphqlServiceFactory(
 
   override suspend fun forShop(shop: ShopDomain): ShopifyGraphqlService? {
     val token = tokens.resolve(shop) ?: return null
-    return HttpShopifyGraphqlService(shop, gqlClientCache.forShop(shop, apiVersion), token)
+    return HttpShopifyGraphqlService(
+      shop = shop,
+      gqlClient = gqlClientCache.forShop(shop, apiVersion),
+      accessToken = token,
+      // A rejected token is dropped so the next request re-resolves it from the monolith, which may
+      // hold a newer one from a reinstall this instance never saw.
+      onTokenRejected = { tokens.forget(shop) },
+    )
   }
 }
 

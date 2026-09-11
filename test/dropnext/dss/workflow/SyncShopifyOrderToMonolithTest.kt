@@ -57,26 +57,27 @@ class SyncShopifyOrderToMonolithTest {
         webhookTopic = "orders/create",
       )
     }
-    assert(result == Success(CreateOrderOutcome.Created))
+    assert(result == WebhookMirrorOutcome.Mirrored)
     assert(monolith.createOrderCalls.single().shopifyOrderId == 1001L)
     assert(monolith.createOrderCalls.single().shopifySubdomain == "acme")
     assert(shopify.orderForDssCalls.single() == "gid://shopify/Order/1001")
   }
 
   @Test
-  fun `syncShopifyOrderToMonolith returns null when order not found`() {
+  fun `syncShopifyOrderToMonolith reports a Shopify failure when the order is not found`() {
     // Default orderForDssResult is NotFound → workflow short-circuits and logs.
     val monolith = FakeMonolithService()
     val shopify = FakeShopifyGraphqlService()
     val result = runBlocking {
       syncShopifyOrderToMonolith(shopify, monolith, "gid://shopify/Order/1001", "orders/create")
     }
-    assert(result == null)
+    assert(result is WebhookMirrorOutcome.ShopifyFailed)
+    assert(!result.isTransient)
     assert(monolith.createOrderCalls.isEmpty())
   }
 
   @Test
-  fun `syncShopifyOrderToMonolith returns null when Graphql call returns top-level errors`() {
+  fun `syncShopifyOrderToMonolith reports a transient Shopify failure on top-level Graphql errors`() {
     val monolith = FakeMonolithService()
     val shopify = FakeShopifyGraphqlService().apply {
       orderForDssResult = Failure(ShopifyError.GraphqlError("throttled"))
@@ -84,12 +85,13 @@ class SyncShopifyOrderToMonolithTest {
     val result = runBlocking {
       syncShopifyOrderToMonolith(shopify, monolith, "gid://shopify/Order/1001", "orders/create")
     }
-    assert(result == null)
+    assert(result == WebhookMirrorOutcome.ShopifyFailed(ShopifyError.GraphqlError("throttled")))
+    assert(result.isTransient)
     assert(monolith.createOrderCalls.isEmpty())
   }
 
   @Test
-  fun `syncShopifyOrderToMonolith returns null when no mapped line items remain`() {
+  fun `syncShopifyOrderToMonolith skips when no mapped line items remain`() {
     // Order with no fulfillment orders → mapped lineItems is empty → skip sync.
     val monolith = FakeMonolithService()
     val shopify = FakeShopifyGraphqlService().apply {
@@ -98,8 +100,23 @@ class SyncShopifyOrderToMonolithTest {
     val result = runBlocking {
       syncShopifyOrderToMonolith(shopify, monolith, "gid://shopify/Order/1001", "orders/create")
     }
-    assert(result == null)
+    assert(result is WebhookMirrorOutcome.Skipped)
     assert(monolith.createOrderCalls.isEmpty())
+  }
+
+  @Test
+  fun `a monolith 5xx is a transient failure and a 4xx is not`() {
+    val shopify = FakeShopifyGraphqlService().apply { orderForDssResult = Success(minimalOrder()) }
+    val down = FakeMonolithService().apply { createOrderStatus = 503 }
+    val refusing = FakeMonolithService().apply { createOrderStatus = 400 }
+
+    val whenDown = runBlocking { syncShopifyOrderToMonolith(shopify, down, "gid://shopify/Order/1001", "orders/create") }
+    val whenRefused = runBlocking { syncShopifyOrderToMonolith(shopify, refusing, "gid://shopify/Order/1001", "orders/create") }
+
+    assert(whenDown is WebhookMirrorOutcome.MonolithFailed)
+    assert(whenDown.isTransient)
+    assert(whenRefused is WebhookMirrorOutcome.MonolithFailed)
+    assert(!whenRefused.isTransient)
   }
 
   @Test
@@ -107,7 +124,7 @@ class SyncShopifyOrderToMonolithTest {
     val fake = FakeMonolithService().apply {
       createOrderStatus = 500
       createOrderErrorBody =
-        """{"error":{"code":"InternalError","message":"fail","trace_id":"fake123"}}"""
+        """{"error":"fail","code":"InternalError","trace_id":"fake123"}"""
     }
     val result = runBlocking {
       postMappedOrderToMonolith(fake, sampleCreateOrderRequest(), "orders/create")

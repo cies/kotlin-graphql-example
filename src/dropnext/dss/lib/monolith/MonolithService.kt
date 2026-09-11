@@ -36,9 +36,10 @@ interface MonolithService {
 typealias MonolithResult<T> = Result<T, MonolithError>
 
 /**
- * Why a monolith call produced no answer, in the one distinction a caller can act on: did the
- * monolith answer at all? A [Transport] failure is worth retrying; a [Rejected] request gets the
- * same answer next time.
+ * Why a monolith call produced no answer, in the distinctions a caller can act on: did the monolith
+ * answer at all, and could the answer be read? A [Transport] failure is worth retrying; a [Rejected]
+ * request gets the same answer next time; an [Undecodable] success is a contract drift or a proxy
+ * page, and a human has to look.
  */
 sealed interface MonolithError {
   val message: String
@@ -48,6 +49,11 @@ sealed interface MonolithError {
 
   /** The monolith answered with a non-success status; [body] carries its parsed error envelope, including its own trace id. */
   data class Rejected(val status: Int, override val message: String, val body: MonolithErrorBody) : MonolithError
+
+  /** A success status whose body is not the DTO the contract promises; [detail] is the decoder's complaint, never the body. */
+  data class Undecodable(val status: Int, val detail: String) : MonolithError {
+    override val message: String get() = "unreadable $status body: $detail"
+  }
 }
 
 enum class CreateOrderOutcome { Created, AlreadyExisted }

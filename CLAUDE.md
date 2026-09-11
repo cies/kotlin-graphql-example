@@ -133,12 +133,21 @@ credentials, so the human developer starts it — see "Operational boundary".
 4. Dispatch on `ShopifyWebhookTopic`, each case one workflow function:
    - `products/create`, `products/update`: `syncShopifyProductToMonolith` — `productById`, map with
      `toProductVariantItems`, upsert the variants on the monolith (`upsertProductVariants`).
-   - `products/delete`: `deleteShopifyProductFromMonolith` — variant ids from the body, soft-delete them on the
-     monolith (`deleteProductVariants`).
+   - `products/delete`: `deleteShopifyProductFromMonolith` — the product id from the body (the only thing the
+     body carries; the product can no longer be fetched), soft-delete its variants on the monolith
+     (`deleteProductVariants`). Needs no Admin token, so it runs even for a shop without one.
    - `orders/create`: `syncShopifyOrderToMonolith` — `orderForDss`, `orderToCreateShopifyOrderRequest`,
      `postCreateOrder` (a `409` from the monolith is `CreateOrderOutcome.AlreadyExisted`, a success).
    - `orders/updated`: acknowledged, not mirrored (the `create` already carried the order).
    - Anything else: logged and acknowledged.
+5. Every workflow answers a `WebhookMirrorOutcome`, and the handler chooses the status from it: `200` when a
+   redelivery could not go better (mirrored, nothing to mirror, no token, a token or a request that is refused),
+   `502` when Shopify or the monolith did not answer, throttled, or answered a `5xx`. Shopify redelivers a non-2xx
+   with backoff for up to two days, so that is the retry; the monolith's idempotent handling makes it safe.
+6. Every verified delivery ends in one `WebhookDeliveryReport`: the `Webhook done …` summary line (info for mirrored
+   and skipped, warn for a transient failure, error for a permanent one) with the webhook id, the delivery lag and
+   a countable `reason=` or `error=` label, and the `200` body that says the same, which Shopify stores with the
+   delivery in the Partner Dashboard.
 
 Deduplication of Shopify's at-least-once delivery is **not implemented**: the service runs as a single instance and
 relies on the monolith's idempotent handling.
@@ -155,10 +164,13 @@ decode or does not pass the domain validators is a `400` shaped by `StatusPages`
 |---|---|---|
 | `POST /sync-shipments-with-fulfillments` | `SyncShipmentsWithFulfillmentsRequest` | `syncShopifyShipmentsToFulfillments`: reconciles DropNext shipments with the order's Shopify fulfillment orders (calculate → determine → effect the mutations). |
 | `POST /tracking-update` | `TrackingUpdateRequest` | `syncShopifyTrackingEvent`: a tracking status becomes a Shopify `FulfillmentEvent`. |
-| `PUT /stores/api-key` | `UpdateStoreApiKeyRequest` | Caches the shop's Admin token in memory and forwards it to the monolith. |
+| `PUT /stores/api-key` | `UpdateStoreApiKeyRequest` | Caches the shop's Admin token in memory and forwards it to the monolith; answers `502` (or `404` for a store the monolith does not know) when the monolith did not persist it, with the token still cached. A blank `api_key` or a non-positive `shopify_shop_id` is a `400` before the cache is touched; `shopify_shop_id` is `null` when unknown. |
 
 The other inbound routes are the OAuth pair (`/install`, `/oauth/callback`) and the diagnostics endpoints (`/`,
-`/health`, `/api`, `/api/check`, `/api/redirect-url`); all of them are constants in `path/Paths.kt`.
+`/health`, `/api`, `/api/check`, `/api/redirect-url`); all of them are constants in `path/Paths.kt`. `/api/check?shop=`
+is the one diagnostics route behind the bearer auth: it answers whether the shop's token resolves and, from a
+read-only `scanShopifyWebhooks`, one row per handled webhook topic (`active` or `missing` at our callback URL, plus
+stale subscriptions pointing elsewhere), so "is this shop still subscribed" can be asked without a reinstall.
 
 The canonical contract is the monolith's `/openapi.json`, checked in here as `src/resources/monolith-dss-openapi.json`;
 the DTOs (`dropnext.dss.contract`) and `OutBoundMonolithPaths` are generated from it — never
@@ -184,7 +196,8 @@ the exchange fails the install; each step reports on the page instead. Failures 
 - Retries: the monolith client (`createMonolithHttpClient`) retries on `IOException` up to 3 times with exponential
   backoff (base 2, max 4 s). Shopify Graphql and OAuth traffic deliberately use the base client without retries, so a
   non-idempotent mutation is never sent twice.
-- `DSS_ALLOW_INSECURE_MONOLITH=true` is **dev-only** — production rejects a non-HTTPS monolith URL at startup.
+- `DSS_ALLOW_INSECURE_MONOLITH=true` is **dev-only** — it needs `DSS_MODE=DEV` (`PROD`, the default, refuses the flag
+  at startup), and production rejects a non-HTTPS monolith URL at startup.
 - Every method returns a `MonolithResult<T>` whose `MonolithError` is either `Transport` (no answer) or `Rejected`
   (status plus the parsed `MonolithErrorBody`, including the monolith's `trace_id`). Log it through
   `logMonolithFailure` (transport and 5xx → error, otherwise warn) so the two services' logs can be correlated.
@@ -211,8 +224,8 @@ There is no request context and no service locator; everything reaches a handler
 - Every collaborator that talks to the outside world is an interface with one real and one fake implementation:
   `MonolithService` / `HttpMonolithService` / `FakeMonolithService`, `ShopifyGraphqlService` /
   `HttpShopifyGraphqlService` / `FakeShopifyGraphqlService`, `ShopifyGraphqlServiceFactory` /
-  `HttpShopifyGraphqlServiceFactory` / `FakeShopifyGraphqlServiceFactory`. Adding an outside dependency means adding
-  all three.
+  `HttpShopifyGraphqlServiceFactory` / `FakeShopifyGraphqlServiceFactory`, `ShopifyOAuthService` /
+  `HttpShopifyOAuthService` / `FakeShopifyOAuthService`. Adding an outside dependency means adding all three.
 - A `ShopifyGraphqlService` is bound to one shop (its token is injected at construction). Handlers obtain one per
   request through `ShopifyGraphqlServiceFactory.forShop(shop)` and answer `DssError.MissingShopifyAdminToken` when
   that returns `null`.
@@ -226,10 +239,11 @@ regarding what packages a package may import from: `domain` depends on nothing o
 application package and its sub-packages never on each other (only on `lib/json`, `lib/crypto`, `lib/logging`),
 `workflow` never on the HTTP or view layers, `presentation` on nothing but `domain`. Plus the other rules it keeps: no
 reflection, no wildcard imports, no ad-hoc `Json {}` or `HttpClient(...)`, only `Config` reads the environment,
-secrets redact and never serialize, Graphql-generated types only inside `lib/shopify/` and the listed translation
-boundaries, no hand-written contract DTOs or `OutBoundMonolithPaths`, the file naming rule and the `test/` ↔ `src/`
-mirroring rule. Add a rule there before introducing a new layer, and extend an allowlist only with a one-line comment
-saying why.
+secrets redact and never serialize, Graphql-generated types only inside `lib/shopify/`, the translation boundaries
+and `workflow/`, no hand-written contract DTOs or `OutBoundMonolithPaths` and the file naming rule. The `test/` →
+`src/` mirroring rule lives in `TestSuiteArchitectureTest` and is checked in one direction only: every test file must
+have a source counterpart; a source file without a test is not caught. Add a rule there before introducing a new
+layer, and extend an allowlist only with a one-line comment saying why.
 
 
 # External dependency policy
@@ -282,7 +296,8 @@ unless configured, which is how the monolith does it too.
   the request in `MDCContext`; the mode only mutes the line. The format is spelled out rather than left to Ktor's
   default, which logs the whole URI — see "Security".
 - **The trace id** comes from Ktor's `CallId` plugin (`installCallId`): the caller's `X-Request-Id` or `X-Trace-Id`
-  when present, 16 hex characters otherwise, echoed as `X-Trace-Id` on every response. The monolith client carries
+  when present and acceptable (at most 64 characters of ASCII letters, digits and `-_.:/`; anything else is replaced,
+  never refused), 16 hex characters otherwise, echoed as `X-Trace-Id` on every response. The monolith client carries
   the client-side `CallId` plugin, which forwards it as `X-Trace-Id` from the coroutine context; nothing reads the
   MDC to do so.
 
@@ -399,7 +414,7 @@ General rules, everywhere:
 Files and types:
 - A file whose main declaration is a class or interface is `PascalCase.kt` after it (`ShopDomain.kt`); a file of
   top-level functions is `lowerCamel.kt` after its main function (`syncShopifyTrackingEvent.kt`,
-  `oauthRoutes.kt`). The `test/` mirroring check in `ArchitectureTest` relies on this.
+  `oauthRoutes.kt`). The `test/` → `src/` mirroring check in `TestSuiteArchitectureTest` relies on this.
 - **Handlers**: one `<Family>Handlers` class per route family in `handler/<Family>Handlers.kt`, with `handle<What>`
   methods (`handleShopifyWebhook`, `handleTrackingUpdate`).
 - **Routing**: `routing/<family>Routes.kt` defines a single `Route.<family>Routes(handlers)`. Not `install…`: in
@@ -408,7 +423,7 @@ Files and types:
   (in `test/`) the fake; the same for `ShopifyGraphqlServiceFactory`.
 - **Outcome types**: one call answers a result4k `Result` (`ShopifyResult<T>`, `MonolithResult<T>`); a summary of
   many is a `*Report` (`WebhookRegistrationReport`, `ShopInstallReport`); what a view renders is an `*Outcome`
-  (`MonolithPersistOutcome`). Errors are the sealed `ShopifyError` and `MonolithError`, nothing else.
+  (`MonolithPersistOutcome`). Errors are the sealed `ShopifyError`, `MonolithError` and `OAuthError`, nothing else.
 - **Secrets and ids** are value classes in `domain/` (`ShopifyAdminToken`, `DssApiKey`, `ShopifyOrderId`, …); a
   `String` token or a `Long` id only exists on the contract DTOs and is wrapped at the handler boundary.
 - **Paths**: inbound constants live in `Paths`; outbound path objects are `OutBound<Target>…Paths`.
@@ -430,9 +445,9 @@ Files and types:
 - One operation per file in `src/resources/<OperationName>.graphql`, the file named after the operation it declares;
   the `graphql-kotlin` plugin generates `dropnext.graphql.generated.<OperationName>` from it at compile time.
 - Only `lib/shopify/` runs operations (the `ShopifyGraphqlService` methods, each answering a typed `ShopifyResult`);
-  everything else programs against that interface. The files that must still see generated types (the mappers, the
-  fulfillment matcher, the two workflows that plan mutations from an `Order`) are listed in
-  `ArchitectureTest.graphqlGeneratedAllowList`.
+  everything else programs against that interface. The interface answers the `Order` and `Product` snapshots and
+  takes two generated enums, so the layers that walk those may import generated types: `domain/fulfillment/`, the
+  mappers and `workflow/` (`ArchitectureTest.graphqlGeneratedAllowList`). Handlers, routing and presentation may not.
 - Bumping the Shopify API version touches several places that must agree; the procedure and the response-handling
   conventions are in `.claude/rules/graphql.md`.
 

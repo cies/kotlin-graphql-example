@@ -2,12 +2,11 @@ package dropnext.dss.workflow
 
 import dev.forkhandles.result4k.Failure
 import dev.forkhandles.result4k.Success
-import dropnext.dss.contract.Shipment
-import dropnext.dss.contract.ShipmentLineItem
 import dropnext.dss.domain.ShopifyOrderId
 import dropnext.dss.lib.shopify.graphql.ShopifyError
 import dropnext.dss.testutil.fake.FakeShopifyGraphqlService
 import dropnext.dss.testutil.fixture.minimalOrder
+import dropnext.dss.testutil.fixture.shipment
 import dropnext.graphql.generated.getorderfordss.Fulfillment
 import kotlin.test.Test
 import kotlinx.coroutines.runBlocking
@@ -82,11 +81,4 @@ class DetermineShopifyMutationsTest {
     assert(fake.createFulfillmentCalls.isEmpty())
   }
 
-  private fun shipment(): Shipment =
-    Shipment(
-      trackingNumber = "1Z999",
-      carrier = "UPS",
-      trackingUrl = null,
-      lineItems = listOf(ShipmentLineItem(productVariantId = 101L, quantity = 1)),
-    )
 }

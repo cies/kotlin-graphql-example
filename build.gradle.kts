@@ -192,10 +192,11 @@ dependencies {
   implementation(libs.ktorServerStatusPages)
   implementation(libs.ktorServerContentNegotiation)
   implementation(libs.ktorServerCallLogging)
-  implementation(libs.ktorServerCallId)           // `CallId` + `callIdMdc`: the per-request trace id, in the MDC across suspensions
+  implementation(libs.ktorServerCallId)            // `CallId` + `callIdMdc`: the per-request trace id, in the MDC across suspensions
   implementation(libs.ktorServerRequestValidation) // Runs the domain validators on decoded bodies; failures become 400s in `StatusPages`
+  implementation(libs.ktorServerBodyLimit)         // Caps request bodies before they are buffered; the webhook route is unauthenticated until the HMAC is checked
   implementation(libs.ktorServerAuth)
-  implementation(libs.ktorClientCallId)           // Forwards the trace id to the monolith as `X-Trace-Id`
+  implementation(libs.ktorClientCallId)            // Forwards the trace id to the monolith as `X-Trace-Id`
 
   // HTML rendering for the OAuth install success page (no reflection).
   implementation(libs.kotlinxHtml)
@@ -204,8 +205,8 @@ dependencies {
   implementation(libs.result4k)
 
   // Logging
-  implementation(libs.kotlinLogging) // Kotlinesque wrapper over SLF4J
-  implementation(libs.slf4jApi)      // facade API (also used directly for MDC)
+  implementation(libs.kotlinLogging)  // Kotlinesque wrapper over SLF4J
+  implementation(libs.slf4jApi)       // facade API (also used directly for MDC)
   implementation(libs.logbackClassic) // Logback backend (configured via src/resources/logback.xml)
 
   // Test dependencies (see also the `power-assert` plugin definition, makes errors more actionable)
@@ -349,58 +350,8 @@ private val openApiSpecFile: File =
       """.trimIndent(),
     )
 
-// Path of the spec after `rewriteOpenApiSpecToV31` has migrated 3.0 nullability syntax
-// to 3.1 union types. `openApiGenerate` reads from this rewritten file, not the source.
-private val openApiSpecRewrittenFile: File =
-  layout.buildDirectory.file("generated/openapi-spec/monolith-dss-openapi.json").get().asFile
-
-// Why this task exists:
-//   The shared monolith↔DSS spec is authored as OpenAPI 3.0-style: nullable string fields use
-//   `{"type":"string","nullable":true}`. The spec's `openapi` version was bumped to `3.1.0` so
-//   the generator would accept the (3.1-only) `webhooks:` block. But OpenAPI 3.1 *dropped* the
-//   `nullable` keyword: in 3.1 you express nullability via a union type `{"type":["string","null"]}`.
-//   The openapi-generator's 3.1 codepath silently ignores stale `"nullable": true` flags, which
-//   regressed ~16 string fields across DTOs like `ShippingAddress` from nullable to non-null —
-//   a binary-incompatible contract change.
-//
-// What this does:
-//   Reads the source spec, rewrites every `{"type":"<scalar>","nullable":true}` into
-//   `{"type":["<scalar>","null"]}`, and writes the result under `build/generated/openapi-spec/`.
-//   `openApiGenerate` is then pointed at the rewritten file.
-//
-// When this can be removed:
-//   - The source spec adopts 3.1 union-type nullability throughout (i.e. the monolith side emits
-//     `["string","null"]` directly); OR
-//   - The spec no longer needs the 3.1-only `webhooks:` block (revert `openapi` to `3.0.0`, after
-//     which `"nullable": true` is valid again and the generator's 3.0 path handles it natively).
-val rewriteOpenApiSpecToV31 by tasks.registering {
-  group = "build"
-  description = "Migrates OpenAPI 3.0-style `nullable: true` flags to 3.1 union-type nullability."
-
-  // Captured into local vals so the doLast closure does not retain a reference to the Gradle
-  // script object (which the configuration cache cannot serialize).
-  val source = openApiSpecFile
-  val target = openApiSpecRewrittenFile
-
-  inputs.file(source)
-  outputs.file(target)
-
-  doLast {
-    // Matches `"type":"<scalar>","nullable":true` — note: order-sensitive. The shared spec is
-    // emitted by a single generator on the monolith side, so the field order is stable; if that
-    // ever changes, broaden the regex (or move to JSON-tree rewriting via the OpenAPI parser).
-    val nullableRewrite = Regex("""\"type\":\"([a-zA-Z]+)\",\"nullable\":true""")
-    val rewritten = nullableRewrite.replace(source.readText()) { match ->
-      "\"type\":[\"${match.groupValues[1]}\",\"null\"]"
-    }
-    target.parentFile.mkdirs()
-    target.writeText(rewritten)
-  }
-}
-
 // Generates `OutBoundMonolithPaths` from the same monolith OpenAPI spec as DTO codegen (`apis=false`
-// skips path constants in openApiGenerate). Reads the source spec directly — paths/servers are
-// unaffected by `rewriteOpenApiSpecToV31`.
+// skips path constants in openApiGenerate).
 val generateOutBoundMonolithPaths by tasks.registering {
   group = "build"
   description = "Generates OutBoundMonolithPaths.kt from monolith-dss-openapi.json."
@@ -448,8 +399,16 @@ val generateOutBoundMonolithPaths by tasks.registering {
 
     val httpMethodOrder = listOf("delete", "get", "patch", "post", "put")
 
-    val pathEntries = paths.keys.sorted().map { path ->
-      val operations = paths[path].orEmpty()
+    // The monolith mounts its contract under `servers[0].url` and http4k bakes that mount prefix
+    // into every path key as well, so the served document names `/api/shopify-service/v1/orders`
+    // under a server of `/api/shopify-service/v1` (a to-do on the monolith side). The constants are
+    // appended to `MONOLITH_API_PREFIX`, which is that same prefix, so it is stripped here once.
+    fun withoutServerPrefix(path: String): String =
+      if (apiPathPrefix != null && path.startsWith("$apiPathPrefix/")) path.removePrefix(apiPathPrefix) else path
+
+    val pathEntries = paths.keys.sorted().map { fullPath ->
+      val path = withoutServerPrefix(fullPath)
+      val operations = paths[fullPath].orEmpty()
       val kdocLines = operations.keys
         .filter { it in httpMethodOrder }
         .sortedBy { httpMethodOrder.indexOf(it) }
@@ -509,7 +468,7 @@ val generateOutBoundMonolithPaths by tasks.registering {
 openApiGenerate {
   generatorName.set("kotlin")
   // file: URI — required on Windows when validateSpec is enabled (absolute paths break $ref resolution).
-  inputSpec.set(openApiSpecRewrittenFile.toURI().toString())
+  inputSpec.set(openApiSpecFile.toURI().toString())
   skipValidateSpec.set(false)
   outputDir.set("${layout.buildDirectory.get()}/generated/openapi")
   modelPackage.set(monolithContractGeneratedDtoPath.replace('/', '.'))
@@ -534,10 +493,6 @@ openApiGenerate {
 
 sourceSets["main"].kotlin.srcDir("${layout.buildDirectory.get()}/generated/openapi/src/main/kotlin")
 sourceSets["main"].kotlin.srcDir(monolithPathsGeneratedDir)
-
-tasks.named("openApiGenerate") {
-  dependsOn(rewriteOpenApiSpecToV31)
-}
 
 tasks.named("compileKotlin") {
   dependsOn(tasks.named("openApiGenerate"), tasks.named("generateOutBoundMonolithPaths"))

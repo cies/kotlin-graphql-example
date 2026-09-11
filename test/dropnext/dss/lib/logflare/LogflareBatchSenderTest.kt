@@ -208,6 +208,41 @@ class LogflareBatchSenderTest {
     }
   }
 
+  /**
+   * The appender asks for a flush on every event above the batch size. Each ask used to be a task on
+   * the executor's unbounded queue, while each flush could block on Logflare for five seconds: a slow
+   * Logflare grew that queue by one task per log line.
+   */
+  @Test
+  fun `a burst of flush requests during a stalled flush submits one task`() {
+    FakeLogflareServer().use { server ->
+      server.logsStallMillis = 1_000
+      val sender = senderFor(server, maxBatchSize = 1, flushInterval = 1.minutes)
+      sender.resolveSourceToken("dropnext-test")
+      sender.start()
+      sender.enqueue(entry("first"))
+      assert(sender.requestFlush())
+      // The first flush is on the wire and stays there for a second; everything below happens meanwhile.
+      assert(server.awaitBatchStarted())
+
+      (1..300).forEach { sender.enqueue(entry("burst-$it")) }
+      val submitted = (1..300).count { sender.requestFlush() }
+
+      assert(submitted == 1)
+      server.logsStallMillis = 0 // Let `close` drain the burst quickly.
+      sender.close()
+      assert(sender.queuedEventCount == 0)
+    }
+  }
+
+  @Test
+  fun `requestFlush before start submits nothing`() {
+    FakeLogflareServer().use { server ->
+      val sender = senderFor(server)
+      assert(!sender.requestFlush())
+    }
+  }
+
   @Test
   fun `a full queue drops events instead of growing without limit`() {
     FakeLogflareServer().use { server ->

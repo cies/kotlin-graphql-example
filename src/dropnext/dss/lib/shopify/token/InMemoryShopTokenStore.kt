@@ -20,11 +20,20 @@ class InMemoryShopTokenStore(
 ) : ShopTokenStore {
   private val tokens: ConcurrentHashMap<ShopDomain, ShopifyAdminToken> = ConcurrentHashMap(initial)
 
-  override suspend fun resolve(shop: ShopDomain): ShopifyAdminToken? =
-    tokens[shop] ?: fallback(shop)?.also { tokens[shop] = it }
+  override suspend fun resolve(shop: ShopDomain): ShopifyAdminToken? {
+    tokens[shop]?.let { return it }
+    val fetched = fallback(shop) ?: return null
+    // `putIfAbsent`, not `put`: a `remember` that landed while the fallback was in flight (an OAuth
+    // callback, a `PUT /stores/api-key`) is newer than what the monolith answered and must win.
+    return tokens.putIfAbsent(shop, fetched) ?: fetched
+  }
 
   override fun remember(shop: ShopDomain, token: ShopifyAdminToken) {
     tokens[shop] = token
+  }
+
+  override fun forget(shop: ShopDomain) {
+    tokens.remove(shop)
   }
 
   /** What is cached right now, without consulting the fallback — for diagnostics and tests. */

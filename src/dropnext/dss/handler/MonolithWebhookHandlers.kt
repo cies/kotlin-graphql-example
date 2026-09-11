@@ -72,22 +72,24 @@ class MonolithWebhookHandlers(
     }
   }
 
-  /** `PUT /stores/api-key` — remembers a Shopify Admin token and forwards it to the monolith. */
+  /**
+   * `PUT /stores/api-key` — remembers a Shopify Admin token and forwards it to the monolith. The token
+   * is cached before the monolith is asked and stays cached when that fails; the answer is then an
+   * error, so the caller knows the monolith does not have it, rather than a `200` with a made-up id.
+   */
   suspend fun handlePutStoreApiKey(call: ApplicationCall) {
     val request = call.receive<UpdateStoreApiKeyRequest>()
     val shop = call.shopDomainOrRespond(request.shopifySubdomain, "shopify_subdomain") ?: return
     val token = ShopifyAdminToken(request.apiKey)
+    val shopId = request.shopifyShopId?.let(::ShopifyShopId)
 
     shopTokens.remember(shop, token)
     log.info { "PUT stores/api-key: token cached in memory for shop=${shop.normalizedShopifyHost}" }
 
-    // The monolith is answered its own store id back, or `0` when it could not be reached: the
-    // token is cached either way, which is what this endpoint is for.
-    val storeId = when (val persisted = persistTokenToMonolith(monolithService, shop, ShopifyShopId(request.shopifyShopId), token)) {
-      is MonolithPersistOutcome.Persisted -> persisted.storeId.value
-      is MonolithPersistOutcome.Failed -> 0L
+    when (val persisted = persistTokenToMonolith(monolithService, shop, shopId, token)) {
+      is MonolithPersistOutcome.Persisted -> call.respond(UpdateStoreApiKeyResponse(storeId = persisted.storeId.value))
+      is MonolithPersistOutcome.Failed -> call.respondError(persisted.toDssError())
     }
-    call.respond(UpdateStoreApiKeyResponse(storeId = storeId))
   }
 
   /** The shop's Graphql service, or the `400` / `401` that explains why there is none. */

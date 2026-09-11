@@ -1,5 +1,15 @@
 # Fulfillment verification (DSS)
 
+> **Status, 2026-09-11.** The sync this checklist describes, cancel every fulfillment on the order and recreate
+> them from the payload, was removed on 2026-08-31 (commit `d2f24d7`): the sync is additive and cancels nothing.
+> The sections "Sync phases (validate-before-cancel)", the failure matrix and the idempotency notes below still
+> describe the old design. A cancel comes back in a narrower form through `specs/shipment-sync-by-tracking-number/`:
+> `000-analysis-cancel-and-recreate.md` explains why the cancel-all had to go and what it broke,
+> `010-skip-shipments-already-fulfilled.md` makes a re-sent payload safe, `020-cancel-replaced-fulfillments.md`
+> cancels exactly the fulfillments whose tracking numbers the monolith names as replaced (the supplier portal's
+> shipment split), `030-report-per-shipment-outcomes.md` changes the response, and `040-rewrite-the-fulfillment-docs.md`
+> rewrites this document. Read this checklist against those specs until `040` lands.
+
 Checklist for verifying **supplier shipment → Shopify fulfillment** via the monolith → DSS path. DSS does not call the Supplier API directly; the monolith bridges supplier events to DSS webhooks defined in the contract spec, [`src/resources/monolith-dss-openapi.json`](../src/resources/monolith-dss-openapi.json).
 
 ## Prerequisites

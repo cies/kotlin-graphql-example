@@ -67,10 +67,10 @@ interface ShopifyGraphqlService {
 
   // ---------- webhook subscription primitives (composed by workflow/registerShopifyWebhooks) ----------
 
-  /** `GetWebhookSubscriptions` — the shop's existing subscriptions filtered by [topics] / [callbackUrl]. */
+  /** `GetWebhookSubscriptions` — this app's subscriptions for [topics], at [callbackUrl] only when one is given. */
   suspend fun webhookSubscriptions(
     topics: List<WebhookSubscriptionTopic>,
-    callbackUrl: String,
+    callbackUrl: String?,
   ): ShopifyResult<List<WebhookSubscriptionStatus>>
 
   /** `RegisterWebhook` — subscribes the shop to one topic at [callbackUrl] with optional projected fields; answers the subscription's GID. */

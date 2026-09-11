@@ -6,6 +6,7 @@ import java.net.InetSocketAddress
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
@@ -41,6 +42,9 @@ class FakeLogflareServer : AutoCloseable {
   /** The sources the fake knows about; empty means the sender has to create one. */
   var knownSourceName: String? = null
 
+  /** How long `/api/logs` holds a batch before answering, so a test can watch the sender while a flush is on the wire. */
+  var logsStallMillis: Long = 0
+
   val endpoint: String get() = "http://127.0.0.1:${server.address.port}"
 
   val receivedEvents: List<JsonObject> get() = received.toList()
@@ -50,12 +54,16 @@ class FakeLogflareServer : AutoCloseable {
   val createdSourceNames: List<String>
     get() = sourceRequestBodies.map { Json.parseToJsonElement(it).jsonObject["name"]!!.jsonPrimitive.content }
 
-  private val batchArrived = java.util.concurrent.atomic.AtomicReference(CountDownLatch(1))
+  private val batchArrived = AtomicReference(CountDownLatch(1))
+
+  private val batchStarted = AtomicReference(CountDownLatch(1))
 
   init {
     server.createContext("/api/sources") { exchange -> handleSources(exchange) }
     server.createContext("/api/logs") { exchange -> handleLogs(exchange) }
-    server.executor = null // Handlers run on the server's own thread; nothing here blocks.
+    // Handlers run on the server's own thread. Nothing here blocks unless a test asked for a stalled
+    // batch, and then blocking the one thread is the point: the sender sees one slow Logflare.
+    server.executor = null
     server.start()
   }
 
@@ -64,11 +72,16 @@ class FakeLogflareServer : AutoCloseable {
    * replaced once it fires, so a second `awaitBatch` waits for a second batch instead of returning
    * true on the first one all over again.
    */
-  fun awaitBatch(timeoutSeconds: Long = 5): Boolean {
-    val latch = batchArrived.get()
-    val arrived = latch.await(timeoutSeconds, TimeUnit.SECONDS)
-    if (arrived) batchArrived.compareAndSet(latch, CountDownLatch(1))
-    return arrived
+  fun awaitBatch(timeoutSeconds: Long = 5): Boolean = await(batchArrived, timeoutSeconds)
+
+  /** Like [awaitBatch], but fires when the batch request arrives rather than when it is answered: what a stalled flush looks like. */
+  fun awaitBatchStarted(timeoutSeconds: Long = 5): Boolean = await(batchStarted, timeoutSeconds)
+
+  private fun await(signal: AtomicReference<CountDownLatch>, timeoutSeconds: Long): Boolean {
+    val latch = signal.get()
+    val fired = latch.await(timeoutSeconds, TimeUnit.SECONDS)
+    if (fired) signal.compareAndSet(latch, CountDownLatch(1))
+    return fired
   }
 
   /**
@@ -99,6 +112,8 @@ class FakeLogflareServer : AutoCloseable {
 
   private fun handleLogs(exchange: HttpExchange) {
     apiKeysSeen += exchange.requestHeaders.getFirst("X-API-KEY").orEmpty()
+    batchStarted.get().countDown()
+    if (logsStallMillis > 0) Thread.sleep(logsStallMillis)
     val body = exchange.requestBody.readBytes().decodeToString()
     Json.parseToJsonElement(body).jsonObject["batch"]!!.jsonArray.forEach { received += it.jsonObject }
     exchange.respond(logsStatusCode, """{"message":"ok"}""")

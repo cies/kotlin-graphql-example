@@ -5,10 +5,17 @@ import dropnext.dss.domain.ShopDomain
 import dropnext.dss.domain.ShopInstallReport
 import dropnext.dss.domain.ShopifyShopId
 import dropnext.dss.domain.StoreId
-import dropnext.dss.domain.WebhookRegistrationFailure
 import dropnext.dss.domain.WebhookRegistrationReport
 import dropnext.dss.domain.WebhookSubscriptionStatus
+import dropnext.dss.domain.WebhookTopicRegistration
+import dropnext.dss.domain.WebhookTopicStatus
 import kotlin.test.Test
+
+
+private const val CALLBACK_URL = "https://dss.example.com/webhooks/shopify"
+
+private fun subscription(id: Int, topic: String, uri: String = CALLBACK_URL) =
+  WebhookSubscriptionStatus(id = "gid://shopify/WebhookSubscription/$id", topic = topic, uri = uri)
 
 
 class RenderOAuthInstallPageTest {
@@ -16,9 +23,7 @@ class RenderOAuthInstallPageTest {
   private fun renderBase(
     shop: String = "acme.myshopify.com",
     monolithPersist: MonolithPersistOutcome = MonolithPersistOutcome.Persisted(storeId = StoreId(1L)),
-    activeSubscriptions: List<WebhookSubscriptionStatus> = emptyList(),
-    addedSubscriptions: List<WebhookSubscriptionStatus> = emptyList(),
-    failures: List<WebhookRegistrationFailure> = emptyList(),
+    topics: List<WebhookTopicRegistration> = emptyList(),
   ): String =
     renderOAuthInstallPage(
       ShopInstallReport(
@@ -26,12 +31,8 @@ class RenderOAuthInstallPageTest {
         shopId = ShopifyShopId(9988L),
         monolithPersist = monolithPersist,
         productSampleCount = 3,
-        webhookCallbackUrl = "https://dss.example.com/webhooks/shopify",
-        webhooks = WebhookRegistrationReport(
-          activeSubscriptions = activeSubscriptions,
-          addedSubscriptions = addedSubscriptions,
-          failures = failures,
-        ),
+        webhookCallbackUrl = CALLBACK_URL,
+        webhooks = WebhookRegistrationReport(topics),
       ),
     )
 
@@ -46,7 +47,7 @@ class RenderOAuthInstallPageTest {
   @Test
   fun `escapes html-significant characters in failure error messages`() {
     val html = renderBase(
-      failures = listOf(WebhookRegistrationFailure("PRODUCTS_CREATE", "<img src=x onerror=alert(1)>")),
+      topics = listOf(WebhookTopicRegistration("PRODUCTS_CREATE", WebhookTopicStatus.Failed("<img src=x onerror=alert(1)>"))),
     )
     assert("<img src=x onerror=alert(1)>" !in html)
     assert("&lt;img src=x onerror=alert(1)&gt;" in html)
@@ -86,46 +87,54 @@ class RenderOAuthInstallPageTest {
   }
 
   @Test
-  fun `empty subscription lists render a None bullet`() {
-    val html = renderBase()
-    // One "None" bullet per empty list — both `activeSubscriptions` and `addedSubscriptions` default to empty.
-    val noneCount = "<li>None</li>".toRegex().findAll(html).count()
-    assert(noneCount == 2)
+  fun `the summary line counts active, added, failed and stale`() {
+    val html = renderBase(
+      topics = listOf(
+        WebhookTopicRegistration("PRODUCTS_CREATE", WebhookTopicStatus.Active(subscription(1, "PRODUCTS_CREATE"))),
+        WebhookTopicRegistration("PRODUCTS_UPDATE", WebhookTopicStatus.Added(subscription(2, "PRODUCTS_UPDATE"))),
+        WebhookTopicRegistration("ORDERS_CREATE", WebhookTopicStatus.Failed("scope missing")),
+        WebhookTopicRegistration(
+          "ORDERS_UPDATED",
+          WebhookTopicStatus.Added(subscription(3, "ORDERS_UPDATED")),
+          stale = listOf(subscription(4, "ORDERS_UPDATED", uri = "https://old.example/webhooks/shopify")),
+        ),
+      ),
+    )
+    assert("1 already active, 2 added in this install, 1 failed, 1 pointing elsewhere." in html)
   }
 
   @Test
-  fun `non-empty subscription list renders one li per entry with id`() {
-    val subs = listOf(
-      WebhookSubscriptionStatus(
-        id = "gid://shopify/WebhookSubscription/1",
-        topic = "PRODUCTS_CREATE",
-        uri = "https://dss.example.com/webhooks/shopify",
-      ),
-      WebhookSubscriptionStatus(
-        id = "gid://shopify/WebhookSubscription/2",
-        topic = "ORDERS_CREATE",
-        uri = "https://dss.example.com/webhooks/shopify",
+  fun `one table row per topic with its status, subscription id and stale uri`() {
+    val html = renderBase(
+      topics = listOf(
+        WebhookTopicRegistration("PRODUCTS_CREATE", WebhookTopicStatus.Active(subscription(1, "PRODUCTS_CREATE"))),
+        WebhookTopicRegistration(
+          "ORDERS_CREATE",
+          WebhookTopicStatus.Missing,
+          stale = listOf(subscription(2, "ORDERS_CREATE", uri = "https://old.example/webhooks/shopify")),
+        ),
       ),
     )
-    val html = renderBase(activeSubscriptions = subs)
-    assert("PRODUCTS_CREATE" in html)
-    assert("ORDERS_CREATE" in html)
+    assert("<td><code>PRODUCTS_CREATE</code></td>" in html)
     assert("gid://shopify/WebhookSubscription/1" in html)
+    assert(">active<" in html)
+    assert(">missing<" in html)
+    assert("https://old.example/webhooks/shopify" in html)
     assert("gid://shopify/WebhookSubscription/2" in html)
   }
 
   @Test
   fun `no failure block when there are no failures`() {
-    val html = renderBase(failures = emptyList())
+    val html = renderBase(topics = listOf(WebhookTopicRegistration("PRODUCTS_CREATE", WebhookTopicStatus.Active(subscription(1, "PRODUCTS_CREATE")))))
     assert("Webhook registrations that failed" !in html)
   }
 
   @Test
   fun `failure block lists each failed topic`() {
     val html = renderBase(
-      failures = listOf(
-        WebhookRegistrationFailure("PRODUCTS_CREATE", "permission denied"),
-        WebhookRegistrationFailure("ORDERS_UPDATED", "scope missing"),
+      topics = listOf(
+        WebhookTopicRegistration("PRODUCTS_CREATE", WebhookTopicStatus.Failed("permission denied")),
+        WebhookTopicRegistration("ORDERS_UPDATED", WebhookTopicStatus.Failed("scope missing")),
       ),
     )
     assert("Webhook registrations that failed" in html)

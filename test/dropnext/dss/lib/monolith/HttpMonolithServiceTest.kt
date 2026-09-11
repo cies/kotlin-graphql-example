@@ -91,7 +91,7 @@ class HttpMonolithServiceTest {
 
   @Test
   fun `postCreateOrder maps non-2xx, non-409 to Rejected with parsed body`() = runBlocking {
-    server.enqueue(HttpStatusCode.BadRequest, """{"error":{"code":"InvalidOrder","message":"bad","trace_id":"t-1"}}""")
+    server.enqueue(HttpStatusCode.BadRequest, """{"error":"bad","code":"InvalidOrder","trace_id":"t-1"}""")
     val req = orderToCreateShopifyOrderRequest("acme", minimalOrder())
     val rejected = rejectedOrNull(service().postCreateOrder(req))
     assert(rejected != null)
@@ -127,6 +127,24 @@ class HttpMonolithServiceTest {
     assert(recorded.method == "PUT")
     assert(recorded.path == "/stores/api-key")
     assert("\"api_key\":\"shpat_x\"" in recorded.body)
+  }
+
+  /** A proxy's maintenance page or a drifted contract is an expected failure, not a bug to answer a 500 for. */
+  @Test
+  fun `putStoreApiKey on a 200 with an unreadable body is Undecodable, not an exception`() = runBlocking {
+    server.enqueue(HttpStatusCode.OK, "<html>maintenance</html>")
+    val result = service().putStoreApiKey(UpdateStoreApiKeyRequest("acme", 99L, "shpat_x"))
+    val error = (result as Failure).reason
+    assert(error is MonolithError.Undecodable)
+    assert((error as MonolithError.Undecodable).status == 200)
+    assert("<html>" !in error.message)
+  }
+
+  @Test
+  fun `every request asks the monolith for JSON`() = runBlocking {
+    server.enqueue(HttpStatusCode.OK, """{"store_id":42}""")
+    service().putStoreApiKey(UpdateStoreApiKeyRequest("acme", 99L, "shpat_x"))
+    assert(server.requests.single().headers["Accept"] == listOf("application/json"))
   }
 
   @Test
@@ -194,19 +212,19 @@ class HttpMonolithServiceTest {
     server.enqueue(HttpStatusCode.OK, """{"deleted":2}""")
     val result =
       service().deleteProductVariants(
-        DeleteProductVariantsRequest(shopifySubdomain = "acme", productVariantIds = listOf(11L, 22L)),
+        DeleteProductVariantsRequest(shopifySubdomain = "acme", productId = 8000000001L),
       )
     assert(result == Success(2))
     val recorded = server.requests.single()
     assert(recorded.method == "DELETE")
     assert(recorded.path == "/product-variants")
-    assert("\"product_variant_ids\":[11,22]" in recorded.body)
+    assert("\"product_id\":8000000001" in recorded.body)
   }
 
   @Test
   fun `deleteProductVariants on 500 is Rejected`() = runBlocking {
     server.enqueue(HttpStatusCode.InternalServerError, """{"error":"nope"}""")
-    val result = service().deleteProductVariants(DeleteProductVariantsRequest("acme", listOf(1L)))
+    val result = service().deleteProductVariants(DeleteProductVariantsRequest("acme", 1L))
     assert(rejectedOrNull(result)?.status == 500)
   }
 
@@ -275,7 +293,7 @@ class HttpMonolithServiceTest {
   fun `monolith trace_id is parsed and propagated through the rejection`() = runBlocking {
     server.enqueue(
       HttpStatusCode.InternalServerError,
-      """{"error":{"code":"InternalError","message":"backend boom","trace_id":"mt-9bf3"}}""",
+      """{"error":"backend boom","code":"InternalError","trace_id":"mt-9bf3"}""",
     )
     val req = orderToCreateShopifyOrderRequest("acme", minimalOrder())
     val rejected = rejectedOrNull(service().postCreateOrder(req))
@@ -290,9 +308,9 @@ class HttpMonolithServiceTest {
   fun `monolith trace_id is parsed for getStore errors too`() = runBlocking {
     server.enqueue(
       HttpStatusCode.InternalServerError,
-      """{"error":{"code":"DbDown","message":"unavailable","traceId":"mt-camel"}}""",
+      """{"error":"unavailable","code":"DbDown","trace_id":"mt-store"}""",
     )
-    assert(rejectedOrNull(service().getStore("acme"))?.body?.monolithTraceId == "mt-camel")
+    assert(rejectedOrNull(service().getStore("acme"))?.body?.monolithTraceId == "mt-store")
   }
 
   // ---------- url composition & headers ----------

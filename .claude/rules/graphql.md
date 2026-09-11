@@ -48,10 +48,10 @@ compiler reports (removed fields, renamed enums). Introspection reads Shopify's 
   `ShopifyError.NotFound`. A caller pattern-matches on `Success` / `Failure` and never reads `response.errors`.
 - A method answers our own types where it can (`ShopIdentityInfo`, `ShopifyFulfillmentId`, `WebhookSubscriptionStatus`)
   and a generated snapshot only where a mapper needs the whole thing (`Order`, `Product`).
-- A file outside `lib/shopify/` that imports `dropnext.graphql.generated.*` must be listed in
-  `ArchitectureTest.graphqlGeneratedAllowList` with a one-line reason, and must be a translation boundary (a mapper, the
-  fulfillment matcher, a workflow planning mutations from an `Order`) — not business logic that could be written
-  against the interface.
+- Outside `lib/shopify/`, only the layers `ArchitectureTest.graphqlGeneratedAllowList` names may import
+  `dropnext.graphql.generated.*`: `domain/fulfillment/` (the matcher), `mapper/` and `workflow/`, which walk the
+  snapshots the interface answers. Handlers, routing and presentation program against the interface's own types; a
+  new layer needs an allowlist entry with a one-line reason.
 - Never retry Shopify traffic: it uses the base HTTP client on purpose, because a retried mutation is a duplicated
   fulfillment. The monolith client is the one with retries.
 - A `ShopifyGraphqlService` is bound to one shop and its token; get one through `ShopifyGraphqlServiceFactory.forShop`

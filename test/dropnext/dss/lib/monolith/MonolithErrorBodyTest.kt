@@ -4,27 +4,36 @@ import kotlin.test.Test
 
 class MonolithErrorBodyTest {
 
+  /** The shape the monolith's `ApiError` has on the wire, as its `apiErrorShaper` completes it. */
   @Test
-  fun `parses nested InternalError with trace_id`() {
+  fun `parses the monolith's flat ApiError with code and trace_id`() {
     val parsed =
-      parseMonolithErrorBody(
-        """{"error":{"code":"InternalError","message":"Internal server error","trace_id":"93753e87"}}""",
-      )
-    assert(parsed.monolithTraceId == "93753e87")
-    assert(parsed.code == "InternalError")
-    assert(parsed.message == "Internal server error")
+      parseMonolithErrorBody("""{"error":"Store not found.","code":"NotFound","trace_id":"1a2b3c4d"}""")
+    assert(parsed.message == "Store not found.")
+    assert(parsed.code == "NotFound")
+    assert(parsed.monolithTraceId == "1a2b3c4d")
+  }
+
+  /** Not a shape the monolith has: the object is kept as text so the log still shows what came back. */
+  @Test
+  fun `keeps an unexpected error object as the message text`() {
+    val parsed = parseMonolithErrorBody("""{"error":{"code":"InternalError","message":"nested"}}""")
+    assert(parsed.message == """{"code":"InternalError","message":"nested"}""")
+    assert(parsed.code == null)
+    assert(parsed.monolithTraceId == null)
   }
 
   @Test
-  fun `parses flat string error`() {
+  fun `parses a bare error string without code or trace id`() {
     val parsed = parseMonolithErrorBody("""{"error":"Order already exists."}""")
     assert(parsed.message == "Order already exists.")
+    assert(parsed.code == null)
     assert(parsed.monolithTraceId == null)
   }
 
   @Test
   fun `formatForLog includes monolith_trace_id`() {
-    val parsed = parseMonolithErrorBody("""{"error":{"code":"InternalError","trace_id":"abc"}}""")
+    val parsed = parseMonolithErrorBody("""{"error":"boom","code":"InternalError","trace_id":"abc"}""")
     assert(parsed.formatForLog().contains("monolith_trace_id=abc"))
   }
 
@@ -69,12 +78,6 @@ class MonolithErrorBodyTest {
     val parsed = parseMonolithErrorBody("[1,2,3]")
     val message = parsed.message
     assert(message != null && message.startsWith("[1,2,3"))
-  }
-
-  @Test
-  fun `reads traceId in camelCase when snake_case is missing`() {
-    val parsed = parseMonolithErrorBody("""{"error":{"code":"Boom","traceId":"camel-123"}}""")
-    assert(parsed.monolithTraceId == "camel-123")
   }
 
   @Test

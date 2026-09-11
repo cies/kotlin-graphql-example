@@ -44,6 +44,34 @@ class InMemoryShopTokenStoreTest {
   }
 
   @Test
+  fun `forget drops the cached token so the next resolve asks the fallback again`() = runBlocking {
+    var fallbackCalls = 0
+    val store = InMemoryShopTokenStore(mapOf(acme to ShopifyAdminToken("shpat_stale"))) {
+      fallbackCalls++
+      ShopifyAdminToken("shpat_fresh")
+    }
+
+    store.forget(acme)
+
+    assert(store.cached(acme) == null)
+    assert(store.resolve(acme) == ShopifyAdminToken("shpat_fresh"))
+    assert(fallbackCalls == 1)
+  }
+
+  /** An OAuth callback that lands while the monolith lookup is in flight holds the newer token. */
+  @Test
+  fun `a token remembered during the fallback is not overwritten by the fallback's answer`() = runBlocking {
+    lateinit var store: InMemoryShopTokenStore
+    store = InMemoryShopTokenStore {
+      store.remember(acme, ShopifyAdminToken("shpat_from_reinstall"))
+      ShopifyAdminToken("shpat_from_monolith")
+    }
+
+    assert(store.resolve(acme) == ShopifyAdminToken("shpat_from_reinstall"))
+    assert(store.cached(acme) == ShopifyAdminToken("shpat_from_reinstall"))
+  }
+
+  @Test
   fun `a token never prints itself`() {
     assert(ShopifyAdminToken("shpat_secret").toString() == "***")
     assert("shpat_secret" !in "token=${ShopifyAdminToken("shpat_secret")}")

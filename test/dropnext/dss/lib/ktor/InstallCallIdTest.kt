@@ -81,6 +81,39 @@ class InstallCallIdTest {
     assert(id != "   ")
   }
 
+  // ---------- the header is anonymous input: what is adopted lands in every log line, the response and the monolith's wire ----------
+
+  @Test
+  fun `an id longer than 64 characters is replaced by a generated one`() = echoApp { get ->
+    val (header, id) = get(null, "x".repeat(MAX_TRACE_ID_LENGTH + 1))
+    assert(id.length == 16)
+    assert(header == id)
+  }
+
+  @Test
+  fun `an id of exactly 64 characters is kept`() = echoApp { get ->
+    val longest = "x".repeat(MAX_TRACE_ID_LENGTH)
+    val (header, id) = get(null, longest)
+    assert(id == longest)
+    assert(header == longest)
+  }
+
+  @Test
+  fun `an id with a space or a non-ASCII letter is replaced by a generated one`() = echoApp { get ->
+    val (_, spaced) = get(null, "trace 42")
+    assert(spaced.length == 16)
+    val (_, accented) = get(null, "tracé-42")
+    assert(accented.length == 16)
+  }
+
+  /** A failed check moves on to the next provider, so a junk `X-Request-Id` does not cost the caller its `X-Trace-Id`. */
+  @Test
+  fun `an unacceptable X-Request-Id falls through to X-Trace-Id`() = echoApp { get ->
+    val (header, id) = get("x".repeat(MAX_TRACE_ID_LENGTH + 1), "trace-ok")
+    assert(id == "trace-ok")
+    assert(header == "trace-ok")
+  }
+
   /**
    * The MDC is thread-local and a suspended handler resumes on any thread: without `MDCContext` the
    * id read after the suspension is empty or — the failure worth fearing — another request's.

@@ -1,10 +1,9 @@
 package dropnext.dss.lib.shopify.webhook
 
-import dropnext.dss.domain.ShopifyVariantId
+import dropnext.dss.domain.ShopifyProductId
 import dropnext.dss.lib.json.AppJson
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
@@ -21,8 +20,7 @@ import kotlinx.serialization.json.longOrNull
 fun graphqlResourceIdFromShopifyWebhook(topic: String, bodyUtf8: String): String? {
   val root = parseWebhookBody(bodyUtf8) ?: return null
   root["admin_graphql_api_id"]?.jsonPrimitive?.contentOrNull?.let { return it }
-  val idPrimitive = root["id"]?.jsonPrimitive ?: return null
-  val numericId = idPrimitive.longOrNull ?: idPrimitive.content.toLongOrNull() ?: return null
+  val numericId = numericIdOf(root) ?: return null
   val resource = when {
     topic.startsWith("products/") -> "Product"
     topic.startsWith("orders/") -> "Order"
@@ -32,16 +30,17 @@ fun graphqlResourceIdFromShopifyWebhook(topic: String, bodyUtf8: String): String
 }
 
 /**
- * Parses the legacy (integer) variant IDs from a Shopify `products/delete` webhook body.
- * Shopify includes the full product JSON (including variants) in delete payloads.
+ * The product id of a `products/delete` webhook. Its body is `{"id": …}` and nothing more: the
+ * product is gone by the time it fires, so this id is all there is to tell the monolith.
  */
-fun variantIdsFromProductWebhook(bodyUtf8: String): List<ShopifyVariantId> {
-  val root = parseWebhookBody(bodyUtf8) ?: return emptyList()
-  val variants = root["variants"]?.jsonArray ?: return emptyList()
-  return variants.mapNotNull { el ->
-    runCatching { el.jsonObject["id"]?.jsonPrimitive?.longOrNull }.getOrNull()?.let(::ShopifyVariantId)
-  }
-}
+fun productIdFromProductWebhook(bodyUtf8: String): ShopifyProductId? =
+  parseWebhookBody(bodyUtf8)?.let(::numericIdOf)?.let(::ShopifyProductId)
 
 private fun parseWebhookBody(bodyUtf8: String): JsonObject? =
   runCatching { AppJson.parseToJsonElement(bodyUtf8).jsonObject }.getOrNull()
+
+/** Shopify writes `id` as a JSON number, but a quoted one is read too: a `Long` is a `Long`. */
+private fun numericIdOf(root: JsonObject): Long? {
+  val idPrimitive = root["id"]?.jsonPrimitive ?: return null
+  return idPrimitive.longOrNull ?: idPrimitive.content.toLongOrNull()
+}

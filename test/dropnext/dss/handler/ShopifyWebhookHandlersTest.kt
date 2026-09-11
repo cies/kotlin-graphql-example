@@ -22,6 +22,7 @@ import dropnext.dss.testutil.helper.capturingLogs
 import dropnext.dss.testutil.helper.withDssApp
 
 import io.ktor.client.HttpClient
+import io.ktor.client.call.body
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -66,6 +67,31 @@ class ShopifyWebhookHandlersTest {
       assert(r.status == HttpStatusCode.Unauthorized)
       assert(monolith.createOrderCalls.isEmpty())
     }
+  }
+
+  /** A rotated app secret or a subscription another app left behind is invisible without this line. */
+  @Test
+  @ResourceLock(GLOBAL_LOG_REGISTRY)
+  fun `a failed HMAC is logged at warn without the signature or the body`() {
+    val forgedSignature = Base64.getEncoder().encodeToString(ByteArray(32))
+    val lines = capturingLogs {
+      withDssApp(deps()) { client ->
+        val r = client.post(Paths.webhooksShopify) {
+          header("X-Shopify-Topic", "orders/create")
+          header("X-Shopify-Shop-Domain", "acme.myshopify.com")
+          header("X-Shopify-Hmac-Sha256", forgedSignature)
+          setBody("""{"id":1001,"note":"do-not-log"}""")
+        }
+        assert(r.status == HttpStatusCode.Unauthorized)
+      }
+    }
+    val line = lines.single { "HMAC mismatch" in it }
+    assert(line.startsWith("WARN"))
+    assert("topic=orders/create" in line)
+    assert("shopDomainHeader=acme.myshopify.com" in line)
+    assert("hmacHeaderPresent=true" in line)
+    assert(forgedSignature !in line)
+    assert("do-not-log" !in line)
   }
 
   @Test
@@ -171,29 +197,38 @@ class ShopifyWebhookHandlersTest {
     }
   }
 
+  /** Shopify's `products/delete` body is the product id and nothing else; the shop comes from the header. */
   @Test
-  fun `products_delete deletes variant ids parsed from the webhook body`() {
+  fun `products_delete asks the monolith to delete the product's variants from the id-only body`() {
     val monolith = FakeMonolithService()
-    withDssApp(deps(monolith = monolith, shopify = FakeShopifyGraphqlService())) { client ->
-      val r = client.signedWebhook(
-        "products/delete",
-        """{"id":503,"admin_graphql_api_id":"gid://shopify/Product/503","domain":"acme.myshopify.com","variants":[{"id":701},{"id":702}]}""",
-      )
+    val shopify = FakeShopifyGraphqlService()
+    withDssApp(deps(monolith = monolith, shopify = shopify)) { client ->
+      val r = client.signedWebhook("products/delete", """{"id":503}""")
       assert(r.status == HttpStatusCode.OK)
       val deleteReq = monolith.deleteProductVariantsCalls.single()
       assert(deleteReq.shopifySubdomain == "acme")
-      assert(deleteReq.productVariantIds == listOf(701L, 702L))
+      assert(deleteReq.productId == 503L)
+      // The product is gone from Shopify: nothing to fetch.
+      assert(shopify.productByIdCalls.isEmpty())
+    }
+  }
+
+  /** A delete needs no Shopify Admin token, so a shop without one must not lose its deletes. */
+  @Test
+  fun `products_delete reaches the monolith when no token is available for the shop`() {
+    val monolith = FakeMonolithService()
+    withDssApp(deps(monolith = monolith)) { client ->
+      val r = client.signedWebhook("products/delete", """{"id":503}""")
+      assert(r.status == HttpStatusCode.OK)
+      assert(monolith.deleteProductVariantsCalls.single().productId == 503L)
     }
   }
 
   @Test
-  fun `products_delete with no variants in body skips monolith call`() {
+  fun `products_delete without a product id in the body skips the monolith call`() {
     val monolith = FakeMonolithService()
     withDssApp(deps(monolith = monolith, shopify = FakeShopifyGraphqlService())) { client ->
-      val r = client.signedWebhook(
-        "products/delete",
-        """{"id":503,"admin_graphql_api_id":"gid://shopify/Product/503","domain":"acme.myshopify.com"}""",
-      )
+      val r = client.signedWebhook("products/delete", """{"admin_graphql_api_id":"gid://shopify/Product/503"}""")
       assert(r.status == HttpStatusCode.OK)
       assert(monolith.deleteProductVariantsCalls.isEmpty())
     }
@@ -237,6 +272,107 @@ class ShopifyWebhookHandlersTest {
     val line = lines.single { "could not load order" in it }
     assert("Shopify rejected the Admin token (HTTP 401)" in line)
     assert("network" !in line.lowercase())
+  }
+
+  // ---------- what Shopify is told to do next ----------
+
+  /** A monolith deploy window must not lose orders: a 5xx from it becomes a 502 to Shopify, which redelivers. */
+  @Test
+  fun `orders_create with the monolith down is answered 502 so Shopify redelivers`() {
+    val monolith = FakeMonolithService().apply { createOrderStatus = 503 }
+    val shopify = FakeShopifyGraphqlService().apply { orderForDssResult = Success(minimalOrder()) }
+    withDssApp(deps(monolith = monolith, shopify = shopify)) { client ->
+      val r = client.signedWebhook(
+        "orders/create",
+        """{"id":1001,"admin_graphql_api_id":"gid://shopify/Order/1001","domain":"acme.myshopify.com"}""",
+      )
+      assert(r.status == HttpStatusCode.BadGateway)
+      assert(monolith.createOrderCalls.size == 1)
+    }
+  }
+
+  @Test
+  fun `products_update with Shopify unreachable is answered 502 so Shopify redelivers`() {
+    val monolith = FakeMonolithService()
+    val shopify = FakeShopifyGraphqlService().apply { productByIdResult = Failure(ShopifyError.Network("connection reset")) }
+    withDssApp(deps(monolith = monolith, shopify = shopify)) { client ->
+      val r = client.signedWebhook(
+        "products/update",
+        """{"id":502,"admin_graphql_api_id":"gid://shopify/Product/502","domain":"acme.myshopify.com"}""",
+      )
+      assert(r.status == HttpStatusCode.BadGateway)
+      assert(monolith.upsertProductVariantsCalls.isEmpty())
+    }
+  }
+
+  /** A request the monolith refuses gets the same answer on every redelivery, so Shopify is not asked for one. */
+  @Test
+  fun `orders_create the monolith refuses with a 4xx is acknowledged with 200`() {
+    val monolith = FakeMonolithService().apply { createOrderStatus = 400 }
+    val shopify = FakeShopifyGraphqlService().apply { orderForDssResult = Success(minimalOrder()) }
+    withDssApp(deps(monolith = monolith, shopify = shopify)) { client ->
+      val r = client.signedWebhook(
+        "orders/create",
+        """{"id":1001,"admin_graphql_api_id":"gid://shopify/Order/1001","domain":"acme.myshopify.com"}""",
+      )
+      assert(r.status == HttpStatusCode.OK)
+      assert(monolith.createOrderCalls.size == 1)
+    }
+  }
+
+  // ---------- what the delivery log and the Partner Dashboard get to read ----------
+
+  /** Shopify stores the body of every delivery, so a skipped one says why, with the trace id that finds our log line. */
+  @Test
+  fun `a skipped delivery answers 200 with its reason and the trace id in the body`() {
+    val monolith = FakeMonolithService()
+    withDssApp(deps(monolith = monolith)) { client ->
+      val r = client.signedWebhook("products/create", """{"id":1,"domain":"acme.myshopify.com"}""")
+      assert(r.status == HttpStatusCode.OK)
+      val body = r.body<WebhookDeliveryResponse>()
+      assert(body.outcome == "skipped")
+      assert(body.reason == "no_admin_token")
+      assert(body.traceId == r.headers["X-Trace-Id"])
+    }
+  }
+
+  @Test
+  fun `a mirrored delivery answers 200 with the outcome in the body`() {
+    val monolith = FakeMonolithService()
+    val shopify = FakeShopifyGraphqlService().apply { orderForDssResult = Success(minimalOrder()) }
+    withDssApp(deps(monolith = monolith, shopify = shopify)) { client ->
+      val r = client.signedWebhook(
+        "orders/create",
+        """{"id":1001,"admin_graphql_api_id":"gid://shopify/Order/1001","domain":"acme.myshopify.com"}""",
+      )
+      assert(r.body<WebhookDeliveryResponse>() == WebhookDeliveryResponse(outcome = "mirrored", traceId = r.headers["X-Trace-Id"]))
+    }
+  }
+
+  @Test
+  @ResourceLock(GLOBAL_LOG_REGISTRY)
+  fun `every verified delivery ends in one summary line with the webhook id and the lag`() {
+    val monolith = FakeMonolithService().apply { createOrderStatus = 503 }
+    val shopify = FakeShopifyGraphqlService().apply { orderForDssResult = Success(minimalOrder()) }
+    val lines = capturingLogs {
+      withDssApp(deps(monolith = monolith, shopify = shopify)) { client ->
+        client.post(Paths.webhooksShopify) {
+          val body = """{"id":1001,"admin_graphql_api_id":"gid://shopify/Order/1001"}"""
+          header("X-Shopify-Topic", "orders/create")
+          header("X-Shopify-Shop-Domain", "acme.myshopify.com")
+          header("X-Shopify-Webhook-Id", "delivery-42")
+          header("X-Shopify-Triggered-At", "2020-01-01T00:00:00Z")
+          header("X-Shopify-Hmac-Sha256", base64HmacSha256(WEBHOOK_SECRET, body.toByteArray(StandardCharsets.UTF_8)))
+          setBody(body)
+        }
+      }
+    }
+    val line = lines.single { "Webhook done" in it }
+    assert(line.startsWith("WARN"))
+    assert("topic=orders/create shop=acme.myshopify.com webhook_id=delivery-42" in line)
+    assert("outcome=failed transient=true error=monolith_503" in line)
+    assert("lag_ms=" in line)
+    assert("answered=502" in line)
   }
 
   // ---------- helpers ----------

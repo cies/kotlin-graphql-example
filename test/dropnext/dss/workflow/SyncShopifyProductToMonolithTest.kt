@@ -18,8 +18,8 @@ private const val PRODUCT_GID = "gid://shopify/Product/501"
 
 
 /**
- * The product mirror behind `products/create` and `products/update`. Nothing here may raise: the
- * webhook is acknowledged whatever happens, so every failure has to end in the log and nowhere else.
+ * The product mirror behind `products/create` and `products/update`. Nothing here may raise: every
+ * failure ends in the log and in the outcome the handler answers Shopify from, nowhere else.
  */
 class SyncShopifyProductToMonolithTest {
 
@@ -55,9 +55,13 @@ class SyncShopifyProductToMonolithTest {
     val monolith = FakeMonolithService()
     val shopify = FakeShopifyGraphqlService().apply { productByIdResult = Failure(ShopifyError.HttpError(429)) }
 
-    val lines = capturingLogs { runBlocking { syncShopifyProductToMonolith(shopify, monolith, PRODUCT_GID) } }
+    lateinit var outcome: WebhookMirrorOutcome
+    val lines = capturingLogs { outcome = runBlocking { syncShopifyProductToMonolith(shopify, monolith, PRODUCT_GID) } }
 
     assert(monolith.upsertProductVariantsCalls.isEmpty())
+    // A throttled Shopify is worth a redelivery.
+    assert(outcome == WebhookMirrorOutcome.ShopifyFailed(ShopifyError.HttpError(429)))
+    assert(outcome.isTransient)
     val line = lines.single { "could not load productGid=$PRODUCT_GID" in it }
 
     assert(line.startsWith("WARN"))

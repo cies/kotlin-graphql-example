@@ -14,36 +14,40 @@ private val log = KotlinLogging.logger {}
 
 /**
  * Mirrors one Shopify product into the monolith after a `products/create` or `products/update` webhook:
- * loads it (the webhook body is id-only), maps its variants, and upserts them.
- * A webhook is answered `200` whatever happens here, so failures only go to the log.
+ * loads it (the webhook body is id-only), maps its variants, and upserts them. The outcome tells the
+ * handler whether a redelivery of the webhook is worth asking for.
  */
 suspend fun syncShopifyProductToMonolith(
   shopify: ShopifyGraphqlService,
   monolith: MonolithService,
   productGid: String,
-) {
+): WebhookMirrorOutcome {
   val shopProduct = when (val loaded = shopify.productById(productGid)) {
     is Failure -> {
       log.warn { "Webhook product: could not load productGid=$productGid error=${loaded.reason.message}" }
-      return
+      return WebhookMirrorOutcome.ShopifyFailed(loaded.reason)
     }
     is Success -> loaded.value ?: run {
       log.info { "Webhook product: Shopify has no product productGid=$productGid (deleted meanwhile?)" }
-      return
+      return WebhookMirrorOutcome.Skipped(WebhookSkipReason.PRODUCT_GONE)
     }
   }
   log.info { "Webhook product loaded id=$productGid title=${shopProduct.product.title}" }
   val variantItems = shopProduct.product.toProductVariantItems(shopProduct.shopCurrencyCode)
-  if (variantItems.isEmpty()) return
+  if (variantItems.isEmpty()) return WebhookMirrorOutcome.Skipped(WebhookSkipReason.NO_MAPPABLE_LINES)
 
   val request = UpsertProductVariantsRequest(
     shopifySubdomain = shopify.shop.subdomainOnly,
     productVariants = variantItems,
   )
-  when (val result = monolith.upsertProductVariants(request)) {
-    is Success ->
+  return when (val result = monolith.upsertProductVariants(request)) {
+    is Success -> {
       log.info { "Monolith upsert variants ok: ${result.value} upserted shop=${shopify.shop.normalizedShopifyHost}" }
-    is Failure ->
+      WebhookMirrorOutcome.Mirrored
+    }
+    is Failure -> {
       logMonolithFailure("upsertProductVariants", result.reason, "shop=${shopify.shop.normalizedShopifyHost}")
+      WebhookMirrorOutcome.MonolithFailed(result.reason)
+    }
   }
 }

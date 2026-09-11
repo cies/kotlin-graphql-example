@@ -2,11 +2,11 @@ package dropnext.dss.domain.fulfillment
 
 import dropnext.dss.contract.Shipment
 import dropnext.dss.contract.ShipmentLineItem
-import dropnext.dss.testutil.fixture.minimalOrder
+import dropnext.dss.testutil.fixture.openFulfillmentOrder
+import dropnext.dss.testutil.fixture.orderWithFulfillmentOrders
+import dropnext.dss.testutil.fixture.shipment
 import dropnext.graphql.generated.enums.FulfillmentOrderStatus
 import dropnext.graphql.generated.getorderfordss.FulfillmentOrder
-import dropnext.graphql.generated.getorderfordss.FulfillmentOrderConnection
-import dropnext.graphql.generated.getorderfordss.FulfillmentOrderEdge
 import dropnext.graphql.generated.getorderfordss.FulfillmentOrderLineItem
 import dropnext.graphql.generated.getorderfordss.FulfillmentOrderLineItemConnection
 import dropnext.graphql.generated.getorderfordss.FulfillmentOrderLineItemEdge
@@ -491,33 +491,13 @@ class MatchShipmentToFulfillmentOrdersTest {
     assert(ok.skipped.single().reason == SkipReason.NO_OPEN_FO)
   }
 
-  private fun shipment(variantId: Long, quantity: Int, tracking: String = "1Z999"): Shipment =
-
-    Shipment(
-      trackingNumber = tracking,
-      carrier = "UPS",
-      trackingUrl = null,
-      lineItems = listOf(ShipmentLineItem(productVariantId = variantId, quantity = quantity)),
-    )
-
   private fun openFo(
     variantId: Long,
     remaining: Int,
     total: Int = remaining,
     foId: Long = 301L,
     lineItemId: Long = 401L,
-  ): FulfillmentOrder {
-    val variant =
-      ProductVariant(
-        id = "gid://shopify/ProductVariant/$variantId",
-        legacyResourceId = variantId.toString(),
-      )
-    return FulfillmentOrder(
-      id = "gid://shopify/FulfillmentOrder/$foId",
-      status = FulfillmentOrderStatus.OPEN,
-      lineItems = foLineItems(lineItemId, variant, remaining, total),
-    )
-  }
+  ): FulfillmentOrder = openFulfillmentOrder(foId = foId, lineItemId = lineItemId, variantId = variantId, remaining = remaining, total = total)
 
   private fun foLineItems(
     variantId: Long,
@@ -563,11 +543,4 @@ class MatchShipmentToFulfillmentOrdersTest {
         ),
     )
 
-  private fun orderWithFulfillmentOrders(vararg fos: FulfillmentOrder): Order =
-    minimalOrder().copy(
-      fulfillmentOrders =
-        FulfillmentOrderConnection(
-          edges = fos.map { FulfillmentOrderEdge(node = it) },
-        ),
-    )
 }
