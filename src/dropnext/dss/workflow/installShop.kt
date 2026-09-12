@@ -21,7 +21,7 @@ private val log = KotlinLogging.logger {}
 /**
  * Everything that happens after the OAuth code exchange handed us a shop's Admin token: learn the
  * shop's canonical domain and id, remember the token under that domain, persist it to the
- * monolith, sample the catalogue as a smoke test, and register the webhook subscriptions.
+ * monolith, count the catalogue as a smoke test, and register the webhook subscriptions.
  *
  * Nothing here fails the installation: each step that cannot be completed is reported on the
  * confirmation page instead, because the token is already ours and a merchant who sees an error
@@ -47,10 +47,12 @@ suspend fun installShop(
 
   val monolithPersist = persistTokenToMonolith(monolith, domain, identity?.shopId, token)
 
-  val productSampleCount = when (val sampled = shopify.productSampleCount(first = 3)) {
-    is Success -> sampled.value.also { log.info { "Product sample after OAuth: shop=${domain.normalizedShopifyHost} products=$it" } }
+  val productCount = when (val counted = shopify.productCount()) {
+    is Success -> counted.value.also {
+      log.info { "Product count after OAuth: shop=${domain.normalizedShopifyHost} products=${it.count} exact=${it.isExact}" }
+    }
     is Failure -> {
-      log.warn { "Product sample after OAuth failed shop=${domain.normalizedShopifyHost}: ${sampled.reason.message}" }
+      log.warn { "Product count after OAuth failed shop=${domain.normalizedShopifyHost}: ${counted.reason.message}" }
       null
     }
   }
@@ -59,7 +61,7 @@ suspend fun installShop(
     shop = domain,
     shopId = identity?.shopId,
     monolithPersist = monolithPersist,
-    productSampleCount = productSampleCount,
+    productCount = productCount,
     webhookCallbackUrl = webhookCallbackUrl,
     webhooks = registerShopifyWebhooks(shopify, webhookCallbackUrl),
   )

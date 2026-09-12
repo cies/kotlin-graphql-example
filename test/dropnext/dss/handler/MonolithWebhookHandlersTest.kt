@@ -18,6 +18,7 @@ import dropnext.dss.domain.ShopifyAdminToken
 import dropnext.dss.domain.ShopifyFulfillmentEventId
 import dropnext.dss.domain.ShopifyFulfillmentId
 import dropnext.dss.dssDependencies
+import dropnext.dss.lib.ktor.DssError
 import dropnext.dss.lib.monolith.MonolithService
 import dropnext.dss.lib.shopify.graphql.ShopifyError
 import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlServiceFactory
@@ -494,6 +495,38 @@ class MonolithWebhookHandlersTest {
 
   // ---------- upstream failures ----------
 
+  /** The token lookup behind the call got no answer from the monolith: a retry can help, so not the 401 of a shop without a token. */
+  @Test
+  fun `sync-shipments returns 502 when the token lookup could not reach the monolith`() {
+    val factory = FakeShopifyGraphqlServiceFactory(tokenSourceUnavailable = true)
+    withDssApp(deps(shopifyGraphqlServiceFactory = factory), authenticateAsMonolith = true) { client ->
+      val r = client.post(Paths.syncShipmentsWithFulfillments) {
+        contentType(ContentType.Application.Json)
+        setBody(validSyncRequest())
+      }
+      assert(r.status == HttpStatusCode.BadGateway)
+      assert(r.errorMessage() == DssError.ShopifyAdminTokenUnavailable.message)
+    }
+  }
+
+  /** The decoder's complaint quotes Shopify's body, which carries customer data: the monolith learns that it failed, not what it said. */
+  @Test
+  fun `sync-shipments answers an unreadable Shopify response without the body it quoted`() {
+    val fakeShopify = FakeShopifyGraphqlService().apply {
+      orderForDssResult = Failure(
+        ShopifyError.Undecodable("Unexpected JSON token at offset 12 at path: \$.data.order\nJSON input: {\"phone\":\"+31 6 1234 5678\"}"),
+      )
+    }
+    withDssApp(deps(shopifyGraphqlServiceFactory = FakeShopifyGraphqlServiceFactory(service = fakeShopify)), authenticateAsMonolith = true) { client ->
+      val r = client.post(Paths.syncShipmentsWithFulfillments) {
+        contentType(ContentType.Application.Json)
+        setBody(validSyncRequest())
+      }
+      assert(r.status == HttpStatusCode.BadGateway)
+      assert(r.errorMessage() == "Shopify's answer could not be read")
+    }
+  }
+
   @Test
   fun `sync-shipments returns 502 when Shopify cannot be reached`() {
     val fakeShopify = FakeShopifyGraphqlService().apply { orderForDssResult = Failure(ShopifyError.Network("connection reset")) }
@@ -572,6 +605,23 @@ class MonolithWebhookHandlersTest {
     }
   }
 
+  /** Shopify would refuse the date with a top-level error that reads as its own failure; the request is at fault, so a 400. */
+  @Test
+  fun `tracking-update returns 400 for a happened_at without an offset before asking Shopify`() {
+    val fakeShopify = FakeShopifyGraphqlService().apply {
+      orderForDssResult = Success(orderWithFulfillment(id = 8000L, trackingNumbers = listOf("1Z999")))
+    }
+    withDssApp(deps(shopifyGraphqlServiceFactory = FakeShopifyGraphqlServiceFactory(service = fakeShopify)), authenticateAsMonolith = true) { client ->
+      val r = client.post(Paths.trackingUpdate) {
+        contentType(ContentType.Application.Json)
+        setBody(validTrackingRequest().copy(happenedAt = "2026-04-02T08:30:00"))
+      }
+      assert(r.status == HttpStatusCode.BadRequest)
+      assert("happened_at" in r.errorMessage())
+      assert(fakeShopify.orderForDssCalls.isEmpty())
+    }
+  }
+
   // ---------- the inbound JSON as the monolith may actually send it ----------
 
   /** The DTO-encoded bodies above go through `AppJson` on both sides; a hand-written body is what pins its leniency. */
@@ -638,8 +688,7 @@ class MonolithWebhookHandlersTest {
   // ---------- helpers ----------
 
   /**
-   * Default graph: an empty token store and a [FakeShopifyGraphqlServiceFactory] that returns `null`
-
+   * Default graph: an empty token store and a [FakeShopifyGraphqlServiceFactory] that answers `Missing`
    * for every shop — `forShop` therefore short-circuits to "missing token" (401). Tests that
    * need a working service pass their own [shopifyGraphqlServiceFactory] (typically wrapping a
    * [FakeShopifyGraphqlService]).

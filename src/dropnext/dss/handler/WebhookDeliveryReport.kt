@@ -30,7 +30,9 @@ data class WebhookDeliveryReport(
     get() = when (outcome) {
       is WebhookMirrorOutcome.Mirrored -> "mirrored"
       is WebhookMirrorOutcome.Skipped -> "skipped"
-      is WebhookMirrorOutcome.ShopifyFailed, is WebhookMirrorOutcome.MonolithFailed -> "failed"
+      is WebhookMirrorOutcome.ShopifyFailed, is WebhookMirrorOutcome.MonolithFailed,
+      is WebhookMirrorOutcome.TokenUnavailable, is WebhookMirrorOutcome.TimedOut,
+        -> "failed"
     }
 
   /** A short, countable name for what failed; never the upstream's message, which may be long or bulky. */
@@ -44,13 +46,20 @@ data class WebhookDeliveryReport(
         is ShopifyError.GraphqlError -> "shopify_graphql"
         is ShopifyError.UserError -> "shopify_user_error"
         is ShopifyError.NotFound -> "shopify_not_found"
+        is ShopifyError.Undecodable -> "shopify_undecodable"
       }
       is WebhookMirrorOutcome.MonolithFailed -> when (val error = outcome.error) {
         is MonolithError.Transport -> "monolith_transport"
         is MonolithError.Rejected -> "monolith_${error.status}"
         is MonolithError.Undecodable -> "monolith_undecodable"
       }
+      is WebhookMirrorOutcome.TokenUnavailable -> "token_unavailable"
+      is WebhookMirrorOutcome.TimedOut -> "timed_out"
     }
+
+  /** Shopify's `extensions.code` values (`THROTTLED`, `ACCESS_DENIED`): as countable as the label, and they say which Graphql error it was. */
+  val graphqlErrorCodes: List<String>
+    get() = ((outcome as? WebhookMirrorOutcome.ShopifyFailed)?.error as? ShopifyError.GraphqlError)?.codes.orEmpty()
 
   val skipReasonLabel: String?
     get() = (outcome as? WebhookMirrorOutcome.Skipped)?.reason?.name?.lowercase()
@@ -77,6 +86,7 @@ data class WebhookDeliveryReport(
     append(" outcome=").append(outcomeLabel)
     skipReasonLabel?.let { append(" reason=").append(it) }
     errorLabel?.let { append(" transient=").append(outcome.isTransient).append(" error=").append(it) }
+    if (graphqlErrorCodes.isNotEmpty()) append(" codes=").append(graphqlErrorCodes.joinToString(","))
     lagMillis?.let { append(" lag_ms=").append(it) }
     append(" took_ms=").append(tookMillis)
     append(" answered=").append(answeredStatus)

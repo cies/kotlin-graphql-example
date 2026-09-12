@@ -1,11 +1,13 @@
 package dropnext.dss.lib.shopify.graphql
 
 import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
+import com.expediagroup.graphql.client.types.GraphQLClientError
 import com.expediagroup.graphql.client.types.GraphQLClientRequest
 import dev.forkhandles.result4k.Failure
 import dev.forkhandles.result4k.Success
 import dev.forkhandles.result4k.flatMap
 import dev.forkhandles.result4k.map
+import dropnext.dss.domain.ProductCount
 import dropnext.dss.domain.ShopDomain
 import dropnext.dss.domain.ShopifyAdminToken
 import dropnext.dss.domain.ShopifyFulfillmentEventId
@@ -19,10 +21,12 @@ import dropnext.graphql.generated.FulfillmentEventCreateMutation
 import dropnext.graphql.generated.GetOrderForDss
 import dropnext.graphql.generated.GetProductById
 import dropnext.graphql.generated.GetWebhookSubscriptions
+import dropnext.graphql.generated.ProductsCount
 import dropnext.graphql.generated.RegisterWebhook
 import dropnext.graphql.generated.ShopIdentity
-import dropnext.graphql.generated.SyncProductsPage
+import dropnext.graphql.generated.enums.CountPrecision
 import dropnext.graphql.generated.enums.FulfillmentEventStatus
+import dropnext.graphql.generated.enums.FulfillmentStatus
 import dropnext.graphql.generated.enums.WebhookSubscriptionTopic
 import dropnext.graphql.generated.getorderfordss.Order
 import dropnext.graphql.generated.inputs.FulfillmentEventInput
@@ -33,6 +37,9 @@ import io.ktor.client.plugins.ResponseException
 import io.ktor.client.request.header
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CancellationException
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 
 
 
@@ -60,9 +67,11 @@ class HttpShopifyGraphqlService(
       )
     }
 
-  override suspend fun productSampleCount(first: Int): ShopifyResult<Int> =
-    execute(SyncProductsPage(SyncProductsPage.Variables(first = first, after = null)))
-      .map { it.products.edges.size }
+  override suspend fun productCount(): ShopifyResult<ProductCount> =
+    execute(ProductsCount()).flatMap { data ->
+      data.productsCount?.let { Success(ProductCount(count = it.count, isExact = it.precision == CountPrecision.EXACT)) }
+        ?: Failure(ShopifyError.GraphqlError("products count missing in response"))
+    }
 
   override suspend fun productById(productGid: String): ShopifyResult<ShopProduct?> =
     execute(GetProductById(GetProductById.Variables(productGid))).map { data ->
@@ -77,11 +86,13 @@ class HttpShopifyGraphqlService(
 
   override suspend fun cancelFulfillment(fulfillmentGid: String): ShopifyResult<Unit> =
     execute(FulfillmentCancelMutation(FulfillmentCancelMutation.Variables(fulfillmentGid))).flatMap { data ->
-      // "already canceled" is the state we wanted; everything else Shopify refuses is a real failure.
-      val realErrors = data.fulfillmentCancel?.userErrors.orEmpty()
-        .map { it.message }
-        .filter { !it.contains("already", ignoreCase = true) }
-      if (realErrors.isEmpty()) Success(Unit) else Failure(ShopifyError.UserError(realErrors))
+      val payload = data.fulfillmentCancel
+      // The state decides, not the wording: a refusal that mentions "already" can be about a fulfillment that was
+      // already delivered, and reading that as a cancel would report a fulfillment gone that Shopify still shows.
+      if (payload?.fulfillment?.status == FulfillmentStatus.CANCELLED) return@flatMap Success(Unit)
+      val userErrors = payload?.userErrors.orEmpty().map { it.message }
+      if (userErrors.isNotEmpty()) return@flatMap Failure(ShopifyError.UserError(userErrors))
+      Failure(ShopifyError.GraphqlError("fulfillment not cancelled in response"))
     }
 
   override suspend fun createFulfillment(
@@ -108,8 +119,10 @@ class HttpShopifyGraphqlService(
       val payload = data.fulfillmentCreate
       val userErrors = payload?.userErrors.orEmpty().map { it.message }
       if (userErrors.isNotEmpty()) return@flatMap Failure(ShopifyError.UserError(userErrors))
+      // No user error and no fulfillment is Shopify's answer being broken, not a refusal: an upstream failure the
+      // monolith retries, the same as for `createFulfillmentEvent` below, rather than a `400` it drops for good.
       val fulfillment = payload?.fulfillment
-        ?: return@flatMap Failure(ShopifyError.UserError(listOf("fulfillment missing in response")))
+        ?: return@flatMap Failure(ShopifyError.GraphqlError("fulfillment missing in response"))
       val id = fulfillment.legacyResourceId.toLongOrNull() ?: legacyIdFromGid(fulfillment.id)
         ?: return@flatMap Failure(ShopifyError.GraphqlError("unparseable fulfillment id ${fulfillment.id}"))
       Success(ShopifyFulfillmentId(id))
@@ -151,7 +164,7 @@ class HttpShopifyGraphqlService(
     callbackUrl: String,
     includeFields: List<String>?,
   ): ShopifyResult<String> =
-    execute(RegisterWebhook(RegisterWebhook.Variables(topic, callbackUrl, includeFields))).flatMap { data ->
+    execute(RegisterWebhook(RegisterWebhook.Variables(topic = topic, uri = callbackUrl, includeFields = includeFields))).flatMap { data ->
       val payload = data.webhookSubscriptionCreate
       val userErrors = payload?.userErrors.orEmpty().map { userError ->
         val field = userError.field.orEmpty().joinToString(",")
@@ -165,8 +178,9 @@ class HttpShopifyGraphqlService(
   /**
    * The single point that runs an operation: injects the per-shop `X-Shopify-Access-Token` header
    * and does the triage every caller used to repeat — a non-2xx status is [ShopifyError.TokenRejected]
-   * or [ShopifyError.HttpError], a thrown transport or decoding failure is [ShopifyError.Network],
-   * top-level `errors` are [ShopifyError.GraphqlError], and so is a response without `data`. The
+   * or [ShopifyError.HttpError], a thrown transport failure is [ShopifyError.Network], a body the
+   * generated types cannot read is [ShopifyError.Undecodable], top-level `errors` are a
+   * [ShopifyError.GraphqlError] with their codes, and so is a response without `data`. The
    * named methods above only look at their payload.
    *
    * The status is caught as an exception because the Graphql client runs with `expectSuccess`. Its
@@ -182,15 +196,28 @@ class HttpShopifyGraphqlService(
       if (e.response.status != HttpStatusCode.Unauthorized) return Failure(ShopifyError.HttpError(status))
       onTokenRejected()
       return Failure(ShopifyError.TokenRejected(status))
+    } catch (e: SerializationException) {
+      return Failure(ShopifyError.Undecodable(e.message ?: "not the expected JSON"))
     } catch (e: Exception) {
       return Failure(ShopifyError.Network(e.message ?: "network error"))
     }
 
     val errors = response.errors
     if (!errors.isNullOrEmpty()) {
-      return Failure(ShopifyError.GraphqlError(errors.joinToString("; ") { it.message }))
+      return Failure(
+        ShopifyError.GraphqlError(
+          message = errors.joinToString("; ") { it.message },
+          codes = errors.mapNotNull { it.code() }.distinct(),
+        ),
+      )
     }
     val data = response.data ?: return Failure(ShopifyError.GraphqlError("empty response"))
     return Success(data)
   }
+}
+
+private fun GraphQLClientError.code(): String? = when (val code = extensions?.get("code")) {
+  is String -> code
+  is JsonPrimitive -> code.contentOrNull
+  else -> null
 }

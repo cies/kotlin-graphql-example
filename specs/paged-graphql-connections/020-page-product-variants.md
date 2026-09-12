@@ -82,8 +82,8 @@ catalogue reaches several hundred. This is the one limit of `010`'s table that a
 
 ## Reuse inventory
 
-- `SyncProductsPage.graphql` already pages with `$first` and `$after` and reads `pageInfo`; it is the model for
-  the new operation's variables.
+- Shopify's cursor pagination (`$first`, `$after`, `pageInfo { hasNextPage endCursor }`) is the model for the new
+  operation's variables; no operation in the service pages today, so there is none to copy.
 - `HttpShopifyGraphqlService.productById` for the `null`-means-gone shape; `execute` for the triage.
 - `FakeShopifyGraphqlService`: a `productVariantsPageResultQueue` in the style of the existing `…ResultQueue`
   fields, so a test can serve two pages and then a failure.

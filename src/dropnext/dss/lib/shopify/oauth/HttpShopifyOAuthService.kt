@@ -11,6 +11,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.HttpResponse
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
@@ -96,7 +97,7 @@ class HttpShopifyOAuthService(
       }
       val status = response.status.value
       when {
-        response.status.isSuccess() -> Success(ShopifyAdminToken(response.body<OAuthAccessTokenResponse>().accessToken))
+        response.status.isSuccess() -> tokenFrom(response)
         status in 400..499 -> Failure(OAuthError.CodeRejected(status))
         else -> Failure(OAuthError.Transport("Shopify answered HTTP $status"))
       }
@@ -106,6 +107,19 @@ class HttpShopifyOAuthService(
       Failure(OAuthError.Transport(e.message ?: "OAuth code exchange failed"))
     }
   }
+
+  /**
+   * The token out of a `2xx`. A body that does not decode is answered without the decoder's complaint: that quotes the
+   * body it could not read, and this body carries the access token, which must never reach a log line.
+   */
+  private suspend fun tokenFrom(response: HttpResponse): OAuthResult<ShopifyAdminToken> =
+    try {
+      Success(ShopifyAdminToken(response.body<OAuthAccessTokenResponse>().accessToken))
+    } catch (e: CancellationException) {
+      throw e
+    } catch (_: Exception) {
+      Failure(OAuthError.Transport("Shopify's token response was not the expected JSON"))
+    }
 
   private fun sign(payload: String): String =
     Base64.getUrlEncoder().withoutPadding().encodeToString(hmacSha256(clientSecret.value, payload))

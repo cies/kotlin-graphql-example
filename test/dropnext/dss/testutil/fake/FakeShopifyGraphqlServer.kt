@@ -8,6 +8,7 @@ import io.ktor.server.cio.CIOApplicationEngine
 import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.request.receiveText
+import io.ktor.server.response.header
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
@@ -38,7 +39,11 @@ class FakeShopifyGraphqlServer : RecordingFake {
   )
 
   /** What one operation answers: the body, and the status Shopify would put in front of it. */
-  private data class CannedResponse(val body: String, val status: HttpStatusCode = HttpStatusCode.OK)
+  private data class CannedResponse(
+    val body: String,
+    val status: HttpStatusCode = HttpStatusCode.OK,
+    val headers: Map<String, String> = emptyMap(),
+  )
 
   // Written by the server's own request thread, read by the test thread.
   val calls: MutableList<RecordedCall> = CopyOnWriteArrayList()
@@ -74,6 +79,7 @@ class FakeShopifyGraphqlServer : RecordingFake {
             dequeueResponse(op)
               ?: responses[op]
               ?: CannedResponse("""{"data":null,"errors":[{"message":"no stub for $op"}]}""")
+          response.headers.forEach { (name, value) -> call.response.header(name, value) }
           call.respondText(response.body, ContentType.Application.Json, response.status)
 
         }
@@ -102,9 +108,17 @@ class FakeShopifyGraphqlServer : RecordingFake {
     oauthStatus = HttpStatusCode.OK
   }
 
-  /** Stub a raw response body for [operationName]; [status] is what Shopify answers with instead of `200` when throttled or refusing the token. */
-  fun stubRaw(operationName: String, responseJson: String, status: HttpStatusCode = HttpStatusCode.OK) {
-    responses[operationName] = CannedResponse(responseJson, status)
+  /**
+   * Stub a raw response body for [operationName]; [status] is what Shopify answers with instead of `200` when throttled
+   * or refusing the token, and [headers] what it adds, such as its deprecation notice.
+   */
+  fun stubRaw(
+    operationName: String,
+    responseJson: String,
+    status: HttpStatusCode = HttpStatusCode.OK,
+    headers: Map<String, String> = emptyMap(),
+  ) {
+    responses[operationName] = CannedResponse(responseJson, status, headers)
   }
 
   /** Stub a sequence of raw responses for [operationName]; each call dequeues the next entry. */
@@ -139,6 +153,6 @@ class FakeShopifyGraphqlServer : RecordingFake {
   }
 
 
-  fun shopUrl(version: String = Config.DEFAULT_SHOPIFY_API_VERSION): String =
+  fun shopUrl(version: String = Config.SHOPIFY_API_VERSION): String =
     "http://localhost:${runBlocking { server.engine.resolvedConnectors().first().port }}/admin/api/$version/graphql.json"
 }

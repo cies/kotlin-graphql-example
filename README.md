@@ -115,7 +115,7 @@ The project targets Admin API **`2026-04`**. Keep these in sync when changing ve
 
 * `graphql.client.endpoint` in `build.gradle.kts`
 * `graphql.config.yml` (IDE plugin URL, if present)
-* `SHOPIFY_API_VERSION` env var (default in `Config.kt`)
+* `Config.SHOPIFY_API_VERSION` in `Config.kt` (not a setting: the generated client speaks exactly this version)
 
 After bumping the version, run `./gradlew graphqlIntrospectSchema graphqlGenerateClient` and fix any schema drift.
 
@@ -221,19 +221,19 @@ Unhandled server errors return a generic message; details stay in server logs on
 | `SHOPIFY_APP_CLIENT_ID` | yes | App Client ID (OAuth client id used for install flow) |
 | `SHOPIFY_APP_CLIENT_SECRET` | yes | App secret (OAuth HMAC, token exchange, webhook HMAC) |
 | `SHOPIFY_SCOPES` | yes | Comma-separated scopes (see above) |
-| `DSS_BASE_URL` | yes | Public https origin of this server (tunnel URL in dev) |
-| `OAUTH_REDIRECT_PATH` | no | Default `/oauth/callback` (must match Partner redirect URL) |
-| `SHOPIFY_API_VERSION` | no | Default `2026-04` (keep in sync with `build.gradle.kts` / `graphql.config.yml`) |
+| `DSS_BASE_URL` | yes | Public https origin of this server (tunnel URL in dev); anything but an absolute `https://` URL is refused at startup |
+| `OAUTH_REDIRECT_PATH` | no | Default `/oauth/callback` (must match Partner redirect URL); anything but an absolute path is refused at startup |
 | `PORT` | no | Default `8080` |
 | `DSS_SHOP_ACCESS_TOKENS` | no | Comma-separated `shop.myshopify.com\|shpat_…` pairs seeding the in-memory token store (parsed in `Config.kt`) |
-| `MONOLITH_BASE_URL` | yes | **REST root URL** DSS appends segments to (`/orders`, `/stores`, `/stores/api-key`, `/product-variants`). May include a path prefix, e.g. `https://staging.dropnext.com/api/shopify-service/v1` (no trailing slash). Leave `MONOLITH_API_PREFIX` empty when the full prefix is already in this value. |
+| `MONOLITH_BASE_URL` | yes | **REST root URL** DSS appends segments to (`/orders`, `/stores`, `/stores/api-key`, `/product-variants`). May include a path prefix, e.g. `https://staging.dropnext.com/api/shopify-service/v1` (no trailing slash). Leave `MONOLITH_API_PREFIX` empty when the full prefix is already in this value. Anything but an absolute `https://` URL (or `http://` with `DSS_ALLOW_INSECURE_MONOLITH`) is refused at startup. |
 | `MONOLITH_API_PREFIX` | no | Inserted **after** base: `{BASE}/{PREFIX}/stores/api-key`. Example env `MONOLITH_API_PREFIX=api/v1`. Omit slashes at edges; empty (default) uses paths directly under base. |
 | `MONOLITH_API_KEY` | no | Optional Bearer token for monolith requests (`Authorization`). |
 | `DSS_API_KEY` | yes | Secret used for DSS internal REST auth (`Authorization: Bearer ...`). |
 | `DSS_ALLOW_INSECURE_MONOLITH` | no | Set `true` only for local dev, together with `DSS_MODE=DEV`, so `MONOLITH_BASE_URL` may use `http://`. In `PROD` mode (the default) the flag itself is refused at startup, and an insecure URL without it always is. |
 | `LOGFLARE_SOURCE_NAME` | no | Logflare source to ship logs to, e.g. `dropnext.dss` (the monolith ships to `dropnext.app`). Created through the API when it does not exist yet. Shipping needs this **and** `LOGFLARE_API_KEY`; with either missing the service logs to stdout only. |
 | `LOGFLARE_API_KEY` | no | Logflare account key. Lives in AWS Secrets Manager (`dropnext/<env>/dss`), never in a repo. |
-| `LOGFLARE_ENDPOINT` | no | Default `https://api.logflare.app`. Point it at a local stub to try shipping without an account. |
+| `LOGFLARE_ENDPOINT` | no | Default `https://api.logflare.app`. Point it at a local stub to try shipping without an account. Must be an absolute URL. |
+| `VERSION_TAG` | no | What `/health`, `/api` and the startup log report as the version. The Dockerfile bakes it in from the build argument `dnc` passes (the image tag), so it is not something to set by hand; unset, as in a local run, it reads `local-dev`. |
 | `DSS_MODE` | no | `DEV` or `PROD` (default), the same switch as the monolith's `MONOLITH_MODE`. `DEV` logs one line per HTTP request (method, path, status — never the query string); useful while working on a webhook locally. |
 
 Legacy compatibility: `SHOPIFY_API_KEY` and `SHOPIFY_API_SECRET` are still accepted as fallbacks when the new `SHOPIFY_APP_CLIENT_ID` / `SHOPIFY_APP_CLIENT_SECRET` vars are not set.

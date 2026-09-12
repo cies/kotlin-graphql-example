@@ -23,10 +23,23 @@ import org.junit.jupiter.api.Test
 class ArchitectureTest {
 
   /**
-   * Our sources live in `src/` (not `src/main/kotlin/`), which defeats Konsist's built-in detection.
-   * The path stays relative: Konsist resolves it against the project root it finds itself.
+   * Two memory representations over the same tree, because they cost wildly different amounts to traverse.
+   *
+   * The [srcScope] is a parsed, read-only model of the code, and building it — plus materializing a file's text
+   * through it — is by far the most expensive part of any rule here (but has Konsist's advantages).
+   * Our sources live in `src/` (not `src/main/kotlin/`), which defeats Konsist's built-in detection; the path
+   * stays relative because Konsist resolves it against the project root it finds itself.
+   *
+   * The [srcFiles] data is for mere text search, and straight copies disk files to memory instead.
+   *
+   * Both live in the companion so they are built once per test JVM, whatever lifecycle JUnit gives the class,
+   * and shared by every rule and every class that needs them. Mirrors the monolith's `ArchitectureTest`.
    */
-  private val srcScope by lazy { Konsist.scopeFromDirectory("src") }
+  companion object {
+    private val srcScope by lazy { Konsist.scopeFromDirectory("src") }
+
+    private val srcFiles by lazy { kotlinSourceFileTexts("src") }
+  }
 
   /**
    * Our packages form a stack whose arrows point one way only. The two that carry the most weight:
@@ -230,7 +243,7 @@ class ArchitectureTest {
     // The view should take data in and return a String. It must not see ApplicationCall,
     // HttpClient, or any other transport-layer type, so it can be tested in isolation.
     val forbiddenPrefixes = listOf("io.ktor.server.", "io.ktor.client.", "io.ktor.http.", "dropnext.graphql.generated.")
-    val violations = kotlinSourceFileTexts("src/dropnext/dss/presentation")
+    val violations = srcFiles.filter { "/src/dropnext/dss/presentation/" in it.path }
       .flatMap { file ->
         file.text.lines()
           .withIndex()
@@ -455,7 +468,7 @@ class ArchitectureTest {
     // Konsist's KoImport.name strips the trailing `.*`, so a Konsist-based check silently passes.
     // We grep the source files directly — no extra dependency, no false negatives.
     val wildcardImportLine = Regex("""^\s*import\s+([\w.]+)\.\*\s*$""")
-    val violations = kotlinSourceFileTexts("src")
+    val violations = srcFiles
       .flatMap { file ->
         file.text.lines()
           .withIndex()

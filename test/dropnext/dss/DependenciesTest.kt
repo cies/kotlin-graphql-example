@@ -72,6 +72,19 @@ class DependenciesTest {
       }
     }
 
+  /** An unreachable monolith answers nothing worth caching: the check says to retry, and the retry asks the monolith again. */
+  @Test
+  fun `a shop whose token lookup cannot reach the monolith is a 502 and is looked up again next time`() =
+    withFakeShopify { rewritingClient ->
+      val monolith = FakeMonolithService().apply { getStoreTransportFailure = true }
+      val deps = dssDependencies(config = testConfig(), httpClient = rewritingClient, monolithService = monolith)
+      withDssApp(deps, authenticateAsMonolith = true) { client ->
+        assert(client.get("${Paths.apiCheck}?shop=acme.myshopify.com").status == HttpStatusCode.BadGateway)
+        assert(client.get("${Paths.apiCheck}?shop=acme.myshopify.com").status == HttpStatusCode.BadGateway)
+        assert(monolith.getStoreCalls == listOf("acme", "acme"))
+      }
+    }
+
   /**
    * The readiness check scans the shop's webhook subscriptions through the production factory, so
    * the graph under test points at a fake Shopify that answers the scan with nothing subscribed.

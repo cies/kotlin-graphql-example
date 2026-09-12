@@ -45,6 +45,12 @@ class DssErrorTest {
     assert("reinstall" in e.message)
   }
 
+  /** Unlike a missing token, a retry can fix a lookup the monolith did not answer, and the monolith retries a 5xx. */
+  @Test
+  fun `an unavailable shopify admin token maps to 502`() {
+    assert(DssError.ShopifyAdminTokenUnavailable.toHttpStatus() == HttpStatusCode.BadGateway)
+  }
+
   @Test
   fun `invalid signature maps to 403`() {
 

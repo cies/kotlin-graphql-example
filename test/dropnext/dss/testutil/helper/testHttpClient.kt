@@ -35,5 +35,5 @@ fun testHttpClient(followRedirects: Boolean = true): HttpClient = HttpClient(OkH
  * version rather than spelled out, so bumping the version does not break a test that has no opinion
  * about it.
  */
-fun shopifyGraphqlUrl(port: Int, apiVersion: String = Config.DEFAULT_SHOPIFY_API_VERSION): String =
+fun shopifyGraphqlUrl(port: Int, apiVersion: String = Config.SHOPIFY_API_VERSION): String =
   "http://localhost:$port/admin/api/$apiVersion/graphql.json"

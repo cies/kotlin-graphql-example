@@ -14,6 +14,9 @@ import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 
 
+/** The shortest backoff the plugin accepts: the production one would put seconds of sleep into every retry case. */
+private const val NO_BACKOFF_MILLIS = 1L
+
 /**
  * The two differences between the clients, and the reasons they exist: the monolith client retries a
  * dropped connection, the shared client never does, because a retried `fulfillmentCreate` would ship the
@@ -53,7 +56,7 @@ class HttpClientBuildersTest {
   @Test
   fun `the monolith client retries a dropped connection and succeeds`() {
     FakeFlakyServer(failFirstConnections = 1).use { upstream ->
-      val client = createMonolithHttpClient(createSharedHttpClient())
+      val client = createMonolithHttpClient(createSharedHttpClient(), retryBaseDelayMillis = NO_BACKOFF_MILLIS)
       try {
         val response: HttpResponse = runBlocking { client.get(upstream.baseUrl) }
         assert(response.status == HttpStatusCode.OK)
@@ -67,7 +70,7 @@ class HttpClientBuildersTest {
   @Test
   fun `the monolith client gives up after three retries of a dropped connection`() {
     FakeFlakyServer().use { upstream ->
-      val client = createMonolithHttpClient(createSharedHttpClient())
+      val client = createMonolithHttpClient(createSharedHttpClient(), retryBaseDelayMillis = NO_BACKOFF_MILLIS)
       try {
         val outcome = runCatching { runBlocking { client.get(upstream.baseUrl) } }
         assert(outcome.isFailure)
@@ -83,7 +86,7 @@ class HttpClientBuildersTest {
   fun `the monolith client retries a server error and succeeds`() {
     val upstream = FakeMonolithHttpServer()
     val port = upstream.start()
-    val client = createMonolithHttpClient(createSharedHttpClient())
+    val client = createMonolithHttpClient(createSharedHttpClient(), retryBaseDelayMillis = NO_BACKOFF_MILLIS)
     try {
       upstream.enqueue(HttpStatusCode.ServiceUnavailable, "")
       upstream.enqueue(HttpStatusCode.OK, "{}")

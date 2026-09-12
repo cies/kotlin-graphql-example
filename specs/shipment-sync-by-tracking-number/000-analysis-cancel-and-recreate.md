@@ -159,7 +159,7 @@ shipping-notification emails" is not true through this path either.
 |-------|-------|
 | `ShopifyMutation.FulfillmentCancel` | Never constructed. |
 | The cancel branch of `effectShopifyMutations` | Dead, still tested by `EffectShopifyMutationsTest`. |
-| `ShopifyGraphqlService.cancelFulfillment` and `FulfillmentCancelMutation.graphql` | Unused in production, wire-tested; "already cancelled" is treated as success. |
+| `ShopifyGraphqlService.cancelFulfillment` and `FulfillmentCancelMutation.graphql` | Unused in production, wire-tested; a cancel succeeds only when Shopify's answer carries the fulfillment as cancelled. |
 | The `canceled=` count of the `sync-shipments` summary line | Always 0. |
 | `docs/FULFILLMENT_VERIFICATION.md` | Describes the additive sync as it runs since 2026-08-31, with the gaps this folder closes listed as known gaps. |
 
@@ -197,8 +197,8 @@ Landing order, per the cross-repo rule: a monolith spec, then the monolith's pay
 
 Each is carried into the spec that decides it.
 
-- Should a cancel Shopify refuses, other than "already cancelled", fail the whole sync so the monolith retries,
-  as the original spec had it? `020` answers a `400` and keeps "create anyway" as its open question 2.
+- Should a cancel Shopify refuses fail the whole sync so the monolith retries, as the original spec had it? `020`
+  answers a `400` and keeps "create anyway" as its open question 2.
 - On a retry after a partial success, should the response carry the ids of fulfillments that already existed for
   the shipments it did not create? `030` answers yes: `already_fulfilled` with the id.
 - Should the split page stop promising customer e-mails, or should `notify_customer` become a request field?

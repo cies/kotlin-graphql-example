@@ -8,7 +8,7 @@ import dropnext.dss.domain.WebhookTopicStatus
 import dropnext.dss.lib.ktor.DssError
 import dropnext.dss.lib.ktor.respondError
 import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlServiceFactory
-import dropnext.dss.lib.shopify.token.ShopTokenStore
+import dropnext.dss.lib.shopify.token.ShopLookup
 import dropnext.dss.path.Paths
 import dropnext.dss.workflow.scanShopifyWebhooks
 import io.github.oshai.kotlinlogging.KotlinLogging
@@ -26,7 +26,6 @@ private val log = KotlinLogging.logger {}
 /** Handlers for the diagnostic/health endpoints (`/`, `/health`, `/api`, `/api/check`, …). */
 class DiagnosticsHandlers(
   private val dssConfig: Config,
-  private val shopTokens: ShopTokenStore,
   private val shopifyGraphqlServiceFactory: ShopifyGraphqlServiceFactory,
 ) {
   suspend fun handleIndex(call: ApplicationCall) {
@@ -36,7 +35,7 @@ class DiagnosticsHandlers(
 
       --- Infrastructure / diagnostics ---
         GET  ${Paths.index.padEnd(26)}This index
-        GET  ${Paths.health.padEnd(26)}Liveness probe - returns "ok"
+        GET  ${Paths.health.padEnd(26)}Liveness probe - JSON with status "ok" and the running version
         GET  ${Paths.api.padEnd(26)}JSON diagnostic info (config, URLs, issues)
         GET  ${Paths.apiCheck.padEnd(20)}?shop=  Readiness for a specific shop: token resolvable, webhook subscriptions (Bearer <DSS_API_KEY> required)
         GET  ${Paths.apiRedirectUrl.padEnd(26)}Full OAuth redirect URL
@@ -62,6 +61,7 @@ class DiagnosticsHandlers(
     call.respond(
       ApiStatusResponse(
         status = "ok",
+        version = dssConfig.versionTag,
         bind = "0.0.0.0:${dssConfig.serverPort}",
         dssBaseUrl = dssConfig.dssBaseUrl,
         oauthRedirectPath = dssConfig.oauthRedirectPath,
@@ -72,19 +72,19 @@ class DiagnosticsHandlers(
   /**
    * Readiness for one shop: the token resolves and, per handled topic, what Shopify is subscribed
    * to at our callback URL. The scan is read-only, so the question "is this shop still subscribed"
-   * (Shopify drops a subscription after nineteen failed deliveries) can be asked without a reinstall.
+   * (Shopify removes a subscription whose deliveries keep failing) can be asked without a reinstall.
    * Behind the bearer auth: it drives a monolith lookup and a Shopify query per call.
    */
   suspend fun handleApiCheck(call: ApplicationCall) {
     val rawShop = call.request.queryParameters.getOrFail("shop")
     val shop = call.shopDomainOrRespond(rawShop, "shop") ?: return
 
-    // Goes through the store rather than the cache alone, so the check answers what a webhook would find.
-    if (shopTokens.resolve(shop) == null) {
-      return call.respondError(DssError.MissingShopifyAdminToken)
+    // The factory goes through the token store, monolith lookup included, so the check answers what a webhook would find.
+    val shopify = when (val lookup = shopifyGraphqlServiceFactory.forShop(shop)) {
+      is ShopLookup.Found -> lookup.value
+      ShopLookup.Missing -> return call.respondError(DssError.MissingShopifyAdminToken)
+      ShopLookup.Unavailable -> return call.respondError(DssError.ShopifyAdminTokenUnavailable)
     }
-    val shopify = shopifyGraphqlServiceFactory.forShop(shop)
-      ?: return call.respondError(DssError.MissingShopifyAdminToken)
 
     val webhooks = when (val scanned = scanShopifyWebhooks(shopify, "${dssConfig.dssBaseUrl}${Paths.webhooksShopify}")) {
       is Success -> scanned.value
@@ -103,8 +103,9 @@ class DiagnosticsHandlers(
     )
   }
 
+  /** The same shape as the monolith's `/health`, so one probe reads both services. */
   suspend fun handleHealth(call: ApplicationCall) {
-    call.respondText("ok")
+    call.respond(HealthResponse(status = "ok", version = dssConfig.versionTag))
   }
 
   suspend fun handleRedirectUrl(call: ApplicationCall) {
@@ -114,8 +115,12 @@ class DiagnosticsHandlers(
 
 
 @Serializable
+private data class HealthResponse(val status: String, val version: String)
+
+@Serializable
 private data class ApiStatusResponse(
   val status: String,
+  val version: String,
   val bind: String,
   val dssBaseUrl: String,
   val oauthRedirectPath: String,

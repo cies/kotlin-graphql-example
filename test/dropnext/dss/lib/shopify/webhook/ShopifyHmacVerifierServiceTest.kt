@@ -74,6 +74,23 @@ class ShopifyHmacVerifierServiceTest {
     assert(signatures.verifyOAuthCallback(params, hmac))
   }
 
+  /**
+   * The example from Shopify's OAuth documentation, signed with the secret `hush`. Every other case here signs the
+   * canonical string this test writes out by hand, so only Shopify's own vector proves the canonicalisation is Shopify's.
+   */
+  @Test
+  fun `verifyOAuthCallback accepts the signed example from Shopify's documentation`() {
+    val hmac = "700e2dadb827fcc8609e9d5ce208b2e9cdaab9df07390d2cbca10d7c328fc4bf"
+    val params = parametersOf(
+      "code" to listOf("0907a61c0c8d55e99db179b68161bc00"),
+      "hmac" to listOf(hmac),
+      "shop" to listOf("some-shop.myshopify.com"),
+      "state" to listOf("0.6784241404160823"),
+      "timestamp" to listOf("1337178173"),
+    )
+    assert(ShopifyHmacVerifierService(ShopifyAppSecret("hush")).verifyOAuthCallback(params, hmac))
+  }
+
   @Test
   fun `verifyOAuthCallback rejects a wrong hmac`() {
     val params = parametersOf("shop" to listOf("acme.myshopify.com"))

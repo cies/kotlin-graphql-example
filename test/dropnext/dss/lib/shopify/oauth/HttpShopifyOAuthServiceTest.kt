@@ -168,6 +168,17 @@ class HttpShopifyOAuthServiceTest {
     assert("client-secret-xyz" !in result.reason.message)
   }
 
+  /** The decoder quotes the body it could not read, and a token response carries the token. */
+  @Test
+  fun `exchangeCode keeps a token response it cannot read out of the error message`() = withFakeShopify { server, service ->
+    server.oauthAccessTokenResponse = """{"access_token":"shpat_must_not_leak","scope":"""
+
+    val result = service.exchangeCode(shop, "abc-code")
+
+    assert((result as Failure).reason is OAuthError.Transport)
+    assert("shpat_must_not_leak" !in result.reason.message)
+  }
+
   /** A fake Shopify serving the token exchange, reached through the rewriting client so the service keeps its real URL. */
   private fun withFakeShopify(block: suspend (FakeShopifyGraphqlServer, ShopifyOAuthService) -> Unit) {
     val server = FakeShopifyGraphqlServer()

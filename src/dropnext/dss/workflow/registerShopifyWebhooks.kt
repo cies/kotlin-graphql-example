@@ -45,10 +45,9 @@ suspend fun scanShopifyWebhooks(
 
 /**
  * Subscribes the shop to every handled topic it is not yet subscribed to at [callbackUrl], each with
- * the payload fields the topic declares (the `orders` topics are id-only so Shopify does not require
- * "protected customer data" approval; the DSS fetches the full order via Graphql after the webhook
- * arrives). A topic already subscribed there is left alone and reported as active: registering it
- * again is what made every reinstall show five failures.
+ * the payload fields the topic declares (the `orders` topics are id-only, because the DSS fetches the
+ * full order via Graphql after the webhook arrives). A topic already subscribed there is left alone and
+ * reported as active: registering it again is what made every reinstall show five failures.
  *
  * Composes [scanShopifyWebhooks] and [ShopifyGraphqlService.registerWebhook].
  */

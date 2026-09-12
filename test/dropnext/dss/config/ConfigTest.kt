@@ -26,7 +26,6 @@ class ConfigTest {
     assert(config.appClientId == "good-id")
     assert(config.scopes == "read_orders")
     assert(config.oauthRedirectPath == "/oauth/callback")
-    assert(config.apiVersion == Config.DEFAULT_SHOPIFY_API_VERSION)
     assert(config.serverPort == 8080)
     assert(config.monolithApiPrefix == null)
     assert(config.monolithApiKey == null)
@@ -64,6 +63,14 @@ class ConfigTest {
     assert(Config.from(requiredEnv()).logflareEndpoint == null)
     val overridden = Config.from(requiredEnv() + ("LOGFLARE_ENDPOINT" to "http://127.0.0.1:54327"))
     assert(overridden.logflareEndpoint == "http://127.0.0.1:54327")
+  }
+
+  /** The shipper builds its URLs from the endpoint on its own thread, where a malformed one used to stop the shipping silently. */
+  @Test
+  fun `a logflare endpoint that is not an absolute url is rejected`() {
+    val failure = runCatching { Config.from(requiredEnv() + ("LOGFLARE_ENDPOINT" to "api.logflare.app")) }.exceptionOrNull()
+    assert(failure is IllegalStateException)
+    assert("LOGFLARE_ENDPOINT" in failure!!.message.orEmpty())
   }
 
   /** `PROD` unless asked for, because `DEV` is the chattier mode; the spelling is forgiven, a typo is not. */
@@ -144,12 +151,39 @@ class ConfigTest {
   }
 
   @Test
+  fun `a DSS_BASE_URL without a host is rejected`() {
+    val failure = runCatching { Config.from(requiredEnv() + ("DSS_BASE_URL" to "https://")) }.exceptionOrNull()
+    assert(failure is IllegalStateException)
+  }
+
+  /** Appended to the base URL for Shopify's redirect and mounted as a route: anything but a plain absolute path breaks one of them. */
+  @Test
+  fun `an oauth redirect path that is not a plain absolute path is rejected`() {
+    listOf("oauth/callback", "/", "/oauth/callback?x=1", "/oauth callback").forEach { path ->
+      val failure = runCatching { Config.from(requiredEnv() + ("OAUTH_REDIRECT_PATH" to path)) }.exceptionOrNull()
+      assert(failure is IllegalStateException)
+      assert("OAUTH_REDIRECT_PATH" in failure!!.message.orEmpty())
+    }
+    assert(Config.from(requiredEnv() + ("OAUTH_REDIRECT_PATH" to "/shopify/callback")).oauthRedirectPath == "/shopify/callback")
+  }
+
+  @Test
   fun `a plain-http monolith url is rejected unless explicitly allowed`() {
     val insecure = requiredEnv() + ("MONOLITH_BASE_URL" to "http://localhost:8080")
     assert(runCatching { Config.from(insecure) }.exceptionOrNull() is IllegalStateException)
     val allowed = Config.from(insecure + ("DSS_ALLOW_INSECURE_MONOLITH" to "true") + ("DSS_MODE" to "DEV"))
     assert(allowed.monolithBaseUrl == "http://localhost:8080")
     assert(allowed.allowInsecureMonolithUrl)
+  }
+
+  /** A value without a scheme used to pass and then fail on every monolith call. */
+  @Test
+  fun `a monolith url that is not an absolute http url is rejected`() {
+    listOf("staging.dropnext.com/api/shopify-service/v1", "ftp://monolith.example.org", "https://").forEach { url ->
+      val failure = runCatching { Config.from(requiredEnv() + ("MONOLITH_BASE_URL" to url)) }.exceptionOrNull()
+      assert(failure is IllegalStateException)
+      assert("MONOLITH_BASE_URL" in failure!!.message.orEmpty())
+    }
   }
 
   /** The flag is a local-development escape hatch; `PROD` is the default, so a deployment that sets it by mistake does not boot. */

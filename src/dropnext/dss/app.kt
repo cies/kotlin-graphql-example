@@ -32,8 +32,12 @@ fun main() {
       host = "0.0.0.0"
       port = config.serverPort
     }
-    shutdownGracePeriod = 3_000
-    shutdownTimeout = 10_000
+    // ECS kills a task thirty seconds after its SIGTERM (Fargate's default stop timeout, which the infra keeps). In-flight
+    // requests get fifteen of those to finish: a webhook's four-second budget fits, and so does a monolith sync, which the
+    // monolith stops waiting for at thirty anyway. Five more to cancel what still runs, then the Logflare appender's drain
+    // of at most five seconds, and the process is gone before the kill.
+    shutdownGracePeriod = 15_000
+    shutdownTimeout = 20_000
   }) {
     dssModule(dssDependencies(config))
     // Subscribed after the module's own close, so the shutdown lines still ship: handlers run in subscription order.
@@ -73,6 +77,7 @@ private fun attachLogflareAppender(config: Config): LogflareAppender? {
  * verify env, container, and reverse-proxy expectations without diving into the code.
  */
 private fun logConfigSummary(config: Config) {
+  log.info { "Starting dropnext-shopify-service ${config.versionTag}" }
   log.info {
     "[http] Listening on 0.0.0.0:${config.serverPort} with DSS_BASE_URL=${config.dssBaseUrl} - " +
       "reverse-proxy target port must equal ${config.serverPort} (unset PORT locally -> 8080; empty PORT in Docker -> 9999)."

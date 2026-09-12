@@ -11,8 +11,8 @@ Repos: DSS; the monolith for layer 2.
 
 - `ShopifyWebhookHandlers.handleShopifyWebhook` verifies the HMAC, runs one workflow per topic and chooses the
   answer from its `WebhookMirrorOutcome`: a `200` when a redelivery could not go better, a `502` when the outcome
-  `isTransient` (Shopify or the monolith did not answer, throttled, or answered a `5xx`), so that Shopify's own
-  redelivery is the retry.
+  `isTransient` (Shopify or the monolith did not answer, throttled, answered a `5xx`, or the work did not finish
+  within the handler's four-second budget), so that Shopify's own redelivery is the retry.
 - The mirrored topics, and how the monolith absorbs a duplicate of each:
   - `orders/create` → `POST /orders`: a second create is a `409`, read as `CreateOrderOutcome.AlreadyExisted`,
     which is a success.
@@ -98,11 +98,12 @@ The rule instead, which is also Shopify's recipe:
   retry or a resend runs it again, which is today's behaviour and safe by the monolith's idempotency. That
   includes the skips: a delivery skipped for `NO_ADMIN_TOKEN` must run again when an operator resends it after the
   app was reinstalled.
-- **Mark a delivery in flight while it runs.** Shopify retries after five seconds without an answer, so a duplicate
-  can arrive while the first attempt is still working. The duplicate is answered `502` without work, so that
-  Shopify's next retry sees the settled state: recorded (then dropped) or cleared (then run). A delivery that ends
-  in anything but `Mirrored` clears its mark. Such a `502` counts as one failed attempt towards the subscription
-  removal; only a delivery slower than five seconds can cause one.
+- **Mark a delivery in flight while it runs.** A duplicate can arrive while the first attempt is still working. The
+  handler gives up on its work after four seconds, before Shopify stops waiting at five, so Shopify's own retry no
+  longer finds an attempt still running; an operator's resend can. The duplicate is answered `502` without work, so
+  that Shopify's next retry sees the settled state: recorded (then dropped) or cleared (then run). A delivery that
+  ends in anything but `Mirrored` clears its mark. Such a `502` counts as one failed attempt towards the subscription
+  removal; only a duplicate that lands within an attempt's four seconds can cause one.
 
 
 ## Approaches considered

@@ -9,6 +9,10 @@ import dropnext.dss.lib.shopify.oauth.OAuthError
 /**
  * Maps a Shopify failure onto the HTTP answer: what Shopify refused is the caller's problem, a
  * refused token is ours to fix by reinstalling, what failed on the way is upstream.
+ *
+ * An upstream failure is a `502` whether or not a retry can fix it ([ShopifyError.isRetryable]). The monolith retries a
+ * `5xx` into its dead-letter queue, where the message waits to be replayed once the cause is fixed, and drops a `4xx` for
+ * good; a missing scope or a query Shopify will not run is not the caller's fault, so it gets the answer that keeps it.
  */
 fun ShopifyError.toDssError(): DssError = when (this) {
   is ShopifyError.NotFound -> DssError.NotFound(message)
@@ -17,6 +21,8 @@ fun ShopifyError.toDssError(): DssError = when (this) {
   is ShopifyError.GraphqlError -> DssError.UpstreamFailure(message)
   is ShopifyError.HttpError -> DssError.UpstreamFailure(message)
   is ShopifyError.Network -> DssError.UpstreamFailure(message)
+  // The decoder's complaint quotes Shopify's body, which can carry customer data: the log has it, the caller gets the gist.
+  is ShopifyError.Undecodable -> DssError.UpstreamFailure("Shopify's answer could not be read")
 }
 
 /**

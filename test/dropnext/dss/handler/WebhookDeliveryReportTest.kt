@@ -77,6 +77,30 @@ class WebhookDeliveryReportTest {
     assert("order 1 not found" !in gone.logLine(200))
   }
 
+  /** Neither was refused: the token source did not answer, or the work did not finish in time. Shopify is asked to redeliver both. */
+  @Test
+  fun `an unavailable token and a blown time budget are transient failures with their own labels`() {
+    val unavailable = report(WebhookMirrorOutcome.TokenUnavailable)
+    assert(unavailable.logLevel == WebhookDeliveryReport.LogLevel.WARN)
+    assert("outcome=failed transient=true error=token_unavailable" in unavailable.logLine(502))
+    assert("outcome=failed transient=true error=timed_out" in report(WebhookMirrorOutcome.TimedOut).logLine(502))
+  }
+
+  @Test
+  fun `a Graphql failure's codes are on the log line, and a permanent one is an error`() {
+    val denied = report(WebhookMirrorOutcome.ShopifyFailed(ShopifyError.GraphqlError("Access denied", codes = listOf("ACCESS_DENIED"))))
+    assert(denied.logLevel == WebhookDeliveryReport.LogLevel.ERROR)
+    assert("transient=false error=shopify_graphql codes=ACCESS_DENIED" in denied.logLine(200))
+    assert(denied.toResponse(null) == WebhookDeliveryResponse(outcome = "failed", error = "shopify_graphql"))
+  }
+
+  @Test
+  fun `an unreadable Shopify answer is labelled without the body its decoder quoted`() {
+    val unreadable = report(WebhookMirrorOutcome.ShopifyFailed(ShopifyError.Undecodable("JSON input: {\"email\":\"jane@example.com\"}")))
+    assert(unreadable.errorLabel == "shopify_undecodable")
+    assert("jane@example.com" !in unreadable.logLine(200))
+  }
+
   @Test
   fun `a delivery without a shop or a webhook id still renders`() {
     val report = report(WebhookMirrorOutcome.Skipped(WebhookSkipReason.NO_SHOP_DOMAIN), shop = null).copy(webhookId = null)

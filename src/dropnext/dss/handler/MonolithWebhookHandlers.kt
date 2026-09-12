@@ -16,6 +16,7 @@ import dropnext.dss.lib.ktor.respondError
 import dropnext.dss.lib.monolith.MonolithService
 import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlService
 import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlServiceFactory
+import dropnext.dss.lib.shopify.token.ShopLookup
 import dropnext.dss.lib.shopify.token.ShopTokenStore
 import dropnext.dss.workflow.persistTokenToMonolith
 import dropnext.dss.workflow.syncShopifyShipmentsToFulfillments
@@ -49,9 +50,9 @@ class MonolithWebhookHandlers(
         call.respond(SyncShipmentsWithFulfillmentsResponse(newFulfillmentIds = synced.value.map { it.value }))
 
       is Failure -> {
-        val mapped = synced.reason.toDssError()
-        log.warn { "sync-shipments failed shop=${shopify.shop.normalizedShopifyHost}: ${mapped.message}" }
-        call.respondError(mapped)
+        // The log gets Shopify's whole message; the caller may be told less (see `toDssError`).
+        log.warn { "sync-shipments failed shop=${shopify.shop.normalizedShopifyHost} error=${synced.reason.message}" }
+        call.respondError(synced.reason.toDssError())
       }
     }
   }
@@ -65,9 +66,8 @@ class MonolithWebhookHandlers(
         call.respond(TrackingUpdateResponse(fulfillmentEventId = synced.value.value))
 
       is Failure -> {
-        val mapped = synced.reason.toDssError()
-        log.warn { "tracking-update failed shop=${shopify.shop.normalizedShopifyHost}: ${mapped.message}" }
-        call.respondError(mapped)
+        log.warn { "tracking-update failed shop=${shopify.shop.normalizedShopifyHost} error=${synced.reason.message}" }
+        call.respondError(synced.reason.toDssError())
       }
     }
   }
@@ -92,12 +92,22 @@ class MonolithWebhookHandlers(
     }
   }
 
-  /** The shop's Graphql service, or the `400` / `401` that explains why there is none. */
+  /**
+   * The shop's Graphql service, or the answer that explains why there is none: a `400` for a malformed shop, a `401`
+   * for a shop without a token, and a `502` the monolith retries when the token lookup itself did not get an answer.
+   */
   private suspend fun ApplicationCall.shopifyServiceOrRespond(rawShop: String): ShopifyGraphqlService? {
     val shop = shopDomainOrRespond(rawShop, "shopify_subdomain") ?: return null
-    return shopifyGraphqlServiceFactory.forShop(shop) ?: run {
-      respondError(DssError.MissingShopifyAdminToken)
-      null
+    return when (val lookup = shopifyGraphqlServiceFactory.forShop(shop)) {
+      is ShopLookup.Found -> lookup.value
+      ShopLookup.Missing -> {
+        respondError(DssError.MissingShopifyAdminToken)
+        null
+      }
+      ShopLookup.Unavailable -> {
+        respondError(DssError.ShopifyAdminTokenUnavailable)
+        null
+      }
     }
   }
 }

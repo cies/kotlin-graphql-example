@@ -3,6 +3,7 @@ package dropnext.dss.workflow
 import dev.forkhandles.result4k.Failure
 import dev.forkhandles.result4k.Success
 import dropnext.dss.domain.MonolithPersistOutcome
+import dropnext.dss.domain.ProductCount
 import dropnext.dss.domain.ShopDomain
 import dropnext.dss.domain.ShopifyAdminToken
 import dropnext.dss.domain.ShopifyShopId
@@ -32,17 +33,17 @@ private const val CALLBACK_URL = "https://dss.test/webhooks/shopify"
 class InstallShopTest {
 
   @Test
-  fun `a clean install reports the shop id, the sample count and the cached token`() = runBlocking {
+  fun `a clean install reports the shop id, the product count and the cached token`() = runBlocking {
     val tokens = InMemoryShopTokenStore()
     val shopify = FakeShopifyGraphqlService(acmeShop).apply {
       shopIdentityResult = Success(ShopIdentityInfo(shopId = ShopifyShopId(9988L), domain = acmeShop))
-      productSampleCountResult = Success(3)
+      productCountResult = Success(ProductCount(count = 3, isExact = true))
     }
     val report = installShop(shopify, FakeMonolithService(), tokens, installedToken, CALLBACK_URL)
 
     assert(report.shop == acmeShop)
     assert(report.shopId == ShopifyShopId(9988L))
-    assert(report.productSampleCount == 3)
+    assert(report.productCount == ProductCount(count = 3, isExact = true))
     assert(report.monolithPersist is MonolithPersistOutcome.Persisted)
     assert(tokens.cached(acmeShop) == installedToken)
   }
@@ -87,14 +88,14 @@ class InstallShopTest {
   }
 
   @Test
-  fun `a failing product sample leaves the count unknown rather than zero`() = runBlocking {
+  fun `a failing product count leaves the count unknown rather than zero`() = runBlocking {
     val shopify = FakeShopifyGraphqlService(acmeShop).apply {
-      productSampleCountResult = Failure(ShopifyError.GraphqlError("Throttled"))
+      productCountResult = Failure(ShopifyError.GraphqlError("Throttled"))
     }
     val report = installShop(shopify, FakeMonolithService(), InMemoryShopTokenStore(), installedToken, CALLBACK_URL)
 
     // Null and 0 mean different things on the page: "could not ask" versus "the catalogue is empty".
-    assert(report.productSampleCount == null)
+    assert(report.productCount == null)
   }
 
   @Test

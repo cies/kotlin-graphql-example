@@ -61,62 +61,17 @@ repositories {
 // Since this is not a library, we don't care for the Maven convention.
 sourceSets {
   main {
-    kotlin {
-      srcDir("src")
-    }
-    resources.srcDirs("src/resources", layout.buildDirectory.dir("generated/version"))
+    kotlin { srcDir("src") }
+    resources.srcDirs("src/resources")
   }
   test {
-    kotlin {
-      srcDir("test")
-    }
-    // Without this the test resources default to `src/test/resources` (which does not exist), and
-    // anything dropped in `test/resources/` — a fixture, a `junit-platform.properties` — never
-    // reaches the classpath, silently.
+    kotlin { srcDir("test") }
+    // Without this the test resources default to `src/test/resources` (which does not exist),
+    // and anything dropped in `test/resources/` (e.g.: a fixture or a `junit-platform.properties`)
+    // never reaches the classpath, silently.
     resources.srcDirs("test/resources")
   }
 }
-
-// Generates `version.txt` on the runtime classpath from git metadata.
-// Format: `<commit-date>-<short-sha>[-dirty]`. The `VERSION_TAG` env var (Dockerfile build arg, CI) can override this at runtime.
-val generateVersionResource by tasks.registering {
-  group = "build"
-  description = "Generates version.txt on the runtime classpath from git metadata."
-
-  val outputFile = layout.buildDirectory.file("generated/version/version.txt")
-  outputs.file(outputFile)
-  outputs.upToDateWhen { false } // git state can change without any file in `inputs` changing
-
-  val projectRoot = layout.projectDirectory.asFile
-
-  doLast {
-    fun runGit(vararg args: String): String? = runCatching {
-      val process = ProcessBuilder(listOf("git") + args)
-        .directory(projectRoot)
-        .redirectErrorStream(false)
-        .start()
-      val output = process.inputStream.bufferedReader().readText().trim()
-      if (process.waitFor() == 0) output else null
-    }.getOrNull()
-
-    val sha = runGit("rev-parse", "--short", "HEAD")
-    val date = runGit("log", "-1", "--format=%cs") // commit date in YYYY-MM-DD
-    val dirty = runGit("status", "--porcelain")?.isNotBlank() == true
-
-    val version = if (sha != null && date != null) {
-      "$date-$sha" + if (dirty) "-dirty" else ""
-    } else {
-      "unknown"
-    }
-
-    val target = outputFile.get().asFile
-    target.parentFile.mkdirs()
-    target.writeText(version)
-    logger.lifecycle("Generated version: $version")
-  }
-}
-
-tasks.named("processResources") { dependsOn(generateVersionResource) }
 
 tasks {
   withType<KotlinJvmCompile>().configureEach {
@@ -295,6 +250,7 @@ val shopifyAdminSchemaFile: File = layout.projectDirectory.file("src/graphql-sch
 graphql {
   client {
     packageName = "dropnext.graphql.generated"
+    serializer = GraphQLSerializer.KOTLINX
 
     // `schemaFile` rather than `endpoint` on purpose: setting `endpoint` here makes the plugin wire
     // `graphqlGenerateClient` onto `graphqlIntrospectSchema`, which puts a network call to
@@ -303,8 +259,10 @@ graphql {
     // file; refreshing it is the deliberate, manual step below.
     schemaFile = shopifyAdminSchemaFile
 
-    allowDeprecatedFields = true
-    serializer = GraphQLSerializer.KOTLINX
+    // A deprecated field in an operation fails the codegen, so it is fixed now rather than discovered when the API
+    // version that removes it arrives. Deprecated input fields and later deprecations are out of its sight; the
+    // `ShopifyDeprecationWarnings` client plugin logs those when Shopify reports them.
+    allowDeprecatedFields = false
 
     // Prevents "To prevent Denial Of Service attacks, parsing has been canceled" errors on Shopify's huge schema.
     parserOptions {
@@ -350,8 +308,8 @@ private val openApiSpecFile: File =
       """.trimIndent(),
     )
 
-// Generates `OutBoundMonolithPaths` from the same monolith OpenAPI spec as DTO codegen (`apis=false`
-// skips path constants in openApiGenerate).
+// Generates `OutBoundMonolithPaths` from the same monolith OpenAPI spec as DTO codegen
+// (`apis=false` skips path constants in openApiGenerate).
 val generateOutBoundMonolithPaths by tasks.registering {
   group = "build"
   description = "Generates OutBoundMonolithPaths.kt from monolith-dss-openapi.json."

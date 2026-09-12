@@ -245,6 +245,32 @@ class RequestValidationTest {
     assert(messages.size == 3)
   }
 
+  /** What the monolith sends is `Instant.toString()`, UTC with a `Z`; an explicit offset is as good. */
+  @Test
+  fun `accepts a happened_at with a Z or an offset`() {
+    assert(validateTrackingUpdateRequest(trackingUpdate(happenedAt = "2026-04-02T08:30:00Z")) is RequestValidation.Valid)
+    assert(validateTrackingUpdateRequest(trackingUpdate(happenedAt = "2026-04-02T10:30:00+02:00")) is RequestValidation.Valid)
+  }
+
+  @Test
+  fun `rejects a happened_at that is not a date and time with an offset`() {
+    listOf("", "not-a-date", "2026-04-02", "2026-04-02T08:30:00").forEach { happenedAt ->
+      val result = validateTrackingUpdateRequest(trackingUpdate(happenedAt = happenedAt))
+      assert(result is RequestValidation.Invalid)
+      assert((result as RequestValidation.Invalid).messages.single().startsWith("happened_at"))
+    }
+  }
+
+  private fun trackingUpdate(happenedAt: String): TrackingUpdateRequest =
+    TrackingUpdateRequest(
+      shopifySubdomain = "acme",
+      shopifyOrderId = 1001L,
+      trackingNumber = "1Z999",
+      status = "in_transit",
+      happenedAt = happenedAt,
+      message = null,
+    )
+
   private fun validShipment(): Shipment =
     Shipment(
       trackingNumber = "1Z999AA10123456784",

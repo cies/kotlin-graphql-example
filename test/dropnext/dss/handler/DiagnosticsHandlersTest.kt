@@ -10,6 +10,7 @@ import dropnext.dss.domain.ShopifyAdminToken
 import dropnext.dss.domain.WebhookSubscriptionStatus
 import dropnext.dss.dssDependencies
 import dropnext.dss.lib.json.AppJson
+import dropnext.dss.lib.ktor.DssError
 import dropnext.dss.lib.shopify.graphql.ShopifyError
 import dropnext.dss.lib.shopify.token.InMemoryShopTokenStore
 import dropnext.dss.path.Paths
@@ -51,10 +52,12 @@ class DiagnosticsHandlersTest {
   }
 
   @Test
-  fun `health answers ok`() = withDssApp(deps()) { client ->
+  fun `health answers ok and names the running version`() = withDssApp(deps()) { client ->
     val r = client.get(Paths.health)
     assert(r.status == HttpStatusCode.OK)
-    assert(r.bodyAsText() == "ok")
+    val body = r.bodyAsText()
+    assert("\"status\":\"ok\"" in body)
+    assert("\"version\":\"test-version\"" in body)
   }
 
   @Test
@@ -120,6 +123,15 @@ class DiagnosticsHandlersTest {
       assert("missing Shopify Admin token" in r.body<ApiError>().error)
     }
 
+  /** The lookup behind the check got no answer from the monolith: a 502 to retry, not the 401 of a shop without a token. */
+  @Test
+  fun `api check answers 502 when the token lookup could not reach the monolith`() =
+    withDssApp(deps(tokenSourceUnavailable = true), authenticateAsMonolith = true) { client ->
+      val r = client.get("${Paths.apiCheck}?shop=acme.myshopify.com")
+      assert(r.status == HttpStatusCode.BadGateway)
+      assert(r.body<ApiError>().error == DssError.ShopifyAdminTokenUnavailable.message)
+    }
+
   @Test
   fun `api check answers 200 for a shop whose token resolves`() {
     val tokens = InMemoryShopTokenStore(mapOf(acmeShop to ShopifyAdminToken("shpat_test")))
@@ -181,15 +193,21 @@ class DiagnosticsHandlersTest {
 
   // ---------- helpers ----------
 
+  /** The factory is given the token store, so a check finds a service only for a shop whose token resolves, as in production. */
   private fun deps(
     config: Config = testConfig(dssApiKey = dssApiKey),
     tokens: InMemoryShopTokenStore = InMemoryShopTokenStore(),
     monolith: FakeMonolithService = FakeMonolithService(),
     shopify: FakeShopifyGraphqlService? = FakeShopifyGraphqlService(),
+    tokenSourceUnavailable: Boolean = false,
   ): DssDependencies = dssDependencies(
     config = config,
     monolithService = monolith,
     shopTokens = tokens,
-    shopifyGraphqlServiceFactory = FakeShopifyGraphqlServiceFactory(service = shopify),
+    shopifyGraphqlServiceFactory = FakeShopifyGraphqlServiceFactory(
+      service = shopify,
+      tokens = tokens,
+      tokenSourceUnavailable = tokenSourceUnavailable,
+    ),
   )
 }

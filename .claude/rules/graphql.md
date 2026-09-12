@@ -28,14 +28,20 @@ Referenced from `CLAUDE.md` ("Graphql queries").
 These must agree, and the compiler only checks the first:
 - `endpoint = "https://shopify.dev/admin-graphql-direct-proxy/<version>"` on `tasks.graphqlIntrospectSchema` in
   `build.gradle.kts` (introspection source; codegen itself reads the committed schema, so a build never downloads),
-- the `SHOPIFY_API_VERSION` default in `config/Config.kt`, documented in `.env.example` and the README env-var table,
-- nothing in `test/`: `testConfig()`, `FakeShopifyGraphqlServer.shopUrl()` and `shopifyGraphqlUrl(port)` all derive
-  the version from `Config.DEFAULT_SHOPIFY_API_VERSION`. Two literals are deliberate and stay: the URL-shape
+- `Config.SHOPIFY_API_VERSION` in `config/Config.kt`, the version the service speaks (a constant, not a setting),
+- nothing in `test/`: `FakeShopifyGraphqlServer.shopUrl()` and `shopifyGraphqlUrl(port)` derive the version from
+  `Config.SHOPIFY_API_VERSION`. Two literals are deliberate and stay: the URL-shape
   assertion in `OutBoundShopifyOAuthPathsTest`, and the off-default version in
   `HttpShopifyGraphqlServiceFactoryTest`, which exists to prove the factory uses the version it was configured with.
 
 Then `./gradlew graphqlIntrospectSchema graphqlGenerateClient`, commit the new `schema.graphql`, and fix the drift the
 compiler reports (removed fields, renamed enums). Introspection reads Shopify's public proxy and needs no token.
+
+Codegen refuses deprecated fields in an operation's selection (`allowDeprecatedFields = false`), so what the new
+version deprecates is a build error rather than a removal to be surprised by a year later. It cannot see deprecated
+input fields, which introspection leaves out of the schema, nor what Shopify deprecates after the schema was fetched:
+Shopify reports those per request, and `ShopifyDeprecationWarnings` logs them once per operation ("Shopify reports
+deprecated API use").
 
 ## Running operations
 - `ShopifyGraphqlService` is the only place operations are executed. Each method is a single-shot primitive — one per
@@ -43,9 +49,11 @@ compiler reports (removed fields, renamed enums). Introspection reads Shopify's 
   `HttpShopifyGraphqlService` is the implementation. Multi-step behaviour (scan-then-register, load-then-create) is a
   `workflow/` function composing primitives.
 - The triage happens once, in `HttpShopifyGraphqlService.execute` and the method that owns the payload: a thrown
-  transport or decoding failure is `ShopifyError.Network`, top-level `errors` (or a missing `data`) are
-  `ShopifyError.GraphqlError`, a mutation payload's `userErrors` are `ShopifyError.UserError`, an absent resource is
-  `ShopifyError.NotFound`. A caller pattern-matches on `Success` / `Failure` and never reads `response.errors`.
+  transport failure is `ShopifyError.Network`, a body the generated types cannot read is `ShopifyError.Undecodable`,
+  top-level `errors` (or a missing `data`) are a `ShopifyError.GraphqlError` carrying their `extensions.code`s, a
+  mutation payload's `userErrors` are `ShopifyError.UserError`, an absent resource is `ShopifyError.NotFound`. Each knows
+  whether a retry can help (`isRetryable`). A caller pattern-matches on `Success` / `Failure` and never reads
+  `response.errors`.
 - A method answers our own types where it can (`ShopIdentityInfo`, `ShopifyFulfillmentId`, `WebhookSubscriptionStatus`)
   and a generated snapshot only where a mapper needs the whole thing (`Order`, `Product`).
 - Outside `lib/shopify/`, only the layers `ArchitectureTest.graphqlGeneratedAllowList` names may import

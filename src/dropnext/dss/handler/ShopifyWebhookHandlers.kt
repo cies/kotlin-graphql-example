@@ -9,6 +9,7 @@ import dropnext.dss.lib.logging.currentTraceId
 import dropnext.dss.lib.monolith.MonolithService
 import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlService
 import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlServiceFactory
+import dropnext.dss.lib.shopify.token.ShopLookup
 import dropnext.dss.lib.shopify.webhook.ShopifyHmacVerifierService
 import dropnext.dss.lib.shopify.webhook.ShopifyWebhookTopic
 import dropnext.dss.lib.shopify.webhook.graphqlResourceIdFromShopifyWebhook
@@ -26,9 +27,20 @@ import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import java.time.Instant
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.withTimeoutOrNull
 
 
 private val log = KotlinLogging.logger {}
+
+/**
+ * How long the work behind one delivery may take. Shopify waits five seconds for an answer and counts one that does not
+ * come as a failed delivery, the same as a `5xx`. Four seconds leaves the fifth for reading and verifying the body and for
+ * the answer's way back. Past it the work is cancelled and the answer is a `502`: what Shopify would have recorded anyway,
+ * and what gets the delivery sent again. Whatever the cancelled work already did in the monolith is safe to repeat.
+ */
+val WEBHOOK_MIRROR_BUDGET: Duration = 4.seconds
 
 /**
  * The one inbound Shopify webhook endpoint: verifies the body signature, resolves the shop and its
@@ -42,6 +54,7 @@ class ShopifyWebhookHandlers(
   private val shopifyGraphqlServiceFactory: ShopifyGraphqlServiceFactory,
   private val monolithService: MonolithService,
   private val shopifyHmacVerifierService: ShopifyHmacVerifierService,
+  private val mirrorBudget: Duration = WEBHOOK_MIRROR_BUDGET,
 ) {
 
   suspend fun handleShopifyWebhook(call: ApplicationCall) {
@@ -69,7 +82,7 @@ class ShopifyWebhookHandlers(
       log.error { "Webhook: no shop domain topic=${topic.raw} shopDomainHeader=$shopDomainHeader" }
       WebhookMirrorOutcome.Skipped(WebhookSkipReason.NO_SHOP_DOMAIN)
     } else {
-      mirror(topic, shop, bodyString)
+      withTimeoutOrNull(mirrorBudget) { mirror(topic, shop, bodyString) } ?: WebhookMirrorOutcome.TimedOut
     }
 
     val report = WebhookDeliveryReport(
@@ -94,8 +107,7 @@ class ShopifyWebhookHandlers(
   // body carries its id), and a shop without a token must not lose its deletes.
   private suspend fun mirror(topic: ShopifyWebhookTopic, shop: ShopDomain, bodyString: String): WebhookMirrorOutcome =
     when (topic) {
-      ShopifyWebhookTopic.ProductsCreate, ShopifyWebhookTopic.ProductsUpdate -> {
-        val shopify = shopifyServiceOrLog(shop, topic) ?: return skipped(WebhookSkipReason.NO_ADMIN_TOKEN)
+      ShopifyWebhookTopic.ProductsCreate, ShopifyWebhookTopic.ProductsUpdate -> withShopifyService(shop, topic) { shopify ->
         val gid = resourceGidOrLog(topic, bodyString) ?: return skipped(WebhookSkipReason.NO_RESOURCE_ID)
         syncShopifyProductToMonolith(shopify, monolithService, gid)
       }
@@ -105,8 +117,7 @@ class ShopifyWebhookHandlers(
         deleteShopifyProductFromMonolith(monolithService, shop, productId)
       }
 
-      ShopifyWebhookTopic.OrdersCreate -> {
-        val shopify = shopifyServiceOrLog(shop, topic) ?: return skipped(WebhookSkipReason.NO_ADMIN_TOKEN)
+      ShopifyWebhookTopic.OrdersCreate -> withShopifyService(shop, topic) { shopify ->
         val gid = resourceGidOrLog(topic, bodyString) ?: return skipped(WebhookSkipReason.NO_RESOURCE_ID)
         syncShopifyOrderToMonolith(shopify, monolithService, gid, topic.raw)
       }
@@ -119,16 +130,28 @@ class ShopifyWebhookHandlers(
 
   private fun skipped(reason: WebhookSkipReason) = WebhookMirrorOutcome.Skipped(reason)
 
-  /** The shop's Graphql service, or `null` after the error line that is all an operator gets. */
-  private suspend fun shopifyServiceOrLog(shop: ShopDomain, topic: ShopifyWebhookTopic): ShopifyGraphqlService? =
-    shopifyGraphqlServiceFactory.forShop(shop)
-      ?: run {
+  /**
+   * Runs [block] with the shop's Graphql service. A shop without a token is skipped after the error line that is all an
+   * operator gets. A token the monolith could not be asked for is a failure Shopify is asked to redeliver instead: the
+   * shop may well have one, and acknowledging the delivery would lose it.
+   */
+  private suspend inline fun withShopifyService(
+    shop: ShopDomain,
+    topic: ShopifyWebhookTopic,
+    block: (ShopifyGraphqlService) -> WebhookMirrorOutcome,
+  ): WebhookMirrorOutcome =
+    when (val lookup = shopifyGraphqlServiceFactory.forShop(shop)) {
+      is ShopLookup.Found -> block(lookup.value)
+      ShopLookup.Missing -> {
         log.error {
           "Webhook: no Admin token topic=${topic.raw} shop=$shop " +
             "(configure DSS_SHOP_ACCESS_TOKENS or complete the OAuth install)"
         }
-        null
+        skipped(WebhookSkipReason.NO_ADMIN_TOKEN)
       }
+      // The lookup has logged the monolith's failure.
+      ShopLookup.Unavailable -> WebhookMirrorOutcome.TokenUnavailable
+    }
 
   private fun resourceGidOrLog(topic: ShopifyWebhookTopic, bodyString: String): String? =
     graphqlResourceIdFromShopifyWebhook(topic.raw, bodyString)

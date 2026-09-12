@@ -7,6 +7,7 @@ import dropnext.dss.lib.ktor.respondTextError
 import dropnext.dss.lib.monolith.MonolithService
 import dropnext.dss.lib.shopify.graphql.ShopifyGraphqlServiceFactory
 import dropnext.dss.lib.shopify.oauth.ShopifyOAuthService
+import dropnext.dss.lib.shopify.token.ShopLookup
 import dropnext.dss.lib.shopify.token.ShopTokenStore
 import dropnext.dss.lib.shopify.webhook.ShopifyHmacVerifierService
 import dropnext.dss.path.Paths
@@ -73,7 +74,7 @@ class OAuthHandlers(
     // Remembered under the shop Shopify redirected for; the workflow remembers it again under the
     // canonical domain once it has asked Shopify, so the factory can hand out a service right away.
     shopTokens.remember(shop, token)
-    val shopify = shopifyGraphqlServiceFactory.forShop(shop)
+    val shopify = (shopifyGraphqlServiceFactory.forShop(shop) as? ShopLookup.Found)?.value
       ?: return call.respondTextError(DssError.UpstreamFailure("could not build a Shopify service for $shop"))
 
     val report = installShop(

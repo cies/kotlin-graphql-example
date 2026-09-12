@@ -3,7 +3,9 @@ package dropnext.dss.lib.shopify.graphql
 import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
 import dropnext.dss.domain.ShopDomain
 import dropnext.dss.lib.shopify.oauth.adminGraphqlUrl
+import dropnext.dss.lib.shopify.token.ShopLookup
 import dropnext.dss.lib.shopify.token.ShopTokenStore
+import dropnext.dss.lib.shopify.token.map
 import io.ktor.client.HttpClient
 import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
@@ -23,17 +25,17 @@ class HttpShopifyGraphqlServiceFactory(
 
   private val gqlClientCache = GraphqlClientCache(httpClient)
 
-  override suspend fun forShop(shop: ShopDomain): ShopifyGraphqlService? {
-    val token = tokens.resolve(shop) ?: return null
-    return HttpShopifyGraphqlService(
-      shop = shop,
-      gqlClient = gqlClientCache.forShop(shop, apiVersion),
-      accessToken = token,
-      // A rejected token is dropped so the next request re-resolves it from the monolith, which may
-      // hold a newer one from a reinstall this instance never saw.
-      onTokenRejected = { tokens.forget(shop) },
-    )
-  }
+  override suspend fun forShop(shop: ShopDomain): ShopLookup<ShopifyGraphqlService> =
+    tokens.resolve(shop).map { token ->
+      HttpShopifyGraphqlService(
+        shop = shop,
+        gqlClient = gqlClientCache.forShop(shop, apiVersion),
+        accessToken = token,
+        // A rejected token is dropped so the next request re-resolves it from the monolith, which may
+        // hold a newer one from a reinstall this instance never saw.
+        onTokenRejected = { tokens.forget(shop, token) },
+      )
+    }
 }
 
 /**

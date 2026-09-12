@@ -2,6 +2,8 @@ query GetOrderForDss($id: ID!) {
   order(id: $id) {
     id
     name
+    # Not mapped into the monolith order: kept in the snapshot for discoverability. Like the shipping address, it is
+    # protected customer data, which a public app may only read with Shopify's approval.
     email
     legacyResourceId
     createdAt

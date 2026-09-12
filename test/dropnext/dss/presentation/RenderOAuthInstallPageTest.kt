@@ -1,6 +1,7 @@
 package dropnext.dss.presentation
 
 import dropnext.dss.domain.MonolithPersistOutcome
+import dropnext.dss.domain.ProductCount
 import dropnext.dss.domain.ShopDomain
 import dropnext.dss.domain.ShopInstallReport
 import dropnext.dss.domain.ShopifyShopId
@@ -24,13 +25,14 @@ class RenderOAuthInstallPageTest {
     shop: String = "acme.myshopify.com",
     monolithPersist: MonolithPersistOutcome = MonolithPersistOutcome.Persisted(storeId = StoreId(1L)),
     topics: List<WebhookTopicRegistration> = emptyList(),
+    productCount: ProductCount? = ProductCount(count = 3, isExact = true),
   ): String =
     renderOAuthInstallPage(
       ShopInstallReport(
         shop = ShopDomain.parse(shop)!!,
         shopId = ShopifyShopId(9988L),
         monolithPersist = monolithPersist,
-        productSampleCount = 3,
+        productCount = productCount,
         webhookCallbackUrl = CALLBACK_URL,
         webhooks = WebhookRegistrationReport(topics),
       ),
@@ -42,6 +44,18 @@ class RenderOAuthInstallPageTest {
     assert(html.startsWith("<!DOCTYPE html>"))
     assert("<h1>App installed</h1>" in html)
     assert("Shop: acme.myshopify.com (id 9988)" in html)
+  }
+
+  /** Shopify stops counting at a cap (10,000 by default), so a count it did not finish is a lower bound. */
+  @Test
+  fun `the product count is shown as counted, and as a lower bound past Shopify's cap`() {
+    assert("Products in the shop: 3" in renderBase())
+    assert("Products in the shop: at least 10000" in renderBase(productCount = ProductCount(count = 10000, isExact = false)))
+  }
+
+  @Test
+  fun `a failed product count reads as unknown rather than zero`() {
+    assert("Products in the shop: unknown (lookup failed)" in renderBase(productCount = null))
   }
 
   @Test

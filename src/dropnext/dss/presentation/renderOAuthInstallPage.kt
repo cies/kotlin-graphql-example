@@ -1,6 +1,7 @@
 package dropnext.dss.presentation
 
 import dropnext.dss.domain.MonolithPersistOutcome
+import dropnext.dss.domain.ProductCount
 import dropnext.dss.domain.ShopInstallReport
 import dropnext.dss.domain.WebhookRegistrationReport
 import dropnext.dss.domain.WebhookTopicRegistration
@@ -18,7 +19,7 @@ fun renderOAuthInstallPage(report: ShopInstallReport): String = StringBuilder("<
     h1 { +"App installed" }
     p { +"Shop: ${report.shop.normalizedShopifyHost} (id ${report.shopId?.value ?: "unknown"})" }
     renderMonolithPersistBlock(report.monolithPersist)
-    p { +"Products on the first catalogue page: ${report.productSampleCount ?: "unknown (lookup failed)"}" }
+    p { +"Products in the shop: ${report.productCount?.let(::describeProductCount) ?: "unknown (lookup failed)"}" }
     p {
       +"Webhook callback URL: "
       code { +report.webhookCallbackUrl }
@@ -30,6 +31,10 @@ fun renderOAuthInstallPage(report: ShopInstallReport): String = StringBuilder("<
     }
   }
 }.toString()
+
+/** Shopify stops counting at a cap, past which its count is a lower bound. */
+private fun describeProductCount(productCount: ProductCount): String =
+  if (productCount.isExact) "${productCount.count}" else "at least ${productCount.count}"
 
 private fun FlowContent.renderMonolithPersistBlock(outcome: MonolithPersistOutcome) {
   when (outcome) {

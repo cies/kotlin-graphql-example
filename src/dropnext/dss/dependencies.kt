@@ -5,6 +5,7 @@ import dropnext.dss.handler.DiagnosticsHandlers
 import dropnext.dss.handler.MonolithWebhookHandlers
 import dropnext.dss.handler.OAuthHandlers
 import dropnext.dss.handler.ShopifyWebhookHandlers
+import dropnext.dss.handler.WEBHOOK_MIRROR_BUDGET
 import dropnext.dss.lib.ktor.createMonolithHttpClient
 import dropnext.dss.lib.ktor.createSharedHttpClient
 import dropnext.dss.lib.monolith.HttpMonolithService
@@ -19,6 +20,7 @@ import dropnext.dss.lib.shopify.webhook.ShopifyHmacVerifierService
 import dropnext.dss.workflow.resolveShopTokenFromMonolith
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.ktor.client.HttpClient
+import kotlin.time.Duration
 
 
 private val log = KotlinLogging.logger {}
@@ -82,7 +84,7 @@ fun dssDependencies(
   shopifyGraphqlServiceFactory: ShopifyGraphqlServiceFactory = HttpShopifyGraphqlServiceFactory(
     httpClient = httpClient,
     tokens = shopTokens,
-    apiVersion = config.apiVersion,
+    apiVersion = Config.SHOPIFY_API_VERSION,
   ),
   oauthClient: ShopifyOAuthService = HttpShopifyOAuthService(
     httpClient = httpClient,
@@ -92,11 +94,12 @@ fun dssDependencies(
     redirectUrl = config.redirectUrl,
   ),
   shopifyHmacVerifierService: ShopifyHmacVerifierService = ShopifyHmacVerifierService(config.appClientSecret),
+  webhookMirrorBudget: Duration = WEBHOOK_MIRROR_BUDGET,
 ): DssDependencies = DssDependencies(
   config = config,
   httpClient = httpClient,
   monolithHttpClient = monolithHttpClient,
-  diagnosticsHandlers = DiagnosticsHandlers(config, shopTokens, shopifyGraphqlServiceFactory),
+  diagnosticsHandlers = DiagnosticsHandlers(config, shopifyGraphqlServiceFactory),
   oauthHandlers = OAuthHandlers(
     config.dssBaseUrl,
     oauthClient,
@@ -109,6 +112,7 @@ fun dssDependencies(
     shopifyGraphqlServiceFactory,
     monolithService,
     shopifyHmacVerifierService,
+    webhookMirrorBudget,
   ),
   monolithWebhookHandlers = MonolithWebhookHandlers(
     shopifyGraphqlServiceFactory,

@@ -19,6 +19,12 @@ sealed interface WebhookMirrorOutcome {
   data class ShopifyFailed(val error: ShopifyError) : WebhookMirrorOutcome
 
   data class MonolithFailed(val error: MonolithError) : WebhookMirrorOutcome
+
+  /** The shop's token is not in memory and the monolith, which holds it, could not be asked: not a shop without one. */
+  data object TokenUnavailable : WebhookMirrorOutcome
+
+  /** The work outlived the time Shopify waits for an answer and was cancelled; the redelivery starts it again. */
+  data object TimedOut : WebhookMirrorOutcome
 }
 
 /** Why a delivery was skipped, as a closed set so a log query or a dashboard filter can count each kind. */
@@ -32,19 +38,17 @@ enum class WebhookSkipReason {
 }
 
 /**
- * Whether a redelivery has a chance: Shopify or the monolith not answering, throttling, or answering
- * a `5xx` passes; a token Shopify refuses, a request the monolith refuses, or a resource that is
- * gone does not, and answering a `5xx` for those would only make Shopify hammer a closed door.
+ * Whether a redelivery has a chance: Shopify or the monolith not answering (in time), throttling, or answering a `5xx`
+ * passes; a token Shopify refuses, a request either side refuses, a resource that is gone or an answer that no longer
+ * reads does not, and answering a `5xx` for those would only make Shopify hammer a closed door.
  */
 val WebhookMirrorOutcome.isTransient: Boolean
   get() = when (this) {
     is WebhookMirrorOutcome.Mirrored, is WebhookMirrorOutcome.Skipped -> false
-    is WebhookMirrorOutcome.ShopifyFailed -> when (error) {
-      is ShopifyError.Network, is ShopifyError.HttpError, is ShopifyError.GraphqlError -> true
-      is ShopifyError.TokenRejected, is ShopifyError.UserError, is ShopifyError.NotFound -> false
-    }
+    is WebhookMirrorOutcome.ShopifyFailed -> error.isRetryable
     is WebhookMirrorOutcome.MonolithFailed -> when (val error = error) {
       is MonolithError.Transport, is MonolithError.Undecodable -> true
       is MonolithError.Rejected -> error.status >= 500
     }
+    is WebhookMirrorOutcome.TokenUnavailable, is WebhookMirrorOutcome.TimedOut -> true
   }

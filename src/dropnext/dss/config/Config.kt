@@ -7,6 +7,7 @@ import dropnext.dss.domain.ShopDomain
 import dropnext.dss.domain.ShopifyAdminToken
 import dropnext.dss.domain.ShopifyAppSecret
 import dropnext.dss.path.Paths
+import java.net.URI
 
 
 /**
@@ -19,7 +20,6 @@ data class Config(
   val scopes: String,
   val dssBaseUrl: String,
   val oauthRedirectPath: String,
-  val apiVersion: String,
   val serverPort: Int,
   val monolithBaseUrl: String,
   val monolithApiPrefix: String?,
@@ -31,6 +31,8 @@ data class Config(
   val logflareApiKey: LogflareApiKey?,
   val logflareEndpoint: String?,
   val mode: DssMode,
+  /** What `/health` and the startup log report: the image tag in a container, a marker outside one. */
+  val versionTag: String,
 ) {
   /** Log shipping needs both halves; with either missing the service logs to stdout only. */
   val logflareEnabled: Boolean
@@ -69,8 +71,8 @@ data class Config(
       if (isPlaceholder(dssBaseUrl) || dssBaseUrl.contains("example.com", ignoreCase = true)) {
         error("DSS_BASE_URL is placeholder.")
       }
-      if (!dssBaseUrl.startsWith("https://", ignoreCase = true)) {
-        error("DSS_BASE_URL should use https://.")
+      if (absoluteHttpUrlOrNull(dssBaseUrl)?.scheme?.equals("https", ignoreCase = true) != true) {
+        error("DSS_BASE_URL must be an absolute https:// URL, was '$dssBaseUrl'.")
       }
       if (dssApiKey.contains("change_this", ignoreCase = true)) {
         error("DSS_API_KEY is still a placeholder value.")
@@ -86,8 +88,24 @@ data class Config(
       if (allowInsecureMonolithUrl && mode.isProd) {
         error("DSS_ALLOW_INSECURE_MONOLITH=true is for local development only: set DSS_MODE=DEV or drop the flag.")
       }
-      if (monolithBaseUrl.startsWith("http:", ignoreCase = true) && !allowInsecureMonolithUrl) {
+      // A value without a scheme used to pass here and then fail on every monolith call instead.
+      val monolithUrl = absoluteHttpUrlOrNull(monolithBaseUrl)
+        ?: error("MONOLITH_BASE_URL must be an absolute URL such as https://monolith.example.org, was '$monolithBaseUrl'.")
+      if (monolithUrl.scheme.equals("http", ignoreCase = true) && !allowInsecureMonolithUrl) {
         error("MONOLITH_BASE_URL must use https:// (or set DSS_ALLOW_INSECURE_MONOLITH=true with DSS_MODE=DEV for local dev).")
+      }
+
+      val oauthRedirectPath = value("OAUTH_REDIRECT_PATH") ?: Paths.defaultOAuthCallback
+      // Appended to DSS_BASE_URL for the redirect URL Shopify must match exactly, and mounted as a route: anything but a
+      // plain absolute path breaks one of the two, and neither says so at startup.
+      if (!oauthRedirectPath.isPlainAbsolutePath()) {
+        error("OAUTH_REDIRECT_PATH must be an absolute path such as /oauth/callback, was '$oauthRedirectPath'.")
+      }
+
+      val logflareEndpoint = value("LOGFLARE_ENDPOINT")
+      // The log shipper builds its URLs from this on its own thread, where a malformed value stopped the shipping without a word.
+      if (logflareEndpoint != null && absoluteHttpUrlOrNull(logflareEndpoint) == null) {
+        error("LOGFLARE_ENDPOINT must be an absolute URL such as https://api.logflare.app, was '$logflareEndpoint'.")
       }
 
       return Config(
@@ -95,8 +113,7 @@ data class Config(
         appClientSecret = ShopifyAppSecret(appClientSecret),
         scopes = scopes,
         dssBaseUrl = dssBaseUrl.trimEnd('/'),
-        oauthRedirectPath = value("OAUTH_REDIRECT_PATH") ?: Paths.defaultOAuthCallback,
-        apiVersion = value("SHOPIFY_API_VERSION") ?: DEFAULT_SHOPIFY_API_VERSION,
+        oauthRedirectPath = oauthRedirectPath,
         serverPort = resolveServerPort(env["PORT"]),
         monolithBaseUrl = monolithBaseUrl,
         monolithApiPrefix = value("MONOLITH_API_PREFIX")?.trim { it == '/' }?.takeIf { it.isNotEmpty() },
@@ -106,13 +123,19 @@ data class Config(
         shopAccessTokens = parseShopAccessTokens(value("DSS_SHOP_ACCESS_TOKENS")),
         logflareSourceName = value("LOGFLARE_SOURCE_NAME"),
         logflareApiKey = value("LOGFLARE_API_KEY")?.let(::LogflareApiKey),
-        logflareEndpoint = value("LOGFLARE_ENDPOINT"),
+        logflareEndpoint = logflareEndpoint,
         mode = mode,
+        // The Dockerfile bakes it in from the build argument `dnc` passes, so a container reports the tag ECR
+        // knows its image by. Nothing sets it for a local run, and the fallback says so.
+        versionTag = value("VERSION_TAG") ?: "local-dev",
       )
     }
 
-    /** Must agree with the introspection endpoint in `build.gradle.kts`; the bump procedure is in `.claude/rules/graphql.md`. */
-    const val DEFAULT_SHOPIFY_API_VERSION = "2026-04"
+    /**
+     * The Admin API version the Graphql client is generated for. Not a setting: it must agree with the introspection
+     * endpoint in `build.gradle.kts`, and the bump procedure is in `.claude/rules/graphql.md`.
+     */
+    const val SHOPIFY_API_VERSION = "2026-04"
 
     /**
      * PaaS UIs sometimes define `PORT=` (empty string), wiping Docker `ENV PORT=9999`;
@@ -144,6 +167,18 @@ data class Config(
 
 private fun isPlaceholder(value: String): Boolean =
   value.contains("your_", ignoreCase = true) || value.contains("change_me", ignoreCase = true)
+
+/** [raw] as an `http` or `https` URL with a host, or `null` for anything less: a bare host, a path, a typo in the scheme. */
+private fun absoluteHttpUrlOrNull(raw: String): URI? {
+  val uri = runCatching { URI(raw) }.getOrNull() ?: return null
+  val scheme = uri.scheme ?: return null
+  if (!scheme.equals("http", ignoreCase = true) && !scheme.equals("https", ignoreCase = true)) return null
+  return uri.takeUnless { it.host.isNullOrBlank() }
+}
+
+/** `/` alone is refused too: it is the index route. */
+private fun String.isPlainAbsolutePath(): Boolean =
+  length > 1 && startsWith('/') && none { it.isWhitespace() || it == '?' || it == '#' }
 
 /**
  * An env value as a dotenv file or a PaaS dashboard may have left it:

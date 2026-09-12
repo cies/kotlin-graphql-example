@@ -62,8 +62,9 @@ of it. What can still be checked before the first mutation is whether the new sh
 
 - `db/sql/job/syncShipmentsWithFulfillmentsRead.kt`: `selectSyncShipmentsWithFulfillmentsPayload` also selects
   the tracking numbers of shipments of the same `shopify_order_id` with `replaced_at is not null`, and puts
-  them in the request. All of them, every run: the DSS treats a cancel of an already-cancelled fulfillment as
-  done, so repeating the list is free and makes a retry after a failed cancel converge.
+  them in the request. All of them, every run: the DSS plans a cancel only for a fulfillment that is still live on
+  the order it loads (the lookup of `010` ignores `CANCELLED` ones), so repeating the list is free and makes a retry
+  after a failed cancel converge.
 - The job's "nothing left to sync" no-op must not swallow a pending cancel: a run with no unsynced shipments
   but with replaced ones that were never mirrored still has to POST. The simplest rule that gives this is to
   stamp replaced shipments too, in a `replacement_synced_at` (or reuse `synced_at`, which a replaced shipment
@@ -103,8 +104,9 @@ of it. What can still be checked before the first mutation is whether the new sh
   cancelled ids and the created ids so far, beside the failure (`030` defines the shape). The summary log line's
   `canceled=` count becomes meaningful again.
 - Failures:
-  - A `ShopifyError.UserError` from a cancel that is not "already cancelled" fails the sync as a `400`, exactly as a
-    refused create does: no later cancel and no create is sent, the cancels before it stay done, the monolith drops
+  - A `ShopifyError.UserError` from a cancel (Shopify refused it and did not report the fulfillment as cancelled)
+    fails the sync as a `400`, exactly as a refused create does: no later cancel and no create is sent, the cancels
+    before it stay done, the monolith drops
     a `4xx` for good, and a human looks at the log.
   - A transport or Graphql failure of a cancel, of the reload or of a create is a `502`; the monolith retries with
     the same `replaced_tracking_numbers`, and the retry converges (see "Edge cases").
@@ -158,7 +160,9 @@ of it. What can still be checked before the first mutation is whether the new sh
 - `ShopifyMutation.FulfillmentCancel`, the cancel branch of `effectShopifyMutations`,
   `ShopifyGraphqlService.cancelFulfillment` and `FulfillmentCancelMutation.graphql`: all present, all
   tested, currently without a producer. This spec is the producer.
-- `HttpShopifyGraphqlService.cancelFulfillment` already treats an "already cancelled" user error as success.
+- `HttpShopifyGraphqlService.cancelFulfillment` succeeds when Shopify's answer carries the fulfillment as `CANCELLED`,
+  whatever user error comes with it, and answers any other refusal as a `UserError`. It does not read Shopify's
+  wording, so it is the plan that keeps an already-cancelled fulfillment from being cancelled again (see "Idempotence").
 - `ShopifyGraphqlService.orderForDss` for the reload; `FakeShopifyGraphqlService.orderForDssResultQueue` serves the
   order before and after the cancels.
 - The live-fulfillment-by-tracking-number lookup and the shipment skip from `010`.

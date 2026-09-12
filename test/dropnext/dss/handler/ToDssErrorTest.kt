@@ -20,6 +20,13 @@ class ToDssErrorTest {
     assert(ShopifyError.Network("down").toDssError() is DssError.UpstreamFailure)
   }
 
+  /** The decoder's complaint quotes Shopify's body, which can carry customer data. */
+  @Test
+  fun `an unreadable answer reaches the caller without what the decoder quoted`() {
+    val mapped = ShopifyError.Undecodable("JSON input: {\"email\":\"jane@example.com\"}").toDssError()
+    assert(mapped == DssError.UpstreamFailure("Shopify's answer could not be read"))
+  }
+
   /** A retry cannot fix a revoked token, so it must not be filed under "upstream" where the monolith would retry it. */
   @Test
   fun `a rejected token is the shop's install problem`() {

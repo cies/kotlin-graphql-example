@@ -50,6 +50,14 @@ sealed interface DssError {
       "Shopify rejected the shop's Admin token (HTTP $httpStatus): the app was uninstalled or the token revoked, reinstall it"
   }
 
+  /**
+   * 502 — the shop's token is not in memory and the monolith, which holds every token, could not be asked. Kept apart
+   * from [MissingShopifyAdminToken] because it asks for the opposite: that one no retry can fix, this one a retry may.
+   */
+  data object ShopifyAdminTokenUnavailable : DssError {
+    override val message: String = "could not look up the shop's Shopify Admin token at the monolith"
+  }
+
   /** 403 — HMAC or signed-state verification failed. */
   data class InvalidSignature(override val message: String) : DssError
 
@@ -88,7 +96,9 @@ fun DssError.toHttpStatus(): HttpStatusCode = when (this) {
 
   is DssError.PayloadTooLarge -> HttpStatusCode.PayloadTooLarge
 
-  is DssError.UpstreamFailure -> HttpStatusCode.BadGateway
+  is DssError.UpstreamFailure,
+  is DssError.ShopifyAdminTokenUnavailable,
+    -> HttpStatusCode.BadGateway
 
   is DssError.Internal -> HttpStatusCode.InternalServerError
 }

@@ -3,49 +3,41 @@
 # Multi-stage build for the dropnext-shopify-service (DSS). Multi-arch: amd64 (what we deploy today) and arm64 both work.
 # `dnc -e <env> deploy` builds and pushes it (default `--arch amd64`); to build by hand:
 #
-#   docker buildx build --platform linux/amd64 \
-#     --build-arg VERSION_TAG=$(git rev-parse --short HEAD) \
-#     -t dropnext-shopify-service:$(git rev-parse --short HEAD) \
-#     --load .
+#   tag=$(date -u +%Y%m%dT%H%M%SZ)-$(git rev-parse --short=12 HEAD)-amd64
+#   docker buildx build --platform linux/amd64 --build-arg VERSION_TAG=$tag -t dropnext-shopify-service:$tag --load .
+#
+# VERSION_TAG is the only way the running app learns its version (`/health`, the startup log): `.git/` is not in
+# the build context, and `dnc` passes the image tag it pushes, so the app reports the tag ECR knows it by.
 #
 # The final image runs a jlinked custom JRE built from Amazon Corretto 25
-# on top of amazonlinux:2023-minimal (~50–80MB total).
+# on top of amazonlinux:2023-minimal (~170MB uncompressed; see the runtime stage for where that goes).
 
 
 # ---------- Stage 1: Gradle build ----------
 # Corretto 25 on Amazon Linux 2023 — multi-arch (amd64 + arm64).
 FROM amazoncorretto:25-al2023 AS build
 
-# Tools Gradle needs at runtime: tar/gzip for plugin downloads, findutils for the
-# script wiring, git so VERSION_TAG can come from a build arg without surprising Gradle.
+# Tools Gradle needs at runtime: tar/gzip for plugin downloads, findutils for the script wiring.
 RUN dnf install -y --setopt=install_weak_deps=False tar gzip findutils \
   && dnf clean all
 
 WORKDIR /src
 
-# Prime the Gradle dependency cache. Copy only build configuration first so the cache layer
-# is reused as long as build files do not change. The OpenAPI spec is required at configure
-# time because `openApiGenerate` resolves its input spec when the build script is evaluated
-# (see build.gradle.kts:openApiSpecFile) — copy just that one file from `src/resources/`
-# so the rest of `src/` can land in a later, less frequently invalidated layer.
+# The build configuration, then the sources. The dependencies are downloaded by the build step below into the
+# BuildKit cache mount, which outlives every layer, so no separate step has to prime it.
 COPY gradle ./gradle
 COPY gradlew settings.gradle.kts build.gradle.kts gradle.properties ./
-COPY src/resources/monolith-dss-openapi.json ./src/resources/monolith-dss-openapi.json
 
-# Resolve dependencies into the BuildKit cache mount. `--no-daemon` because containers.
-RUN --mount=type=cache,target=/root/.gradle,sharing=locked \
-  chmod +x gradlew && ./gradlew --no-daemon --no-configuration-cache help
-
-# Now bring in the actual sources. Tests are intentionally not copied — they are excluded
-# via `.dockerignore` and the build runs `installDist -x test`. CI runs the suite separately.
+# Tests are intentionally not copied — they are excluded via `.dockerignore` and the build runs
+# `installDist -x test`. CI runs the suite separately.
 # `src/graphql-schema/schema.graphql` is committed, so no introspection is needed at build time.
 COPY src ./src
 
 # Produce the runnable distribution at build/install/dropnext-shopify-service/{bin,lib}.
 # Tests are skipped here — run them in CI before building the image.
-# VERSION_TAG flows directly into the runtime stage as an ENV (see Stage 3).
+# `--no-daemon` because containers.
 RUN --mount=type=cache,target=/root/.gradle,sharing=locked \
-  ./gradlew --no-daemon --no-configuration-cache installDist -x test
+  chmod +x gradlew && ./gradlew --no-daemon --no-configuration-cache installDist -x test
 
 
 # ---------- Stage 2: jlink a custom JRE ----------
@@ -60,22 +52,24 @@ RUN dnf install -y --setopt=install_weak_deps=False binutils && dnf clean all
 # modular/non-modular classpaths (Ktor + OkHttp + graphql-kotlin pull in plain JARs that
 # `--ignore-missing-deps` does not fully cover).
 #
-# This list is the conservative superset for "Ktor server + HTTP client + Graphql + JSON":
+# The list was checked against `jdeps -s` over the runtime classpath plus every jar's
+# module-info: each module below is statically referenced by our code or a dependency,
+# except the last two, which are service providers loaded by name and cannot show up in
+# such a scan. Modules that neither check turned up (jdk.crypto.cryptoki, jdk.naming.dns)
+# were dropped; jdk.crypto.ec is an empty module since JDK 22, elliptic-curve TLS lives in
+# java.base.
 #   java.base            — implicit, always present
-#   java.instrument      — agents (incl. logging frameworks that probe for them)
+#   java.instrument      — kotlinx-coroutines (debug agent probe)
 #   java.logging         — j.u.l → SLF4J bridge
 #   java.management      — JMX, MaxRAMPercentage relies on it for container memory detection
-#   java.naming          — JNDI (referenced by some HTTPS/proxy detection paths)
-#   java.net.http        — JDK HttpClient (transitive fallback in some libs)
+#   java.naming          — logback requires it
+#   java.net.http        — JDK HttpClient (our own code)
 #   java.xml             — Logback parses `logback.xml` via SAX at JVM startup
-#   jdk.charsets         — non-default charsets (logback file appenders, etc.)
-#   jdk.crypto.cryptoki  — PKCS11 (TLS keystore types)
-#   jdk.crypto.ec        — TLS elliptic-curve ciphers (HTTPS clients: Shopify Admin, monolith)
-#   jdk.naming.dns       — DNS lookups via JNDI
-#   jdk.unsupported      — sun.misc.Unsafe (OkHttp/Netty and many performance-sensitive libs)
-#   jdk.zipfs            — zip:// NIO filesystem (read jars/resources)
+#   jdk.unsupported      — sun.misc.Unsafe (Ktor, kotlinx-coroutines, OkHttp)
+#   jdk.charsets         — non-default charsets, loaded by name
+#   jdk.zipfs            — zip:// NIO filesystem provider, loaded by name
 RUN jlink \
-  --add-modules java.base,java.instrument,java.logging,java.management,java.naming,java.net.http,java.xml,jdk.charsets,jdk.crypto.cryptoki,jdk.crypto.ec,jdk.naming.dns,jdk.unsupported,jdk.zipfs \
+  --add-modules java.base,java.instrument,java.logging,java.management,java.naming,java.net.http,java.xml,jdk.unsupported,jdk.charsets,jdk.zipfs \
   --strip-debug \
   --no-man-pages \
   --no-header-files \
@@ -84,7 +78,12 @@ RUN jlink \
 
 
 # ---------- Stage 3: Runtime ----------
-# AL2023 minimal is ~40MB and ships microdnf for installing the few extras we need.
+# AL2023 minimal is ~100MB uncompressed — over half of the final image — and ships microdnf
+# for installing the few extras we need. `2023-minimal` is a rolling tag within the AL2023
+# major, so every build picks up the latest patch level; Amazon publishes no newer major yet.
+# The image could be slimmed down considerably with Google's `java-base-debian12` distroless
+# base (~30MB, made for jlinked runtimes), at the cost of no shell (breaks ECS Exec) and no
+# curl for the HEALTHCHECK.
 # This tag only exists on Amazon ECR Public — Docker Hub has `amazonlinux:2023` (full,
 # ~150MB) and `amazonlinux:minimal` (rolling), but not the pinned `2023-minimal` combo.
 FROM public.ecr.aws/amazonlinux/amazonlinux:2023-minimal AS runtime
@@ -106,12 +105,16 @@ ENV PATH="${JAVA_HOME}/bin:${PATH}"
 COPY --from=jlink /javaruntime ${JAVA_HOME}
 COPY --from=build --chown=dropnext:dropnext /src/build/install/dropnext-shopify-service /app
 
-# Forwarded into the running JVM. MaxRAMPercentage lets the JVM size its heap from the
-# container memory limit. Headless avoids accidental AWT init.
+# JAVA_OPTS is read by the start script the Gradle `application` plugin generates. Not JAVA_TOOL_OPTIONS:
+# every JVM reads that one and prints "Picked up JAVA_TOOL_OPTIONS" to stderr for it.
+# MaxRAMPercentage lets the JVM size its heap from the container memory limit. ExitOnOutOfMemoryError
+# ends the process on the first OutOfMemoryError, so ECS replaces the task instead of keeping one alive
+# whose threads died mid-request. Headless avoids accidental AWT init.
+# The image tag, handed to the app as its version. `dnc` always passes it; the default marks a hand build that did not.
 ARG VERSION_TAG=unspecified
 ENV VERSION_TAG=${VERSION_TAG} \
   PORT=9999 \
-  JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -XX:+UseG1GC -Djava.awt.headless=true"
+  JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError -Djava.awt.headless=true"
 
 USER dropnext
 WORKDIR /app

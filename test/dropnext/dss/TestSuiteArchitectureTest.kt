@@ -17,9 +17,15 @@ import org.junit.jupiter.api.Test
  */
 class TestSuiteArchitectureTest {
 
-  private val testFiles: List<KotlinSourceFile> by lazy { kotlinSourceFileTexts("test") }
+  /**
+   * Read once per test JVM: JUnit builds a fresh instance per test method, so an instance-level `lazy` would
+   * walk the tree again for every rule. Mirrors the monolith's `TestSuiteArchitectureTest`.
+   */
+  companion object {
+    private val testFiles: List<KotlinSourceFile> by lazy { kotlinSourceFileTexts("test") }
 
-  private val srcFiles: List<KotlinSourceFile> by lazy { kotlinSourceFileTexts("src") }
+    private val srcFiles: List<KotlinSourceFile> by lazy { kotlinSourceFileTexts("src") }
+  }
 
   /** Files under `test/` that are infrastructure rather than tests; everything here lives under `testutil/`. */
   private fun KotlinSourceFile.isInfrastructure(): Boolean = "/test/dropnext/dss/testutil/" in path

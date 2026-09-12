@@ -11,7 +11,6 @@ import dropnext.dss.domain.ShopifyAppSecret
 
 fun testConfig(
   appClientSecret: String = "test-secret",
-  apiVersion: String = Config.DEFAULT_SHOPIFY_API_VERSION,
   dssApiKey: String = "x".repeat(32),
   monolithBaseUrl: String = "https://monolith.test",
   monolithApiKey: String? = null,
@@ -24,7 +23,6 @@ fun testConfig(
     scopes = "read_orders",
     dssBaseUrl = "https://dss.test",
     oauthRedirectPath = "/oauth/callback",
-    apiVersion = apiVersion,
     serverPort = 8080,
     monolithBaseUrl = monolithBaseUrl,
     monolithApiPrefix = null,
@@ -37,4 +35,5 @@ fun testConfig(
     logflareApiKey = null,
     logflareEndpoint = null,
     mode = mode,
+    versionTag = "test-version",
   )

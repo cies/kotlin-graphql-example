@@ -4,6 +4,7 @@ import dev.forkhandles.result4k.Failure
 import dropnext.dss.domain.ShopDomain
 import dropnext.dss.domain.ShopifyAdminToken
 import dropnext.dss.lib.shopify.token.InMemoryShopTokenStore
+import dropnext.dss.lib.shopify.token.ShopLookup
 import dropnext.dss.testutil.fake.FakeMonolithService
 import dropnext.dss.testutil.fake.FakeShopifyGraphqlServer
 import dropnext.dss.testutil.helper.shopifyRewritingHttpClient
@@ -23,14 +24,14 @@ private const val API_VERSION = "2025-01"
 
 
 /**
- * The factory decides, once per request, whether a shop can be talked to at all — a `null` here is
- * what a webhook handler turns into a silent `200`, so the fallback to the monolith and its failure
- * modes are worth pinning.
+ * The factory decides, once per request, whether a shop can be talked to at all. A webhook handler acknowledges a
+ * `Missing` with a `200` and asks Shopify to redeliver an `Unavailable`, so the fallback to the monolith and its
+ * failure modes are worth pinning.
  *
  * Requests go through the rewriting client to a fake Shopify, so the URL the factory builds is
  * observable rather than assumed.
  */
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS) // Stop it from unnecessarily reconstructing per instance.
 class HttpShopifyGraphqlServiceFactoryTest {
 
   private lateinit var shopify: FakeShopifyGraphqlServer
@@ -53,10 +54,9 @@ class HttpShopifyGraphqlServiceFactoryTest {
     val monolith = FakeMonolithService()
     val factory = factoryFor(monolith, cached = mapOf(acmeShop to ShopifyAdminToken("shpat_cached")))
 
-    val service = factory.forShop(acmeShop)
+    val lookup = factory.forShop(acmeShop)
 
-    assert(service != null)
-    assert(service!!.shop == acmeShop)
+    assert((lookup as ShopLookup.Found).value.shop == acmeShop)
     assert(monolith.getStoreCalls.isEmpty())
   }
 
@@ -66,9 +66,9 @@ class HttpShopifyGraphqlServiceFactoryTest {
     val tokens = tokenStore(monolith)
     val factory = HttpShopifyGraphqlServiceFactory(httpClient, tokens, API_VERSION)
 
-    val service = factory.forShop(acmeShop)
+    val lookup = factory.forShop(acmeShop)
 
-    assert(service != null)
+    assert(lookup is ShopLookup.Found)
     // The monolith knows stores by subdomain, not by the full myshopify host.
     assert(monolith.getStoreCalls.single() == "acme")
     assert(tokens.cached(acmeShop) == ShopifyAdminToken("shpat_from_monolith"))
@@ -86,35 +86,37 @@ class HttpShopifyGraphqlServiceFactoryTest {
   }
 
   @Test
-  fun `a shop the monolith does not know resolves to no service`() = runBlocking {
+  fun `a shop the monolith does not know has no service`() = runBlocking {
     val monolith = FakeMonolithService().apply { getStoreReturnsNotFound = true }
     val factory = HttpShopifyGraphqlServiceFactory(httpClient, tokenStore(monolith), API_VERSION)
 
-    assert(factory.forShop(acmeShop) == null)
+    assert(factory.forShop(acmeShop) == ShopLookup.Missing)
   }
 
   /** A store the monolith knows but has no token for is as unusable as one it does not know. */
   @Test
-  fun `a store without an api key resolves to no service`() = runBlocking {
+  fun `a store without an api key has no service`() = runBlocking {
     val monolith = FakeMonolithService().apply { getStoreToken = null }
     val factory = HttpShopifyGraphqlServiceFactory(httpClient, tokenStore(monolith), API_VERSION)
 
-    assert(factory.forShop(acmeShop) == null)
+    assert(factory.forShop(acmeShop) == ShopLookup.Missing)
   }
 
-  /** An unreachable monolith must not raise: the caller answers "no token" and the webhook is dropped. */
+  /** An unreachable monolith is not a shop without a token: the caller has to be able to ask for a retry. */
   @Test
-  fun `an unreachable monolith resolves to no service rather than throwing`() = runBlocking {
+  fun `an unreachable monolith makes the service unavailable rather than missing`() = runBlocking {
     val monolith = FakeMonolithService().apply { getStoreTransportFailure = true }
-    val factory = HttpShopifyGraphqlServiceFactory(httpClient, tokenStore(monolith), API_VERSION)
+    val tokens = tokenStore(monolith)
+    val factory = HttpShopifyGraphqlServiceFactory(httpClient, tokens, API_VERSION)
 
-    assert(factory.forShop(acmeShop) == null)
+    assert(factory.forShop(acmeShop) == ShopLookup.Unavailable)
+    assert(tokens.cached(acmeShop) == null)
   }
 
   @Test
   fun `the service it hands back talks to the configured API version with the shop's token`() = runBlocking {
     val factory = factoryFor(FakeMonolithService(), cached = mapOf(acmeShop to ShopifyAdminToken("shpat_cached")))
-    val service = factory.forShop(acmeShop)!!
+    val service = (factory.forShop(acmeShop) as ShopLookup.Found).value
 
     service.shopIdentity()
 
@@ -134,11 +136,26 @@ class HttpShopifyGraphqlServiceFactoryTest {
     val factory = factoryFor(monolith, cached = mapOf(acmeShop to ShopifyAdminToken("shpat_revoked")))
     shopify.stubRaw("ShopIdentity", """{"errors":"[API] Invalid API key or access token"}""", HttpStatusCode.Unauthorized)
 
-    val rejected = factory.forShop(acmeShop)!!.shopIdentity()
+    val rejected = (factory.forShop(acmeShop) as ShopLookup.Found).value.shopIdentity()
     assert((rejected as Failure).reason == ShopifyError.TokenRejected(401))
 
     factory.forShop(acmeShop)
     assert(monolith.getStoreCalls.single() == "acme")
+    shopify.clear()
+  }
+
+  /** The `401` of a request that started out with the old token must not throw away the token a reinstall remembered meanwhile. */
+  @Test
+  fun `a 401 for an old token leaves a newer token in place`() = runBlocking {
+    val tokens = InMemoryShopTokenStore(mapOf(acmeShop to ShopifyAdminToken("shpat_revoked")))
+    val factory = HttpShopifyGraphqlServiceFactory(httpClient, tokens, API_VERSION)
+    val serviceWithOldToken = (factory.forShop(acmeShop) as ShopLookup.Found).value
+    tokens.remember(acmeShop, ShopifyAdminToken("shpat_after_reinstall"))
+    shopify.stubRaw("ShopIdentity", """{"errors":"[API] Invalid API key or access token"}""", HttpStatusCode.Unauthorized)
+
+    serviceWithOldToken.shopIdentity()
+
+    assert(tokens.cached(acmeShop) == ShopifyAdminToken("shpat_after_reinstall"))
     shopify.clear()
   }
 

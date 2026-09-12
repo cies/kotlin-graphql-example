@@ -13,8 +13,8 @@ build/
 *.iml
 .DS_Store
 
-# VCS metadata is not needed at build time. If you ever want `git rev-parse` inside
-# the build, remove this line and pass VERSION_TAG via --build-arg from the host instead.
+# VCS metadata is not needed at build time: the version reaches the image as the
+# VERSION_TAG build argument (`dnc` passes the image tag), not from git.
 .git/
 .gitignore
 .gitattributes

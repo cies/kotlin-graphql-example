@@ -3,6 +3,7 @@ package dropnext.dss.lib.shopify.graphql
 import com.expediagroup.graphql.client.ktor.GraphQLKtorClient
 import dev.forkhandles.result4k.Failure
 import dev.forkhandles.result4k.Success
+import dropnext.dss.domain.ProductCount
 import dropnext.dss.domain.ShopDomain
 import dropnext.dss.domain.ShopifyAdminToken
 import dropnext.dss.domain.ShopifyFulfillmentEventId
@@ -21,13 +22,13 @@ import dropnext.graphql.generated.FulfillmentEventCreateMutation
 import dropnext.graphql.generated.GetOrderForDss
 import dropnext.graphql.generated.GetProductById
 import dropnext.graphql.generated.GetWebhookSubscriptions
+import dropnext.graphql.generated.ProductsCount
 import dropnext.graphql.generated.RegisterWebhook
 import dropnext.graphql.generated.ShopIdentity
-import dropnext.graphql.generated.SyncProductsPage
+import dropnext.graphql.generated.enums.CountPrecision
 import dropnext.graphql.generated.enums.CurrencyCode
 import dropnext.graphql.generated.enums.FulfillmentEventStatus
 import dropnext.graphql.generated.enums.FulfillmentStatus
-import dropnext.graphql.generated.enums.ProductStatus
 import dropnext.graphql.generated.enums.WebhookSubscriptionTopic
 import dropnext.graphql.generated.fulfillmentcancelmutation.Fulfillment as CancelledFulfillment
 import dropnext.graphql.generated.fulfillmentcancelmutation.FulfillmentCancelPayload
@@ -45,13 +46,8 @@ import dropnext.graphql.generated.getwebhooksubscriptions.WebhookSubscriptionCon
 import dropnext.graphql.generated.registerwebhook.UserError as RegisterUserError
 import dropnext.graphql.generated.registerwebhook.WebhookSubscription as CreatedSubscription
 import dropnext.graphql.generated.registerwebhook.WebhookSubscriptionCreatePayload
+import dropnext.graphql.generated.productscount.Count
 import dropnext.graphql.generated.shopidentity.Shop as ShopIdentityShop
-import dropnext.graphql.generated.syncproductspage.ImageConnection as PageImageConnection
-import dropnext.graphql.generated.syncproductspage.PageInfo
-import dropnext.graphql.generated.syncproductspage.Product as PageProduct
-import dropnext.graphql.generated.syncproductspage.ProductConnection
-import dropnext.graphql.generated.syncproductspage.ProductEdge
-import dropnext.graphql.generated.syncproductspage.ProductVariantConnection as PageVariantConnection
 import io.ktor.client.HttpClient
 import io.ktor.http.HttpStatusCode
 import java.net.URI
@@ -77,7 +73,7 @@ import org.junit.jupiter.api.TestInstance
 private const val CALLBACK_URL = "https://dss.test/webhooks/shopify"
 
 
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS) // Stop it from unnecessarily reconstructing per instance.
 class HttpShopifyGraphqlServiceTest {
 
   private val acme = ShopDomain.parse("acme.myshopify.com")!!
@@ -127,19 +123,19 @@ class HttpShopifyGraphqlServiceTest {
   }
 
   @Test
-  fun `productSampleCount counts the edges of the first page`() = runBlocking {
+  fun `productCount answers the count and whether Shopify stopped at its cap`() = runBlocking {
     fake.stubData(
-      "SyncProductsPage",
-      SyncProductsPage.Result(
-        products = ProductConnection(
-          pageInfo = PageInfo(hasNextPage = true, endCursor = "cursor-2"),
-          edges = listOf(ProductEdge(node = pageProduct("501")), ProductEdge(node = pageProduct("502"))),
-        ),
-      ),
-      SyncProductsPage.Result.serializer(),
+      "ProductsCount",
+      ProductsCount.Result(productsCount = Count(count = 10000, precision = CountPrecision.AT_LEAST)),
+      ProductsCount.Result.serializer(),
     )
-    assert(shopify.productSampleCount(first = 3) == Success(2))
-    assert(fake.calls.single().variables.jsonObject["first"]?.jsonPrimitive?.content == "3")
+    assert(shopify.productCount() == Success(ProductCount(count = 10000, isExact = false)))
+  }
+
+  @Test
+  fun `productCount without a count in the payload is a GraphqlError`() = runBlocking {
+    fake.stubData("ProductsCount", ProductsCount.Result(productsCount = null), ProductsCount.Result.serializer())
+    assert((shopify.productCount() as Failure).reason is ShopifyError.GraphqlError)
   }
 
   @Test
@@ -174,31 +170,82 @@ class HttpShopifyGraphqlServiceTest {
     assert((result as Failure).reason == ShopifyError.GraphqlError("Throttled"))
   }
 
+  /** Shopify sends its error codes with a `200`; they are what tells a throttled request from one that will never be allowed. */
+  @Test
+  fun `top-level errors carry Shopify's error codes, and a throttled request is retryable`() = runBlocking {
+    fake.stubRaw("ShopIdentity", """{"errors":[{"message":"Throttled","extensions":{"code":"THROTTLED"}}]}""")
+    val error = (shopify.shopIdentity() as Failure).reason
+    assert(error == ShopifyError.GraphqlError("Throttled", codes = listOf("THROTTLED")))
+    assert(error.isRetryable)
+  }
+
+  @Test
+  fun `a top-level access denied is not retryable`() = runBlocking {
+    fake.stubRaw(
+      "ShopIdentity",
+      """{"data":null,"errors":[{"message":"Access denied for shop field.","extensions":{"code":"ACCESS_DENIED","documentation":"https://shopify.dev/api/usage/access-scopes"}}]}""",
+    )
+    val error = (shopify.shopIdentity() as Failure).reason
+    assert((error as ShopifyError.GraphqlError).codes == listOf("ACCESS_DENIED"))
+    assert(!error.isRetryable)
+  }
+
   @Test
   fun `a response without data is a GraphqlError`() = runBlocking {
     fake.stubRaw("ShopIdentity", """{"data":null}""")
     assert((shopify.shopIdentity() as Failure).reason is ShopifyError.GraphqlError)
   }
 
+  /** Schema drift reads the same on every attempt, and the decoder's complaint quotes the body: logged, never retried. */
   @Test
-  fun `an unreadable response is a Network failure`() = runBlocking {
+  fun `an unreadable response is Undecodable and not retryable`() = runBlocking {
     fake.stubRaw("ShopIdentity", "{not-json")
-    assert((shopify.shopIdentity() as Failure).reason is ShopifyError.Network)
+    val error = (shopify.shopIdentity() as Failure).reason
+    assert(error is ShopifyError.Undecodable)
+    assert(!error.isRetryable)
   }
 
+  /** What Shopify says the fulfillment is decides, whatever user error comes along with it. */
   @Test
-  fun `cancelFulfillment treats an already cancelled fulfillment as done`() = runBlocking {
+  fun `cancelFulfillment treats a fulfillment Shopify reports as cancelled as done, user error or not`() = runBlocking {
     fake.stubData(
       "FulfillmentCancelMutation",
       FulfillmentCancelMutation.Result(
         fulfillmentCancel = FulfillmentCancelPayload(
-          fulfillment = null,
+          fulfillment = CancelledFulfillment(id = "gid://shopify/Fulfillment/8000", status = FulfillmentStatus.CANCELLED),
           userErrors = listOf(CancelUserError(field = listOf("id"), message = "Fulfillment is already canceled.")),
         ),
       ),
       FulfillmentCancelMutation.Result.serializer(),
     )
     assert(shopify.cancelFulfillment("gid://shopify/Fulfillment/8000") == Success(Unit))
+  }
+
+  /** A refusal that merely mentions "already" is still a refusal: this fulfillment was delivered, not cancelled. */
+  @Test
+  fun `cancelFulfillment does not read a user error mentioning already as a cancel`() = runBlocking {
+    fake.stubData(
+      "FulfillmentCancelMutation",
+      FulfillmentCancelMutation.Result(
+        fulfillmentCancel = FulfillmentCancelPayload(
+          fulfillment = null,
+          userErrors = listOf(CancelUserError(field = listOf("id"), message = "Fulfillment has already been delivered.")),
+        ),
+      ),
+      FulfillmentCancelMutation.Result.serializer(),
+    )
+    val result = shopify.cancelFulfillment("gid://shopify/Fulfillment/8000")
+    assert((result as Failure).reason == ShopifyError.UserError(listOf("Fulfillment has already been delivered.")))
+  }
+
+  @Test
+  fun `cancelFulfillment without a cancelled fulfillment or a user error is a GraphqlError`() = runBlocking {
+    fake.stubData(
+      "FulfillmentCancelMutation",
+      FulfillmentCancelMutation.Result(fulfillmentCancel = FulfillmentCancelPayload(fulfillment = null, userErrors = emptyList())),
+      FulfillmentCancelMutation.Result.serializer(),
+    )
+    assert((shopify.cancelFulfillment("gid://shopify/Fulfillment/8000") as Failure).reason is ShopifyError.GraphqlError)
   }
 
   @Test
@@ -297,8 +344,9 @@ class HttpShopifyGraphqlServiceTest {
     assert(result == Success(ShopifyFulfillmentId(7777L)))
   }
 
+  /** No user error and no fulfillment is Shopify misbehaving: an upstream failure the monolith retries, not a `400` it drops. */
   @Test
-  fun `createFulfillment without a fulfillment or a user error in the payload is a UserError`() = runBlocking {
+  fun `createFulfillment without a fulfillment or a user error in the payload is a GraphqlError`() = runBlocking {
     fake.stubData(
       "FulfillmentCreateWithLineItems",
       FulfillmentCreateWithLineItems.Result(fulfillmentCreate = FulfillmentCreatePayload(fulfillment = null, userErrors = emptyList())),
@@ -309,16 +357,14 @@ class HttpShopifyGraphqlServiceTest {
       tracking = FulfillmentTracking(company = "UPS", number = "1Z999", url = null),
       notifyCustomer = false,
     )
-    val reason = (result as Failure).reason
-    assert(reason is ShopifyError.UserError)
-    assert("fulfillment missing in response" in (reason as ShopifyError.UserError).messages.single())
+    assert((result as Failure).reason == ShopifyError.GraphqlError("fulfillment missing in response"))
   }
 
   /** What a restarting Shopify edge looks like from here: the connection is accepted and reset. */
   @Test
   fun `a reset connection is a Network failure`() = runBlocking {
     FakeFlakyServer().use { unreachable ->
-      val deadUrl = URI("${unreachable.baseUrl}/admin/api/${Config.DEFAULT_SHOPIFY_API_VERSION}/graphql.json").toURL()
+      val deadUrl = URI("${unreachable.baseUrl}/admin/api/${Config.SHOPIFY_API_VERSION}/graphql.json").toURL()
       val deadShopify = HttpShopifyGraphqlService(acme, GraphQLKtorClient(deadUrl, httpClient), ShopifyAdminToken("shpat_test"))
       val result = deadShopify.orderForDss("gid://shopify/Order/1001")
       assert((result as Failure).reason is ShopifyError.Network)
@@ -414,7 +460,7 @@ class HttpShopifyGraphqlServiceTest {
     )
     val result = shopify.registerWebhook(WebhookSubscriptionTopic.ORDERS_CREATE, CALLBACK_URL, includeFields = listOf("id"))
     assert(result == Success("gid://shopify/WebhookSubscription/9"))
-    assert(fake.calls.single().variables.jsonObject["callbackUrl"]?.jsonPrimitive?.content == CALLBACK_URL)
+    assert(fake.calls.single().variables.jsonObject["uri"]?.jsonPrimitive?.content == CALLBACK_URL)
   }
 
   /** Shopify reports a rejected callback URL as a field error, which is worth carrying to the install page. */
@@ -424,14 +470,14 @@ class HttpShopifyGraphqlServiceTest {
       "RegisterWebhook",
       RegisterWebhook.Result(
         webhookSubscriptionCreate = WebhookSubscriptionCreatePayload(
-          userErrors = listOf(RegisterUserError(field = listOf("webhookSubscription", "callbackUrl"), message = "is not allowed")),
+          userErrors = listOf(RegisterUserError(field = listOf("webhookSubscription", "uri"), message = "is not allowed")),
           webhookSubscription = null,
         ),
       ),
       RegisterWebhook.Result.serializer(),
     )
     val result = shopify.registerWebhook(WebhookSubscriptionTopic.ORDERS_CREATE, CALLBACK_URL, includeFields = null)
-    assert((result as Failure).reason == ShopifyError.UserError(listOf("webhookSubscription,callbackUrl: is not allowed")))
+    assert((result as Failure).reason == ShopifyError.UserError(listOf("webhookSubscription,uri: is not allowed")))
   }
 
   // ---------- what a non-200 status from Shopify becomes ----------
@@ -558,23 +604,4 @@ id: String = "gid://shopify/Shop/1", domain: String = "acme.myshopify.com") {
       ShopIdentity.Result.serializer(),
     )
   }
-
-  /** A product of the `SyncProductsPage` operation, whose types are its own; only the count is read from it. */
-  private fun pageProduct(legacyResourceId: String): PageProduct = PageProduct(
-    id = "gid://shopify/Product/$legacyResourceId",
-    legacyResourceId = legacyResourceId,
-    title = "Sample $legacyResourceId",
-    description = "",
-    descriptionHtml = "",
-    vendor = "",
-    productType = "",
-    tags = emptyList(),
-    handle = "sample-$legacyResourceId",
-    status = ProductStatus.ACTIVE,
-    publishedAt = null,
-    createdAt = "2026-04-01T00:00:00Z",
-    updatedAt = "2026-04-01T00:00:00Z",
-    images = PageImageConnection(edges = emptyList()),
-    variants = PageVariantConnection(edges = emptyList()),
-  )
 }

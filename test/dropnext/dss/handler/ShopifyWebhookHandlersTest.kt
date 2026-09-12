@@ -30,6 +30,9 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.http.HttpStatusCode
 import java.nio.charset.StandardCharsets
 import java.util.Base64
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.parallel.ResourceLock
 
@@ -116,7 +119,7 @@ class ShopifyWebhookHandlersTest {
 
   @Test
   fun `returns 200 without Graphql when no token is available for the shop`() {
-    // The default graph resolves no service, so `forShop` answers null.
+    // The default graph resolves no service, so `forShop` answers `Missing`.
     val monolith = FakeMonolithService()
     withDssApp(deps(monolith = monolith)) { client ->
       val r = client.signedWebhook("products/create", """{"id":1,"domain":"acme.myshopify.com"}""")
@@ -320,6 +323,60 @@ class ShopifyWebhookHandlersTest {
     }
   }
 
+  /** After a restart the token is only at the monolith; a monolith that does not answer must not cost the order. */
+  @Test
+  fun `orders_create whose token the monolith could not be asked for is answered 502 so Shopify redelivers`() {
+    val monolith = FakeMonolithService()
+    withDssApp(deps(monolith = monolith, tokenSourceUnavailable = true)) { client ->
+      val r = client.signedWebhook(
+        "orders/create",
+        """{"id":1001,"admin_graphql_api_id":"gid://shopify/Order/1001","domain":"acme.myshopify.com"}""",
+      )
+      assert(r.status == HttpStatusCode.BadGateway)
+      assert(monolith.createOrderCalls.isEmpty())
+    }
+  }
+
+  /** Shopify stops waiting after five seconds; work still running by then is cancelled and the delivery asked for again. */
+  @Test
+  fun `orders_create that outlives the time budget is answered 502 so Shopify redelivers`() {
+    val monolith = FakeMonolithService()
+    val shopify = FakeShopifyGraphqlService().apply {
+      orderForDssResult = Success(minimalOrder())
+      orderForDssDelay = 2.seconds
+    }
+    withDssApp(deps(monolith = monolith, shopify = shopify, mirrorBudget = 50.milliseconds)) { client ->
+      val r = client.signedWebhook(
+        "orders/create",
+        """{"id":1001,"admin_graphql_api_id":"gid://shopify/Order/1001","domain":"acme.myshopify.com"}""",
+      )
+      assert(r.status == HttpStatusCode.BadGateway)
+      assert(monolith.createOrderCalls.isEmpty())
+    }
+  }
+
+  /** A missing scope answers the same on every redelivery; asking for them would only cost the subscription. */
+  @Test
+  @ResourceLock(GLOBAL_LOG_REGISTRY)
+  fun `orders_create that Shopify refuses with ACCESS_DENIED is acknowledged with 200 and logged with the code`() {
+    val monolith = FakeMonolithService()
+    val shopify = FakeShopifyGraphqlService().apply {
+      orderForDssResult = Failure(ShopifyError.GraphqlError("Access denied for order field.", codes = listOf("ACCESS_DENIED")))
+    }
+    val lines = capturingLogs {
+      withDssApp(deps(monolith = monolith, shopify = shopify)) { client ->
+        val r = client.signedWebhook(
+          "orders/create",
+          """{"id":1001,"admin_graphql_api_id":"gid://shopify/Order/1001","domain":"acme.myshopify.com"}""",
+        )
+        assert(r.status == HttpStatusCode.OK)
+      }
+    }
+    assert(monolith.createOrderCalls.isEmpty())
+    assert("transient=false error=shopify_graphql codes=ACCESS_DENIED" in lines.single { "Webhook done" in it })
+    assert("Access denied for order field." in lines.single { "could not load order" in it })
+  }
+
   // ---------- what the delivery log and the Partner Dashboard get to read ----------
 
   /** Shopify stores the body of every delivery, so a skipped one says why, with the trace id that finds our log line. */
@@ -391,16 +448,19 @@ class ShopifyWebhookHandlersTest {
   }
 
   /**
-   * Default graph: no Admin token resolvable for any shop, so `forShop` answers null and the handler
-   * logs the "no Admin token" warning. Tests that need a working service pass [shopify].
+   * Default graph: no Admin token resolvable for any shop, so `forShop` answers `Missing` and the handler
+   * logs the "no Admin token" error. Tests that need a working service pass [shopify].
    */
   private fun deps(
     monolith: MonolithService = FakeMonolithService(),
     shopify: FakeShopifyGraphqlService? = null,
+    tokenSourceUnavailable: Boolean = false,
+    mirrorBudget: Duration = WEBHOOK_MIRROR_BUDGET,
   ): DssDependencies = dssDependencies(
     config = testConfig(appClientSecret = WEBHOOK_SECRET),
     monolithService = monolith,
     shopTokens = InMemoryShopTokenStore(),
-    shopifyGraphqlServiceFactory = FakeShopifyGraphqlServiceFactory(service = shopify),
+    shopifyGraphqlServiceFactory = FakeShopifyGraphqlServiceFactory(service = shopify, tokenSourceUnavailable = tokenSourceUnavailable),
+    webhookMirrorBudget = mirrorBudget,
   )
 }

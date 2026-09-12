@@ -1,0 +1,6 @@
+query ProductsCount {
+  productsCount {
+    count
+    precision
+  }
+}

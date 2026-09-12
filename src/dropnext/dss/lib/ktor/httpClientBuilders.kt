@@ -16,21 +16,45 @@ import java.util.concurrent.TimeUnit
 import okhttp3.Dispatcher
 
 
+// The timeouts in this file line up with two limits set elsewhere. Shopify waits five seconds for a webhook's answer,
+// and the handler holds the work behind a delivery to four (`WEBHOOK_MIRROR_BUDGET`). The monolith waits thirty seconds
+// (its client's read timeout) for the routes it calls; the calls those routes make have to fit inside that.
+
+/**
+ * How long opening a connection may take, to Shopify and to the monolith alike. Both answer from well-connected data
+ * centres, where a TCP and TLS handshake takes tens of milliseconds; five seconds is a host that is not there, and waiting
+ * longer would only eat into the budget of the request that needs the connection.
+ */
+const val CONNECT_TIMEOUT_MILLIS = 5_000L
+
+/**
+ * How long one Shopify call (a Graphql operation, the OAuth code exchange) may take. The Admin API answers in well under
+ * a second, a large order query in one or two; ten seconds leaves a wide margin. It has to stay far below the thirty
+ * seconds the monolith waits for a `sync-shipments` or a `tracking-update`, which make one to a few of these calls in a
+ * row, so a stuck call fails the request while the monolith still waits for the answer.
+ */
+const val SHOPIFY_REQUEST_TIMEOUT_MILLIS = 10_000L
+
 /**
  * How long one monolith call may take before it is given up on. A healthy monolith answers every
  * endpoint the DSS calls in well under a second: each is one transaction on indexed rows (a store
- * lookup, an order insert plus a queue message, an upsert of at most one product's variants), so ten
- * seconds is an order of magnitude of headroom for a cold connection pool or a GC pause. Waiting
- * longer buys nothing: Shopify abandons a webhook delivery after five seconds and redelivers it, so
- * a call that is still pending at ten seconds already belongs to a request nobody is waiting for,
- * and the monolith's own idempotency (a `409` for a repeated order, upserts and soft-deletes) is
- * what makes that redelivery safe. It also keeps the worst case bounded: the retries below add up
- * to under a minute, where the shared client's two minutes per attempt once allowed eight.
+ * lookup, an order insert plus a queue message, an upsert of at most one product's variants), so five
+ * seconds still covers a cold connection pool or a GC pause. The bound that decides it is the monolith's
+ * own client: where it calls us and we call it back (`PUT /stores/api-key`, the token lookup behind its sync
+ * calls) it waits thirty seconds, and four attempts of five seconds plus the backoff stay under that.
  */
-const val MONOLITH_REQUEST_TIMEOUT_MILLIS = 10_000L
+const val MONOLITH_REQUEST_TIMEOUT_MILLIS = 5_000L
 
-/** Connection resets and refused connections; a timeout of any kind is not one of these. */
+/** Connection resets, refused connections and `5xx` answers; a timeout of any kind is not one of these. */
 const val MONOLITH_MAX_RETRIES = 3
+
+/**
+ * The first pause before a monolith call is repeated. Each next pause doubles, capped at four times this, with up to half
+ * of it added at random so retries from concurrent requests do not arrive in lockstep. Half a second, one, two: the three
+ * retries wait under five seconds in total, so a webhook's four-second budget still has room for one or two, and a
+ * monolith that is restarting gets a moment to come back.
+ */
+const val MONOLITH_RETRY_BASE_DELAY_MILLIS = 500L
 
 /**
  * OkHttp's dispatcher lets five requests per host through at a time, a browser-like default. Every
@@ -50,30 +74,33 @@ fun createSharedHttpClient(): HttpClient = HttpClient(OkHttp) {
           maxRequestsPerHost = MAX_CONCURRENT_REQUESTS_PER_HOST
         },
       )
-      connectTimeout(15, TimeUnit.SECONDS)
-      readTimeout(120, TimeUnit.SECONDS)
-      writeTimeout(120, TimeUnit.SECONDS)
+      // The same bounds as the plugin below, so a request the plugin leaves alone is not held for OkHttp's own defaults.
+      connectTimeout(CONNECT_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)
+      readTimeout(SHOPIFY_REQUEST_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)
+      writeTimeout(SHOPIFY_REQUEST_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)
     }
   }
   install(HttpTimeout) {
-    requestTimeoutMillis = 120_000
-    connectTimeoutMillis = 15_000
-    socketTimeoutMillis = 120_000
+    requestTimeoutMillis = SHOPIFY_REQUEST_TIMEOUT_MILLIS
+    connectTimeoutMillis = CONNECT_TIMEOUT_MILLIS
+    socketTimeoutMillis = SHOPIFY_REQUEST_TIMEOUT_MILLIS
   }
   install(ContentNegotiation) {
     json(AppJson)
   }
+  install(ShopifyDeprecationWarnings)
   // No Logging plugin: avoids accidentally logging Authorization headers or JSON bodies to monolith/Shopify.
 }
 
 /**
- * Derives the monolith-specific [HttpClient]: a short request timeout ([MONOLITH_REQUEST_TIMEOUT_MILLIS],
- * overridable for tests), retries with exponential backoff on a dropped or refused connection and on a
- * `5xx`, and none on a timeout. Every monolith endpoint the DSS calls is idempotent, so repeating a
- * call the monolith may already have processed is safe; a timed-out call is not repeated because the
- * time budget, not the outcome, is what ran out, and three more attempts would only hold the webhook
- * longer. Shopify Graphql and OAuth traffic keep the base [createSharedHttpClient]: its mutations
- * carry no idempotency key, so a retried `fulfillmentCreate` would ship the same parcel twice.
+ * Derives the monolith-specific [HttpClient]: a short request timeout ([MONOLITH_REQUEST_TIMEOUT_MILLIS]),
+ * retries with exponential backoff ([MONOLITH_RETRY_BASE_DELAY_MILLIS]) on a dropped or refused connection
+ * and on a `5xx`, and none on a timeout. Both are parameters so a test does not have to wait them out. Every
+ * monolith endpoint the DSS calls is idempotent, so repeating a call the monolith may already have processed
+ * is safe; a timed-out call is not repeated because the time budget, not the outcome, is what ran out, and
+ * three more attempts would only hold the request longer. Shopify Graphql and OAuth traffic keep the base
+ * [createSharedHttpClient]: its mutations carry no idempotency key, so a retried `fulfillmentCreate` would ship
+ * the same parcel twice.
  *
  * It also forwards the request's trace id, read from the coroutine context the server's `CallId` plugin
  * fills, so the monolith's log lines for a call can be found from ours. Shopify does not get the header.
@@ -82,6 +109,7 @@ fun createSharedHttpClient(): HttpClient = HttpClient(OkHttp) {
 fun createMonolithHttpClient(
   baseHttpClient: HttpClient,
   requestTimeoutMillis: Long = MONOLITH_REQUEST_TIMEOUT_MILLIS,
+  retryBaseDelayMillis: Long = MONOLITH_RETRY_BASE_DELAY_MILLIS,
 ): HttpClient = baseHttpClient.config {
   install(HttpTimeout) {
     this.requestTimeoutMillis = requestTimeoutMillis
@@ -93,7 +121,12 @@ fun createMonolithHttpClient(
     maxRetries = MONOLITH_MAX_RETRIES
     retryOnServerErrors(MONOLITH_MAX_RETRIES)
     retryOnExceptionIf(MONOLITH_MAX_RETRIES) { _, cause -> cause is IOException && !cause.isTimeout() }
-    exponentialDelay(base = 2.0, maxDelayMs = 4_000)
+    exponentialDelay(
+      base = 2.0,
+      baseDelayMs = retryBaseDelayMillis,
+      maxDelayMs = 4 * retryBaseDelayMillis,
+      randomizationMs = retryBaseDelayMillis / 2,
+    )
   }
   install(CallId) {
     addToHeader(TRACE_ID_HEADER)

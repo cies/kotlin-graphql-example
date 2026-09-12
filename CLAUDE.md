@@ -74,7 +74,8 @@ credentials, so the human developer starts it — see "Operational boundary".
 - **Web framework**: [Ktor](https://ktor.io/) server on the CIO engine; `dssModule.kt` installs the plugins (from `lib/ktor/`) and the routes.
 - **HTTP client**: Ktor client on OkHttp. One shared client (`createSharedHttpClient()` in
   `lib/ktor/httpClientBuilders.kt`) plus a derived monolith client with retries; `ArchitectureTest` forbids
-  constructing an `HttpClient(...)` anywhere else.
+  constructing an `HttpClient(...)` anywhere else. The shared client logs, once per operation, what Shopify reports
+  as deprecated (`ShopifyDeprecationWarnings`).
 - **Graphql client**: [graphql-kotlin](https://github.com/ExpediaGroup/graphql-kotlin) — typed at compile time against
   the Shopify Admin schema (see `.claude/rules/graphql.md`).
 - **Monolith contract**: OpenAPI. The DTOs (`dropnext.dss.contract`) and the outbound path constants are generated
@@ -128,8 +129,10 @@ credentials, so the human developer starts it — see "Operational boundary".
 2. The raw body is verified against `X-Shopify-Hmac-Sha256` with the app secret
    (`ShopifyHmacVerifierService.verifyWebhook`, constant-time compare); a mismatch is a `401`.
 3. The shop comes from `X-Shopify-Shop-Domain` (or the body) and `ShopifyGraphqlServiceFactory.forShop` resolves its
-   Admin token. No token → logged as an error but answered `200`, so Shopify does not keep retrying a delivery we
-   cannot act on.
+   Admin token. No token (`ShopLookup.Missing`) → logged as an error but answered `200`, so Shopify does not keep
+   retrying a delivery we cannot act on. A token the monolith could not be asked for (`ShopLookup.Unavailable`: the
+   cache is empty after a restart and the monolith does not answer) → `502`, because the shop may well have one and a
+   `200` would lose the delivery.
 4. Dispatch on `ShopifyWebhookTopic`, each case one workflow function:
    - `products/create`, `products/update`: `syncShopifyProductToMonolith` — `productById`, map with
      `toProductVariantItems`, upsert the variants on the monolith (`upsertProductVariants`).
@@ -140,9 +143,12 @@ credentials, so the human developer starts it — see "Operational boundary".
      `postCreateOrder` (a `409` from the monolith is `CreateOrderOutcome.AlreadyExisted`, a success).
    - `orders/updated`: acknowledged, not mirrored (the `create` already carried the order).
    - Anything else: logged and acknowledged.
-5. Every workflow answers a `WebhookMirrorOutcome`, and the handler chooses the status from it: `200` when a
-   redelivery could not go better (mirrored, nothing to mirror, no token, a token or a request that is refused),
-   `502` when Shopify or the monolith did not answer, throttled, or answered a `5xx`. Shopify redelivers a non-2xx, or
+5. Every workflow answers a `WebhookMirrorOutcome`, and the handler chooses the status from it (`isTransient`): `200`
+   when a redelivery could not go better (mirrored, nothing to mirror, no token, a token, a request or a query that is
+   refused, an answer that no longer decodes), `502` when Shopify or the monolith did not answer, throttled, answered a
+   `5xx`, or the work outlived `WEBHOOK_MIRROR_BUDGET` (four seconds, inside Shopify's five). Whether a Shopify failure
+   is worth a retry is decided where it is recognised (`ShopifyError.isRetryable`, for a Graphql error from its
+   `extensions.code`, since those arrive with HTTP `200`). Shopify redelivers a non-2xx, or
    no answer within five seconds, up to eight times in four hours with a growing interval, so that is the retry;
    the monolith's idempotent handling makes it safe. After repeated failures within 24 hours Shopify removes the
    subscription, which `/api/check` then reports as `missing` ([Shopify: troubleshoot
@@ -184,7 +190,7 @@ the monolith change (see `../CLAUDE.md`, "Cross-repo couplings").
 `GET /install?shop=…` redirects to Shopify's authorize URL with a signed `state`. `GET /oauth/callback` verifies the
 callback HMAC and the state, exchanges the code for an Admin token (`ShopifyOAuthService`) and hands the rest to the
 `installShop` workflow: learn the shop's canonical domain and id, remember the token in the `ShopTokenStore`, persist
-it to the monolith (`putStoreApiKey`), sample the catalogue, register the webhook subscriptions
+it to the monolith (`putStoreApiKey`), count the catalogue, register the webhook subscriptions
 (`registerShopifyWebhooks`: scans what exists, registers the handled topics with the fields each topic declares,
 reports active/added/failed) and answer a `ShopInstallReport` that `renderOAuthInstallPage` renders. Nothing after
 the exchange fails the install; each step reports on the page instead. Failures in this flow are plain-text errors
@@ -196,13 +202,15 @@ the exchange fails the install; each step reports on the page instead. Failures 
 
 - Base URL: `MONOLITH_BASE_URL` (+ optional `MONOLITH_API_PREFIX`); the paths come from the generated `OutBoundMonolithPaths`.
 - Auth: optional `MONOLITH_API_KEY`, sent as a Bearer token.
-- Retries: the monolith client (`createMonolithHttpClient`) retries on `IOException` up to 3 times with exponential
-  backoff (base 2, max 4 s). Shopify Graphql and OAuth traffic deliberately use the base client without retries, so a
-  non-idempotent mutation is never sent twice.
+- Timeouts and retries (`lib/ktor/httpClientBuilders.kt`, where each number is explained): a monolith call may take
+  5 s and is retried up to 3 times on a dropped or refused connection or a `5xx` (never on a timeout), after 0.5, 1 and
+  2 s; a Shopify call may take 10 s and is never retried, so a non-idempotent mutation is never sent twice. Both fit
+  inside the 30 s the monolith waits for the routes it calls.
 - `DSS_ALLOW_INSECURE_MONOLITH=true` is **dev-only** — it needs `DSS_MODE=DEV` (`PROD`, the default, refuses the flag
   at startup), and production rejects a non-HTTPS monolith URL at startup.
-- Every method returns a `MonolithResult<T>` whose `MonolithError` is either `Transport` (no answer) or `Rejected`
-  (status plus the parsed `MonolithErrorBody`, including the monolith's `trace_id`). Log it through
+- Every method returns a `MonolithResult<T>` whose `MonolithError` is `Transport` (no answer), `Rejected`
+  (status plus the parsed `MonolithErrorBody`, including the monolith's `trace_id`) or `Undecodable` (a success whose
+  body is not the contract's DTO). Log it through
   `logMonolithFailure` (transport and 5xx → error, otherwise warn) so the two services' logs can be correlated.
 - Every request carries our `trace_id` as `X-Trace-Id`, so the monolith's log lines for a call can be found from ours.
 
@@ -230,8 +238,9 @@ There is no request context and no service locator; everything reaches a handler
   `HttpShopifyGraphqlServiceFactory` / `FakeShopifyGraphqlServiceFactory`, `ShopifyOAuthService` /
   `HttpShopifyOAuthService` / `FakeShopifyOAuthService`. Adding an outside dependency means adding all three.
 - A `ShopifyGraphqlService` is bound to one shop (its token is injected at construction). Handlers obtain one per
-  request through `ShopifyGraphqlServiceFactory.forShop(shop)` and answer `DssError.MissingShopifyAdminToken` when
-  that returns `null`.
+  request through `ShopifyGraphqlServiceFactory.forShop(shop)`, which answers a `ShopLookup`: `Found`, `Missing`
+  (answered as `DssError.MissingShopifyAdminToken`, a `401`) or `Unavailable` when the monolith behind the token store
+  could not be asked (`DssError.ShopifyAdminTokenUnavailable`, a `502`).
 - Workflows are top-level functions that take the services they need as parameters; they never see Ktor server types
   (`ArchitectureTest` checks), so they are testable with the in-memory fakes alone.
 
@@ -264,8 +273,9 @@ There are some exceptions, those can be found in the `ArchitectureTest` as well.
 
 # Error handling
 - **Expected failures are values, not exceptions.** Every outbound call returns a result4k `Result`:
-  `ShopifyResult<T>` with a `ShopifyError` (`Network`, `GraphqlError`, `UserError`, `NotFound`) or
-  `MonolithResult<T>` with a `MonolithError` (`Transport`, `Rejected`). The triage — transport exception, top-level
+  `ShopifyResult<T>` with a `ShopifyError` (`Network`, `TokenRejected`, `HttpError`, `GraphqlError`, `UserError`,
+  `NotFound`, `Undecodable`), each of which knows whether a retry can help (`isRetryable`), or `MonolithResult<T>` with
+  a `MonolithError` (`Transport`, `Rejected`, `Undecodable`). The triage — transport exception, top-level
   Graphql errors, a payload's `userErrors`, a non-success status — happens once, inside `HttpShopifyGraphqlService`
   and `HttpMonolithService`; a caller pattern-matches on `Success` / `Failure` and never sees the wire. Workflows pass
   the same result up. Exceptions are for bugs.

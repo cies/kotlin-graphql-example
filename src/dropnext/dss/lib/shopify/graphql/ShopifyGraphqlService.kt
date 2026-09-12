@@ -1,6 +1,7 @@
 package dropnext.dss.lib.shopify.graphql
 
 import dev.forkhandles.result4k.Result
+import dropnext.dss.domain.ProductCount
 import dropnext.dss.domain.ShopDomain
 import dropnext.dss.domain.ShopifyFulfillmentEventId
 import dropnext.dss.domain.ShopifyFulfillmentId
@@ -36,8 +37,8 @@ interface ShopifyGraphqlService {
   /** `ShopIdentity` — used post-OAuth to capture the canonical `*.myshopify.com` host and legacy shop id. */
   suspend fun shopIdentity(): ShopifyResult<ShopIdentityInfo>
 
-  /** `SyncProductsPage` — how many products the first page of [first] holds; the install page shows it as a smoke test. */
-  suspend fun productSampleCount(first: Int): ShopifyResult<Int>
+  /** `ProductsCount` — how many products the shop has; the install page shows it as proof that the token reads the catalogue. */
+  suspend fun productCount(): ShopifyResult<ProductCount>
 
   /** `GetProductById` — the product to mirror after a `products/create` or `products/update` webhook; a successful `null` means Shopify has no such product. */
   suspend fun productById(productGid: String): ShopifyResult<ShopProduct?>
@@ -47,7 +48,7 @@ interface ShopifyGraphqlService {
 
   // ---------- fulfillment primitives (composed by the workflow functions) ----------
 
-  /** `FulfillmentCancel` — cancels a single Shopify fulfillment by GID; an already-cancelled fulfillment is a success. */
+  /** `FulfillmentCancel` — cancels a single Shopify fulfillment by GID; a success when Shopify's answer carries the fulfillment as cancelled, whatever user errors come with it. */
   suspend fun cancelFulfillment(fulfillmentGid: String): ShopifyResult<Unit>
 
   /** `FulfillmentCreateWithLineItems` — creates one fulfillment spanning one or more fulfillment orders and answers its id. */
@@ -89,13 +90,23 @@ typealias ShopifyResult<T> = Result<T, ShopifyError>
  *
  * [UserError] and [NotFound] are Shopify refusing what we sent (a `400` / `404` for the caller);
  * [TokenRejected] is Shopify refusing *us* (a `401`, and no retry can help);
- * [GraphqlError], [HttpError] and [Network] are Shopify or the wire failing (a `502`).
+ * [GraphqlError], [HttpError] and [Network] are Shopify or the wire failing (a `502`);
+ * [Undecodable] is an answer the generated client can no longer read.
  */
 sealed interface ShopifyError {
   val message: String
 
-  /** The request never got an answer: connection failure, timeout, unreadable response. */
-  data class Network(override val message: String) : ShopifyError
+  /**
+   * Whether asking again can go differently. Decided here, where each failure is recognised, so every reader draws the
+   * same line: a webhook answered `502` for a failure a redelivery cannot fix only burns Shopify's retries, and enough
+   * failed deliveries cost the subscription.
+   */
+  val isRetryable: Boolean
+
+  /** The request never got an answer: a refused or reset connection, a timeout. */
+  data class Network(override val message: String) : ShopifyError {
+    override val isRetryable: Boolean get() = true
+  }
 
   /**
    * Shopify answered `401`: the Admin token is no longer valid, which is what an uninstall looks like
@@ -105,6 +116,7 @@ sealed interface ShopifyError {
   data class TokenRejected(val httpStatus: Int) : ShopifyError {
     override val message: String
       get() = "Shopify rejected the Admin token (HTTP $httpStatus): the app was uninstalled or the token revoked"
+    override val isRetryable: Boolean get() = false
   }
 
   /**
@@ -114,20 +126,48 @@ sealed interface ShopifyError {
    */
   data class HttpError(val httpStatus: Int) : ShopifyError {
     override val message: String get() = "Shopify answered HTTP $httpStatus"
+
+    /** Throttling, a timeout and Shopify's own `5xx` pass; `402` (a frozen shop), `403`, `404` and `423` (a locked shop) come back the same. */
+    override val isRetryable: Boolean get() = httpStatus == 408 || httpStatus == 429 || httpStatus >= 500
   }
 
-
-  /** Shopify answered with top-level `errors` (throttled, invalid query, …) or without the data asked for. */
-  data class GraphqlError(override val message: String) : ShopifyError
+  /**
+   * Shopify answered with top-level `errors`, or without the data asked for. These arrive with HTTP `200`, and [codes]
+   * holds their `extensions.code` (`THROTTLED`, `ACCESS_DENIED`, `MAX_COST_EXCEEDED`, a validation error's code): the
+   * only thing that tells a throttled request from one that will never be allowed.
+   */
+  data class GraphqlError(override val message: String, val codes: List<String> = emptyList()) : ShopifyError {
+    /**
+     * Only throttling and Shopify's internal errors pass. An error without any code is Shopify answering something
+     * broken (no data, a payload without the object it promised), which is worth another attempt.
+     */
+    override val isRetryable: Boolean get() = codes.isEmpty() || codes.any { it in RETRYABLE_GRAPHQL_ERROR_CODES }
+  }
 
   /** A mutation payload's `userErrors`: the business rules of the shop refused the mutation. */
   data class UserError(val messages: List<String>) : ShopifyError {
     override val message: String get() = messages.joinToString("; ")
+    override val isRetryable: Boolean get() = false
   }
 
   /** The referenced resource does not exist on the shop. */
-  data class NotFound(override val message: String) : ShopifyError
+  data class NotFound(override val message: String) : ShopifyError {
+    override val isRetryable: Boolean get() = false
+  }
+
+  /**
+   * A success whose body the generated client could not read: Shopify's answer moved away from the schema this build was
+   * compiled against, and it reads the same on every attempt. [detail] is the decoder's complaint, which quotes the part
+   * of the body it choked on; it is logged with the rest of this error, and `toDssError` keeps it from a caller.
+   */
+  data class Undecodable(val detail: String) : ShopifyError {
+    override val message: String get() = "Shopify's answer could not be read: $detail"
+    override val isRetryable: Boolean get() = false
+  }
 }
+
+/** The `extensions.code` values Shopify documents as passing conditions: its rate limit and its own internal error. */
+private val RETRYABLE_GRAPHQL_ERROR_CODES = setOf("THROTTLED", "INTERNAL_SERVER_ERROR")
 
 /** The shop's canonical host and numeric id, as Shopify reports them. */
 data class ShopIdentityInfo(

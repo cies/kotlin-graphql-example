@@ -1,6 +1,7 @@
 package dropnext.dss.lib.shopify.graphql
 
 import dropnext.dss.domain.ShopDomain
+import dropnext.dss.lib.shopify.token.ShopLookup
 
 
 /**
@@ -11,6 +12,6 @@ import dropnext.dss.domain.ShopDomain
  * tests wire `FakeShopifyGraphqlServiceFactory` (returns an in-memory fake).
  */
 interface ShopifyGraphqlServiceFactory {
-  /** Returns a [ShopifyGraphqlService] for [shop], or `null` when no Admin token is resolvable. */
-  suspend fun forShop(shop: ShopDomain): ShopifyGraphqlService?
+  /** [ShopLookup.Missing] when no Admin token is known for [shop], [ShopLookup.Unavailable] when the token source could not be asked. */
+  suspend fun forShop(shop: ShopDomain): ShopLookup<ShopifyGraphqlService>
 }

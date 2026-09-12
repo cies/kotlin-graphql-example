@@ -3,7 +3,11 @@ package dropnext.dss.lib.shopify.webhook
 import dropnext.graphql.generated.enums.WebhookSubscriptionTopic
 
 
-/** Restricting `orders` topics to id-only fields keeps the app exempt from "protected customer data" approval. */
+/**
+ * The `orders` topics carry ids only: the order is loaded through Graphql right after the delivery, so the rest of the
+ * payload would only be bytes to verify and parse. It does not spare the app protected customer data access: loading the
+ * order, with its shipping address and e-mail, needs that access just as a full payload would.
+ */
 private val ordersSafeFields = listOf("id", "admin_graphql_api_id")
 
 /**

@@ -24,7 +24,6 @@ tell a complete list from the first page of a longer one:
 | `GetOrderForDss` | `fulfillmentOrders.lineItems` | 100 | Same, per fulfillment order. |
 | `GetOrderForDss` | `order.fulfillments` | 50 | Not a connection (`fulfillments(first:)` answers a plain list), so it has no `pageInfo`; a tracking number on the fifty-first fulfillment is not found, and `/tracking-update` answers `404`. |
 | `GetWebhookSubscriptions` | `webhookSubscriptions` | 100 | Filtered to our topics and our callback URI, so a handful at most. No change. |
-| `SyncProductsPage` | `products` | `$first` | Already asks for `pageInfo`; only the count of one page is used (the install page's sample). No change. |
 
 `GetOrderForDss` has three readers, and all three inherit its limits: the `orders/create` webhook
 (`syncShopifyOrderToMonolith`), `/sync-shipments-with-fulfillments` (`determineShopifyMutations`) and
@@ -36,7 +35,7 @@ happen the service answers `200` with a wrong mirror, which is the failure mode 
 
 ## What changes
 
-- Every connection in the table above except the two "no change" rows asks for `pageInfo { hasNextPage }`.
+- Every connection in the table above except the "no change" row asks for `pageInfo { hasNextPage }`.
   `variants.media(first: 1)` is deliberately the first image and is left alone.
 - `HttpShopifyGraphqlService` checks `hasNextPage` on every connection it answers, in the method that owns
   the payload (`productById`, `orderForDss`), before the snapshot leaves `lib/shopify/`. This is the triage
@@ -54,8 +53,9 @@ happen the service answers `200` with a wrong mirror, which is the failure mode 
   `specs/shipment-sync-by-tracking-number/040-rewrite-the-fulfillment-docs.md` rewrites that document later and
   keeps the sentence.
 - Mapping the failure:
-  - **Shopify webhooks.** `WebhookMirrorOutcome.isTransient` is `false` for `Truncated`: a redelivery loads the
-    same product. The handler answers `200`, and the `WebhookDeliveryReport` line is at `error` level with
+  - **Shopify webhooks.** `Truncated.isRetryable` is `false`, so `WebhookMirrorOutcome.isTransient` is too: a
+    redelivery loads the same product. The handler answers `200`, and the `WebhookDeliveryReport` line is at `error`
+    level with
     `error=shopify_truncated`, in the family of the existing `shopify_…` labels, which is what an operator
     searches for.
   - **Monolith-facing routes.** `ShopifyError.toDssError()` maps `Truncated` to a new `DssError.Unsupported`
@@ -74,7 +74,7 @@ happen the service answers `200` with a wrong mirror, which is the failure mode 
 ## Behavioral contract
 
 - **Precondition**: a Shopify response that decoded. Truncation is checked after the existing triage (transport,
-  top-level `errors`, `NotFound`), so a `Truncated` answer means the resource exists.
+  decoding, top-level `errors`, `NotFound`), so a `Truncated` answer means the resource exists.
 - **Postcondition**: a `Success` from `productById` carries every variant of the product, and a `Success` from
   `orderForDss` carries every line item and every fulfillment order with every line, or the call answers
   `Truncated` and nothing downstream runs on a partial snapshot.
@@ -91,7 +91,7 @@ happen the service answers `200` with a wrong mirror, which is the failure mode 
   be synced because of truncation still gets its deletes.
 - `media` truncated and `variants` truncated on the same product: `Truncated` wins, and the media warning is not
   logged (the sync did not happen).
-- The install page's product sample (`SyncProductsPage`, `first = 3`) is a count and never fails on paging.
+- The install page's product count (`ProductsCount`) is not a connection and never fails on paging.
 - `/tracking-update` on an order with more than 50 fulfillment orders: `500`, although the fulfillment it looks
   for was loaded.
 - A tracking number on a fulfillment beyond the 250th: not found, `404`, as today; the documented limit.
@@ -99,8 +99,8 @@ happen the service answers `200` with a wrong mirror, which is the failure mode 
 
 ## Reuse inventory
 
-- `ShopifyError` and the `isTransient` mapping in `workflow/WebhookMirrorOutcome.kt`; the new member joins the
-  non-transient branch beside `TokenRejected`, `UserError` and `NotFound`.
+- `ShopifyError.isRetryable`, which `WebhookMirrorOutcome.isTransient` reads: the new member answers `false`, like
+  `TokenRejected`, `UserError`, `NotFound` and `Undecodable`.
 - `handler/toDssError.kt`: the one `ShopifyError` → `DssError` mapping.
 - `lib/ktor/DssError.kt`: `Internal` is the model for a `500` whose message stays generic; `toHttpStatus` gains the
   new member.
@@ -125,7 +125,7 @@ happen the service answers `200` with a wrong mirror, which is the failure mode 
   - `MonolithWebhookHandlersTest`: `sync-shipments` on an order with truncated fulfillment orders is `500` with
     the generic message and no `createFulfillment` call; `tracking-update` on the same order is `500` and no
     `createFulfillmentEvent` call.
-- **Pure**: `WebhookMirrorOutcome.isTransient` for `Truncated` is `false`; `toDssError` maps it to the `500`.
+- **Pure** (`ShopifyGraphqlServiceTest`, `ToDssErrorTest`): `Truncated` is not retryable; `toDssError` maps it to the `500`.
 
 
 ## Open questions for the human developer

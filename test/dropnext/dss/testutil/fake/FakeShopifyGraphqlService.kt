@@ -2,6 +2,7 @@ package dropnext.dss.testutil.fake
 
 import dev.forkhandles.result4k.Failure
 import dev.forkhandles.result4k.Success
+import dropnext.dss.domain.ProductCount
 import dropnext.dss.domain.ShopDomain
 import dropnext.dss.domain.ShopifyFulfillmentEventId
 import dropnext.dss.domain.ShopifyFulfillmentId
@@ -17,6 +18,8 @@ import dropnext.dss.lib.shopify.graphql.ShopifyResult
 import dropnext.graphql.generated.enums.FulfillmentEventStatus
 import dropnext.graphql.generated.enums.WebhookSubscriptionTopic
 import dropnext.graphql.generated.getorderfordss.Order
+import kotlin.time.Duration
+import kotlinx.coroutines.delay
 
 
 /**
@@ -38,14 +41,17 @@ class FakeShopifyGraphqlService(
     Success(ShopIdentityInfo(shopId = ShopifyShopId(0L), domain = shop))
   val shopIdentityCalls: MutableList<ShopDomain> = mutableListOf()
 
-  var productSampleCountResult: ShopifyResult<Int> = Success(0)
-  val productSampleCountCalls: MutableList<Int> = mutableListOf()
+  var productCountResult: ShopifyResult<ProductCount> = Success(ProductCount(count = 0, isExact = true))
+  val productCountCalls: MutableList<ShopDomain> = mutableListOf()
 
   var productByIdResult: ShopifyResult<ShopProduct?> = Success(null)
   val productByIdCalls: MutableList<String> = mutableListOf()
 
   var orderForDssResult: ShopifyResult<Order> = Failure(ShopifyError.NotFound("order not found"))
   val orderForDssResultQueue: MutableList<ShopifyResult<Order>> = mutableListOf()
+
+  /** How long `orderForDss` takes to answer: what makes a webhook outlive its time budget. */
+  var orderForDssDelay: Duration = Duration.ZERO
   val orderForDssCalls: MutableList<String> = mutableListOf()
 
   var cancelFulfillmentResult: ShopifyResult<Unit> = Success(Unit)
@@ -75,9 +81,9 @@ class FakeShopifyGraphqlService(
     return shopIdentityResult
   }
 
-  override suspend fun productSampleCount(first: Int): ShopifyResult<Int> {
-    productSampleCountCalls.add(first)
-    return productSampleCountResult
+  override suspend fun productCount(): ShopifyResult<ProductCount> {
+    productCountCalls.add(shop)
+    return productCountResult
   }
 
   override suspend fun productById(productGid: String): ShopifyResult<ShopProduct?> {
@@ -87,6 +93,7 @@ class FakeShopifyGraphqlService(
 
   override suspend fun orderForDss(orderGid: String): ShopifyResult<Order> {
     orderForDssCalls.add(orderGid)
+    delay(orderForDssDelay)
     if (orderForDssResultQueue.isNotEmpty()) {
       return orderForDssResultQueue.removeAt(0)
     }
@@ -141,10 +148,11 @@ class FakeShopifyGraphqlService(
 
   override fun clear() {
     shopIdentityCalls.clear()
-    productSampleCountCalls.clear()
+    productCountCalls.clear()
     productByIdCalls.clear()
     orderForDssCalls.clear()
     orderForDssResultQueue.clear()
+    orderForDssDelay = Duration.ZERO
     cancelFulfillmentCalls.clear()
     createFulfillmentCalls.clear()
     createFulfillmentResultQueue.clear()
